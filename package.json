@@ -1,0 +1,13 @@
+{
+  "name": "ibp-bom-v7",
+  "version": "7.0.0",
+  "description": "SAP IBP Explorer - BOM Hierarchy, Red Logística & Key Figures",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "node-fetch": "^2.7.0"
+  }
+}
