@@ -120,12 +120,18 @@ fetchAllPages(url, logEl, filter, select)
   - `vizToggleType(type, visible)` — toggle visibilidad por tipo
   - `vizGlobMatch(text, pattern)` — matching con wildcards
 
-### 4. Requisitos técnicos (header)
+### 4. Doc Generator (pestaña)
+- Permite subir archivos ZIP de SAP CIDS conteniendo integraciones en formato XML.
+- Analiza y extrae especificaciones de integración: orígenes de datos, destinos, mapeos de campos, filtros de transformación y uso de funciones (lookups).
+- Utiliza `JSZip` y el `DOMParser` nativo del navegador para el procesamiento cliente-servidor (100% frontend).
+- Ensambla toda la documentación y descarga un archivo de Excel nativo (`.xlsx`) completamente estructurado usando JSZip sin dependencias pesadas.
+
+### 5. Requisitos técnicos (header)
 - Panel desplegable en el header
 - 5 pestañas: Conexión, Usuario SAP IBP, Communication Arrangement, Entidades OData, Permisos de red
 - Visible sin necesidad de conectarse
 
-### 5. Feedback (botón flotante)
+### 6. Feedback (botón flotante)
 - Botón fijo esquina inferior derecha
 - Panel lateral con formulario: Nombre, App, Tipo, Descripción
 - Envío via EmailJS (service: `service_tw7qns4`, template: `template_hd02kde`)
