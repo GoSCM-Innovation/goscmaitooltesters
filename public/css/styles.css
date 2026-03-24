@@ -703,6 +703,10 @@
       display: none !important;
     }
 
+    .locked-hidden {
+      display: none !important;
+    }
+
     /* Scrollbar */
     ::-webkit-scrollbar {
       width: 6px;
@@ -943,3 +947,115 @@
 .l-err  { color: var(--red); }
 .l-info { color: var(--cyan); }
 .docs-hint { color: var(--text3); font-size: 11px; margin-top: 8px; }
+
+/*======================================================================
+   MOBILE RESPONSIVENESS (SMARTPHONES)
+  ======================================================================*/
+@media (max-width: 768px) {
+  /* Generales */
+  body { font-size: 14px; }
+  
+  /* Header */
+  .app-header {
+    flex-wrap: wrap;
+    padding: 12px 16px;
+    gap: 10px;
+  }
+  .app-title { font-size: 15px; }
+  .header-status {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+  .header-divider { display: none; }
+  #btnHeaderConnect { width: 100%; justify-content: center; }
+  #btnTechReq { width: 100%; justify-content: center; }
+  
+  /* Panel Conexión Dropdown */
+  #connectPanelDrop {
+    padding: 20px 16px !important;
+  }
+  
+  /* Formularios y Botones */
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .btn-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .btn {
+    width: 100%;
+    justify-content: center;
+    padding: 10px 18px;
+  }
+  
+  /* Pestañas (Navegación TABS Principal) */
+  .tab-nav {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding: 0 16px 8px 16px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tab-nav::-webkit-scrollbar { height: 4px; }
+  .tab-btn {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  
+  /* Banners de Pestaña */
+  .tab-info-banner {
+    flex-direction: column;
+    text-align: center;
+    gap: 12px;
+    padding: 20px 16px;
+  }
+  .tab-info-desc { text-align: justify; font-size: 13px; }
+
+  /* Paneles */
+  .panel {
+    margin: 12px;
+    padding: 16px;
+  }
+  
+  /* Controles (Filtros, Buscadores) */
+  .controls-bar {
+    flex-direction: column;
+    align-items: stretch;
+    height: auto;
+    gap: 12px;
+    padding: 12px;
+  }
+  .controls-bar > div, .controls-bar .form-group {
+    width: 100%;
+  }
+  
+  /* Requisitos Técnicos Navigation */
+  .treq-tab-nav {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+    padding-bottom: 6px;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Tablas */
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+  }
+  table th, table td {
+    padding: 10px;
+  }
+  
+  /* Modales */
+  dialog.modal-dlg form {
+    min-width: 0;
+    width: 92vw;
+    padding: 16px;
+  }
+  .viz-filter-list {
+    max-height: 40vh;
+  }
+}

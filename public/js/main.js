@@ -13,6 +13,42 @@
         var el = document.getElementById(TAB_BANNERS[t]);
         if (el) el.classList.toggle('visible', t === tabId);
       });
+      if (typeof updateTabLocks === 'function') {
+          updateTabLocks();
+      }
+    }
+
+    function updateTabLocks() {
+      var isConn = (typeof IS_CONNECTED !== 'undefined' && IS_CONNECTED);
+      document.querySelectorAll('.tab-panel').forEach(function(panel) {
+          var tabId = panel.id.replace('tab-', '');
+          var btn = document.getElementById('tabBtn-' + tabId);
+          if (btn && btn.classList.contains('req-conn')) {
+              var lockMsg = panel.querySelector('.locked-message');
+              Array.from(panel.children).forEach(function(child) {
+                  if (!child.classList.contains('tab-info-banner') && !child.classList.contains('locked-message')) {
+                      if (!isConn) {
+                          child.classList.add('locked-hidden');
+                      } else {
+                          child.classList.remove('locked-hidden');
+                      }
+                  }
+              });
+              if (lockMsg) {
+                  lockMsg.style.display = isConn ? 'none' : 'block';
+              }
+          }
+      });
+    }
+
+    function toggleMappingBody(bodyId, arrId, forceState) {
+      var body = document.getElementById(bodyId);
+      var arr = document.getElementById(arrId);
+      if (!body || !arr) return;
+      var isHidden = body.style.display === 'none';
+      var newState = typeof forceState !== 'undefined' ? forceState : isHidden;
+      body.style.display = newState ? 'block' : 'none';
+      arr.textContent = newState ? '▼' : '▶';
     }
 
     /* ═══════════════════════════════════════════════════════════════
@@ -33,7 +69,8 @@
       btn.textContent = hidden ? 'Ver logs técnicos' : 'Ocultar logs';
     }
 
-    async function doConnect() {
+    async function doConnect(event) {
+      if (event && event.preventDefault) event.preventDefault();
       var logEl = document.getElementById('logConnect');
       logEl.classList.add('hidden');
       logEl.innerHTML = '';
@@ -53,6 +90,21 @@
         log(logEl, 'err', 'Completa URL, usuario, contraseña y Planning Area');
         return;
       }
+
+      function addHist(key, val) {
+        if (!val) return;
+        try {
+          var arr = JSON.parse(localStorage.getItem(key) || '[]');
+          var i = arr.indexOf(val);
+          if (i !== -1) arr.splice(i, 1);
+          arr.unshift(val);
+          if (arr.length > 5) arr.pop();
+          localStorage.setItem(key, JSON.stringify(arr));
+        } catch(e) {}
+      }
+      addHist('ibp_h_url', CFG.url);
+      addHist('ibp_h_pa', CFG.pa);
+      addHist('ibp_h_pver', CFG.pver);
 
       document.getElementById('btnConnect').disabled = true;
 
@@ -489,6 +541,7 @@
        STEP 2: FETCH ALL DATA
        ═══════════════════════════════════════════════════════════════ */
     async function doFetchAll() {
+      if (typeof toggleMappingBody === 'function') toggleMappingBody('bodyMDT', 'arrMDT', false);
       var logEl = document.getElementById('logFetch');
       logEl.innerHTML = '';
       logEl.classList.add('hidden');
@@ -646,11 +699,24 @@
     /* ── Technical Requirements Panel ── */
     var _techReqOpen = false;
     var _techReqCurrentTab = 'conexion';
+    var _connectPanelOpen = false;
+
+    function toggleConnectPanel() {
+      _connectPanelOpen = !_connectPanelOpen;
+      document.getElementById('connectPanelDrop').style.display = _connectPanelOpen ? 'block' : 'none';
+      document.getElementById('connectArrow').textContent = _connectPanelOpen ? '▲' : '▼';
+      if (_connectPanelOpen && _techReqOpen) {
+          toggleTechReq();
+      }
+    }
 
     function toggleTechReq() {
       _techReqOpen = !_techReqOpen;
       document.getElementById('techReqPanel').style.display = _techReqOpen ? 'block' : 'none';
       document.getElementById('techReqArrow').textContent = _techReqOpen ? '▲' : '▼';
+      if (_techReqOpen && _connectPanelOpen) {
+          toggleConnectPanel();
+      }
     }
 
     function switchTechTab(tab) {
@@ -664,4 +730,15 @@
       });
       _techReqCurrentTab = tab;
     }
+
+    try {
+      function popList(key, listId) {
+        var arr = JSON.parse(localStorage.getItem(key) || '[]');
+        var dl = document.getElementById(listId);
+        if (dl) dl.innerHTML = arr.map(function(v) { return '<option value="' + v + '">'; }).join('');
+      }
+      popList('ibp_h_url', 'urlsList');
+      popList('ibp_h_pa', 'paList');
+      popList('ibp_h_pver', 'pverList');
+    } catch(e) {}
 

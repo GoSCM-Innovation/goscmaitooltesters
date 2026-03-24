@@ -2,6 +2,7 @@
        GLOBAL STATE
        ═══════════════════════════════════════════════════════════════ */
     var CFG = { url: '', user: '', pass: '', pa: '', service: '', pver: '', paEntities: [] };
+    var IS_CONNECTED = false;
     var ENTITIES = [];       // [{name, fields:[]}]
     var RAW = {};            // legacy placeholder (no longer used for storage)
     var TREE = { locids: [], roots: {}, stats: {}, cycles: [] };

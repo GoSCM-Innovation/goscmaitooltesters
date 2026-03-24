@@ -12,6 +12,7 @@
 
     /* --- Confirm mapping: load products only -------------------------- */
     async function vizConfirmMapping() {
+      if (typeof toggleMappingBody === 'function') toggleMappingBody('bodyVizMDT', 'arrVizMDT', false);
       var productEntity = document.getElementById('selVizProduct').value;
       if (!productEntity) {
         alert('Selecciona la entidad Product antes de confirmar.');
@@ -876,8 +877,32 @@
     }
 
     function setConnected(on) {
+      if (typeof IS_CONNECTED !== 'undefined') IS_CONNECTED = !!on;
       document.getElementById('statusDot').className = 'status-dot ' + (on ? 'on' : 'off');
       document.getElementById('statusText').textContent = on ? 'Conectado' : 'Desconectado';
+      
+      document.querySelectorAll('.lock-icon').forEach(function(el) {
+          el.style.display = on ? 'none' : 'inline';
+      });
+      
+      if (typeof updateTabLocks === 'function') {
+          updateTabLocks();
+      }
+      
+      if (on && typeof _connectPanelOpen !== 'undefined' && _connectPanelOpen) {
+          toggleConnectPanel();
+      }
+
+      if (on) {
+          var toast = document.createElement('div');
+          toast.textContent = '✅ Conectado a SAP IBP con éxito';
+          toast.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#10B981;color:#fff;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:9999;transition:opacity 0.3s;';
+          document.body.appendChild(toast);
+          setTimeout(function() {
+              toast.style.opacity = '0';
+              setTimeout(function() { if(toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
+          }, 3500);
+      }
     }
 
     function setProgress(pct) {
