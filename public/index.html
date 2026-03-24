@@ -13,6 +13,7 @@
   <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <link rel="stylesheet" href="css/styles.css">
+  <link rel="icon" type="image/png" href="favicon.png">
 </head>
 
 <body>
@@ -330,11 +331,15 @@
 
     <!-- ═══ PANEL 2: MDT MAPPING ═══ -->
     <div class="panel hidden" id="panelMDT">
-      <div class="panel-title">② Mapeo de entidades (Master Data Types)</div>
-      <p style="font-size:12px;color:var(--text2);margin-bottom:8px;">
-        La auto-detección asignó las entidades más probables. Ajusta manualmente si es necesario.
-      </p>
-      <div class="mdt-grid">
+      <div class="panel-title" onclick="toggleMappingBody('bodyMDT', 'arrMDT')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
+        <span>② Mapeo de entidades (Master Data Types)</span>
+        <span id="arrMDT" style="font-size:11px;">▼</span>
+      </div>
+      <div id="bodyMDT">
+        <p style="font-size:12px;color:var(--text2);margin-bottom:8px;">
+          La auto-detección asignó las entidades más probables. Ajusta manualmente si es necesario.
+        </p>
+        <div class="mdt-grid">
         <div class="mdt-card">
           <div class="mdt-label">Production Source Header</div>
           <div class="ss-wrap">
@@ -375,6 +380,7 @@
           </div>
           <div class="mdt-fields" id="fieldsProduct"></div>
         </div>
+      </div>
       </div>
       <div class="btn-row">
         <button class="btn btn-primary" id="btnFetch" onclick="doFetchAll()">Descargar datos y construir
@@ -479,12 +485,16 @@
 
     <!-- ═══ SUPPLY NETWORK: MDT MAPPING ═══ -->
     <div class="panel hidden" id="panelSNMDT">
-      <div class="panel-title">② Mapeo de entidades — Supply Network</div>
-      <p style="font-size:12px;color:var(--text2);margin-bottom:8px;">
-        Selecciona las entidades de datos maestros para analizar la red de suministro. La auto-detección asignó las más
-        probables.
-      </p>
-      <div class="mdt-grid">
+      <div class="panel-title" onclick="toggleMappingBody('bodySNMDT', 'arrSNMDT')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
+        <span>② Mapeo de entidades — Supply Network</span>
+        <span id="arrSNMDT" style="font-size:11px;">▼</span>
+      </div>
+      <div id="bodySNMDT">
+        <p style="font-size:12px;color:var(--text2);margin-bottom:8px;">
+          Selecciona las entidades de datos maestros para analizar la red de suministro. La auto-detección asignó las más
+          probables.
+        </p>
+        <div class="mdt-grid">
         <div class="mdt-card">
           <div class="mdt-label">Location Source</div>
           <div class="ss-wrap">
@@ -546,6 +556,7 @@
           <div class="mdt-fields" id="fieldsSNCustMaster"></div>
         </div>
       </div>
+      </div>
       <div class="btn-row">
         <button class="btn btn-primary" id="btnFetchSN" onclick="doAnalyzeAndExport()">Analizar red y Exportar
           Excel</button>
@@ -598,12 +609,16 @@
 
     <!-- ═══ VISUALIZER: MDT MAPPING ═══ -->
     <div class="panel" id="panelVizMDT" style="display:none;">
-      <div class="panel-title">② Mapeo de entidades — Visualizer</div>
-      <p style="font-size:12px;color:var(--text2);margin-bottom:8px;">
-        Selecciona las entidades. La auto-detección asignó las más probables. Confirma para cargar el catálogo de
-        productos.
-      </p>
-      <div class="mdt-grid">
+      <div class="panel-title" onclick="toggleMappingBody('bodyVizMDT', 'arrVizMDT')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
+        <span>② Mapeo de entidades — Visualizer</span>
+        <span id="arrVizMDT" style="font-size:11px;">▼</span>
+      </div>
+      <div id="bodyVizMDT">
+        <p style="font-size:12px;color:var(--text2);margin-bottom:8px;">
+          Selecciona las entidades. La auto-detección asignó las más probables. Confirma para cargar el catálogo de
+          productos.
+        </p>
+        <div class="mdt-grid">
         <div class="mdt-card">
           <div class="mdt-label">Location Source</div>
           <div class="ss-wrap">
@@ -664,6 +679,7 @@
           </div>
           <div class="mdt-fields" id="fieldsVizCustMaster"></div>
         </div>
+      </div>
       </div>
       <div class="btn-row">
         <button class="btn btn-primary" id="btnVizConfirm" onclick="vizConfirmMapping()">Confirmar mapeo y cargar

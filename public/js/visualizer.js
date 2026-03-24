@@ -12,6 +12,7 @@
 
     /* --- Confirm mapping: load products only -------------------------- */
     async function vizConfirmMapping() {
+      if (typeof toggleMappingBody === 'function') toggleMappingBody('bodyVizMDT', 'arrVizMDT', false);
       var productEntity = document.getElementById('selVizProduct').value;
       if (!productEntity) {
         alert('Selecciona la entidad Product antes de confirmar.');

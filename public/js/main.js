@@ -41,6 +41,16 @@
       });
     }
 
+    function toggleMappingBody(bodyId, arrId, forceState) {
+      var body = document.getElementById(bodyId);
+      var arr = document.getElementById(arrId);
+      if (!body || !arr) return;
+      var isHidden = body.style.display === 'none';
+      var newState = typeof forceState !== 'undefined' ? forceState : isHidden;
+      body.style.display = newState ? 'block' : 'none';
+      arr.textContent = newState ? '▼' : '▶';
+    }
+
     /* ═══════════════════════════════════════════════════════════════
        STEP 1: CONNECT — Fetch $metadata, parse entities
        ═══════════════════════════════════════════════════════════════ */
@@ -531,6 +541,7 @@
        STEP 2: FETCH ALL DATA
        ═══════════════════════════════════════════════════════════════ */
     async function doFetchAll() {
+      if (typeof toggleMappingBody === 'function') toggleMappingBody('bodyMDT', 'arrMDT', false);
       var logEl = document.getElementById('logFetch');
       logEl.innerHTML = '';
       logEl.classList.add('hidden');
