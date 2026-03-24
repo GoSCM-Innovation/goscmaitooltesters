@@ -34,9 +34,58 @@
         ⚙ Requisitos técnicos <span id="techReqArrow">▼</span>
       </button>
       <div class="header-divider"></div>
+      <button onclick="toggleConnectPanel()" id="btnHeaderConnect" class="btn btn-primary btn-small" style="padding:5px 12px;font-size:11px;display:flex;align-items:center;gap:6px;">
+        🔗 Conectar SAP IBP <span id="connectArrow">▼</span>
+      </button>
+      <div class="header-divider"></div>
       <div class="status-dot off" id="statusDot"></div>
       <span id="statusText">Desconectado</span>
     </div>
+  </div>
+
+  <!-- ═══ CONNECTION PANEL DROPDOWN ═══ -->
+  <div id="connectPanelDrop"
+    style="display:none;background:var(--bg2);border-bottom:2px solid var(--border);z-index:190;position:relative;padding:24px 28px;">
+    <div class="panel-title" style="margin-top:0;">Conexión a SAP IBP</div>
+    <form id="connectForm" onsubmit="doConnect(event)">
+      <div class="form-grid" style="max-width:800px;">
+        <div class="form-group full">
+          <label>API Base URL</label>
+          <input type="url" id="inpUrl" name="api_url" list="urlsList" autocomplete="url" placeholder="https://my400444-api.scmibp.ondemand.com" value="" required>
+          <datalist id="urlsList"></datalist>
+        </div>
+        <div class="form-group">
+          <label>Usuario</label>
+          <input type="text" id="inpUser" name="username" autocomplete="username" placeholder="COMM_USER" required>
+        </div>
+        <div class="form-group">
+          <label>Contraseña</label>
+          <input type="password" id="inpPass" name="password" autocomplete="current-password" placeholder="••••••••" required>
+        </div>
+        <div class="form-group">
+          <label>Planning Area</label>
+          <input type="text" id="inpPA" name="planning_area" list="paList" autocomplete="on" placeholder="ID del área de planificación" style="font-family:var(--mono);" required>
+          <datalist id="paList"></datalist>
+        </div>
+        <div class="form-group">
+          <label>Versión</label>
+          <input type="text" id="inpPver" name="pver" list="pverList" autocomplete="on" placeholder="ID de la versión (vacío = Baseline)"
+            style="font-family:var(--mono);">
+          <datalist id="pverList"></datalist>
+        </div>
+        <input type="hidden" id="inpService" value="MASTER_DATA_API_SRV">
+      </div>
+      <div class="btn-row" style="margin-top:20px;">
+        <button type="submit" class="btn btn-primary" id="btnConnect">Conectar y detectar entidades</button>
+        <button type="button" class="btn btn-secondary" onclick="toggleConnectPanel()">Cancelar</button>
+      </div>
+    </form>
+    <div id="connStatus" style="display:none;font-size:12px;margin-top:12px;align-items:center;gap:8px;">
+      <span id="connStatusText"></span>
+      <button id="btnToggleConnLogs" class="btn btn-secondary btn-small" style="padding:2px 8px;font-size:11px;"
+        onclick="toggleConnLogs()">Ver logs técnicos</button>
+    </div>
+    <div class="log-area hidden" id="logConnect"></div>
   </div>
 
   <!-- ═══ TECHNICAL REQUIREMENTS PANEL ═══ -->
@@ -237,62 +286,26 @@
     </div>
   </div>
 
-  <!-- ═══ PANEL 1: CONNECTION ═══ -->
-  <div class="panel" id="panelConnect">
-    <div class="panel-title">① Conexión a SAP IBP</div>
-    <div class="form-grid">
-      <div class="form-group full">
-        <label>API Base URL</label>
-        <input type="text" id="inpUrl" placeholder="https://my400444-api.scmibp.ondemand.com" value="">
-      </div>
-      <div class="form-group">
-        <label>Usuario</label>
-        <input type="text" id="inpUser" placeholder="COMM_USER">
-      </div>
-      <div class="form-group">
-        <label>Contraseña</label>
-        <input type="password" id="inpPass" placeholder="••••••••">
-      </div>
-      <div class="form-group">
-        <label>Planning Area</label>
-        <input type="text" id="inpPA" placeholder="ID del área de planificación" style="font-family:var(--mono);">
-      </div>
-      <div class="form-group">
-        <label>Versión</label>
-        <input type="text" id="inpPver" placeholder="ID de la versión (vacío = Baseline)"
-          style="font-family:var(--mono);">
-      </div>
-      <input type="hidden" id="inpService" value="MASTER_DATA_API_SRV">
-    </div>
-    <div class="btn-row">
-      <button class="btn btn-primary" id="btnConnect" onclick="doConnect()">Conectar y detectar entidades</button>
-    </div>
-    <div id="connStatus" style="display:none;font-size:12px;margin-top:6px;align-items:center;gap:8px;">
-      <span id="connStatusText"></span>
-      <button id="btnToggleConnLogs" class="btn btn-secondary btn-small" style="padding:2px 8px;font-size:11px;"
-        onclick="toggleConnLogs()">Ver logs técnicos</button>
-    </div>
-    <div class="log-area hidden" id="logConnect"></div>
-  </div>
+  <!-- Panel moved to dropdown above -->
 
   <!-- ═══ TAB NAVIGATION ═══ -->
-  <div class="tab-nav" id="tabNav" style="display:none">
-    <button class="tab-btn active" onclick="switchTab('bom')" id="tabBtn-bom">
-      <span>📦</span> Production Hierarchy
+  <div class="tab-nav" id="tabNav">
+    <button class="tab-btn req-conn" onclick="switchTab('bom')" id="tabBtn-bom">
+      <span>📦</span> Production Hierarchy <span class="lock-icon" style="font-size:10px;opacity:0.7;margin-left:4px;">🔒</span>
     </button>
-    <button class="tab-btn" onclick="switchTab('network')" id="tabBtn-network">
-      <span>🌐</span> Supply Network Analyzer
+    <button class="tab-btn req-conn" onclick="switchTab('network')" id="tabBtn-network">
+      <span>🌐</span> Supply Network Analyzer <span class="lock-icon" style="font-size:10px;opacity:0.7;margin-left:4px;">🔒</span>
     </button>
-    <button class="tab-btn" onclick="switchTab('visualizer')" id="tabBtn-visualizer">
-      <span>🔭</span> Supply Network Visualizer
+    <button class="tab-btn req-conn" onclick="switchTab('visualizer')" id="tabBtn-visualizer">
+      <span>🔭</span> Supply Network Visualizer <span class="lock-icon" style="font-size:10px;opacity:0.7;margin-left:4px;">🔒</span>
     </button>
-    <button class="tab-btn" onclick="switchTab('docs')" id="tabBtn-docs">
+    <button class="tab-btn active" onclick="switchTab('docs')" id="tabBtn-docs">
       <span>📄</span> Doc Generator
     </button>
   </div>
 
   <!-- ═══ TAB: BOM HIERARCHY ═══ -->
-  <div class="tab-panel active" id="tab-bom">
+  <div class="tab-panel" id="tab-bom">
 
     <div class="tab-info-banner" id="infoBannerBom">
       <span class="tab-info-icon">📦</span>
@@ -302,6 +315,17 @@
           cada nivel de la jerarquía, identifica co-productos y componentes, y visualiza las plantas de producción
           asociadas.</div>
       </div>
+    </div>
+
+    <div class="locked-message empty-state" style="display:none; margin-top:40px;">
+      <div class="icon" style="font-size:48px; opacity:0.8; margin-bottom:16px;">🔒</div>
+      <strong style="font-size:16px;color:var(--text)">Módulo restringido</strong>
+      <p style="font-size:13px;color:var(--text2);margin-top:8px;max-width:400px;margin-left:auto;margin-right:auto;">
+        La jerarquía de producción requiere leer datos en tiempo real. Por favor, conéctate a tu entorno de SAP IBP para acceder.
+      </p>
+      <button class="btn btn-primary" style="margin-top:20px; font-size:13px; padding:10px 20px;" onclick="toggleConnectPanel()">
+        🔗 Conectar a SAP IBP
+      </button>
     </div>
 
     <!-- ═══ PANEL 2: MDT MAPPING ═══ -->
@@ -442,6 +466,17 @@
       </div>
     </div>
 
+    <div class="locked-message empty-state" style="display:none; margin-top:40px;">
+      <div class="icon" style="font-size:48px; opacity:0.8; margin-bottom:16px;">🔒</div>
+      <strong style="font-size:16px;color:var(--text)">Módulo restringido</strong>
+      <p style="font-size:13px;color:var(--text2);margin-top:8px;max-width:400px;margin-left:auto;margin-right:auto;">
+        El análisis de red evalúa múltiples entidades. Por favor, conéctate a tu entorno de SAP IBP para acceder.
+      </p>
+      <button class="btn btn-primary" style="margin-top:20px; font-size:13px; padding:10px 20px;" onclick="toggleConnectPanel()">
+        🔗 Conectar a SAP IBP
+      </button>
+    </div>
+
     <!-- ═══ SUPPLY NETWORK: MDT MAPPING ═══ -->
     <div class="panel hidden" id="panelSNMDT">
       <div class="panel-title">② Mapeo de entidades — Supply Network</div>
@@ -548,6 +583,17 @@
           mapeo para cargar el catálogo de materiales, selecciona uno y haz click en "Cargar red logística" para ver su
           diagrama.</div>
       </div>
+    </div>
+
+    <div class="locked-message empty-state" style="display:none; margin-top:40px;">
+      <div class="icon" style="font-size:48px; opacity:0.8; margin-bottom:16px;">🔒</div>
+      <strong style="font-size:16px;color:var(--text)">Módulo restringido</strong>
+      <p style="font-size:13px;color:var(--text2);margin-top:8px;max-width:400px;margin-left:auto;margin-right:auto;">
+        El visualizador dinámico requiere extraer nodos y dependencias. Por favor, conéctate a tu entorno de SAP IBP para acceder.
+      </p>
+      <button class="btn btn-primary" style="margin-top:20px; font-size:13px; padding:10px 20px;" onclick="toggleConnectPanel()">
+        🔗 Conectar a SAP IBP
+      </button>
     </div>
 
     <!-- ═══ VISUALIZER: MDT MAPPING ═══ -->
@@ -860,15 +906,15 @@
   </div><!-- /tab-visualizer -->
 
   <!-- ═══ TAB: DOC GENERATOR ═══ -->
-  <div class="tab-panel" id="tab-docs">
+  <div class="tab-panel active" id="tab-docs">
     <div class="tab-info-banner" id="infoBannerDocs">
       <span class="tab-info-icon">📄</span>
       <div class="tab-info-content">
         <div class="tab-info-title">Doc Generator</div>
-        <div class="tab-info-desc">Generador de documentación para tu Supply Network y Production Hierarchy. (Próximamente)</div>
+        <div class="tab-info-desc">Generador de documentación para tu Supply Network y Production Hierarchy.</div>
       </div>
     </div>
-    
+
     <!-- MAIN UPLOAD PANEL -->
     <div class="panel">
       <div class="panel-title">📦 Archivos ZIP de entrada</div>
@@ -879,10 +925,13 @@
         <p class="drop-hint">o haz click para seleccionar &nbsp;·&nbsp; <b>Múltiples archivos</b> permitidos</p>
       </div>
       <div id="file-list"></div>
-      <div class="progress-wrap" id="pw"><div class="progress-bar" id="pb"></div></div>
+      <div class="progress-wrap" id="pw">
+        <div class="progress-bar" id="pb"></div>
+      </div>
       <div class="btn-row">
         <button class="btn btn-primary" id="gen-btn" disabled onclick="generate()">⚙️ Generar Excel</button>
-        <button class="btn btn-primary" id="dl-btn" style="display:none; background: var(--green);" onclick="downloadExcel()">⬇️ Descargar Excel</button>
+        <button class="btn btn-primary" id="dl-btn" style="display:none; background: var(--green);"
+          onclick="downloadExcel()">⬇️ Descargar Excel</button>
       </div>
     </div>
 
@@ -890,9 +939,12 @@
     <div class="panel" id="stats-card" style="display:none">
       <div class="panel-title">📊 Resultado</div>
       <div class="stats-grid">
-        <div class="stat-box"><span class="stat-num blue" id="s-jobs">0</span><span class="stat-label">Integraciones</span></div>
-        <div class="stat-box"><span class="stat-num purple" id="s-maps">0</span><span class="stat-label">Mapeos</span></div>
-        <div class="stat-box"><span class="stat-num green" id="s-filt">0</span><span class="stat-label">Filtros</span></div>
+        <div class="stat-box"><span class="stat-num blue" id="s-jobs">0</span><span
+            class="stat-label">Integraciones</span></div>
+        <div class="stat-box"><span class="stat-num purple" id="s-maps">0</span><span class="stat-label">Mapeos</span>
+        </div>
+        <div class="stat-box"><span class="stat-num green" id="s-filt">0</span><span class="stat-label">Filtros</span>
+        </div>
       </div>
     </div>
 

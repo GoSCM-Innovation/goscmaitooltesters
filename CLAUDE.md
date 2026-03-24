@@ -9,7 +9,7 @@ Contexto completo del proyecto para sesiones de Claude Code.
 **Nombre:** GoSCM — Production Hierarchy & Supply Network Analysis
 **URL producción:** https://ibp-bom-v7.vercel.app
 **Repositorio GitHub:** https://github.com/gahumadatoledo-cmyk/ibp-bom-v7 (privado)
-**Stack:** HTML + CSS + JavaScript (single file `public/index.html`) + Node.js backend en Vercel (`api/proxy.js`)
+**Stack:** HTML + CSS (`public/css/`) + JavaScript modular (`public/js/`) + Node.js backend en Vercel (`api/proxy.js`)
 
 ---
 
@@ -25,11 +25,14 @@ Contexto completo del proyecto para sesiones de Claude Code.
 ## Arquitectura
 
 ### Frontend
-- Todo el UI y JS vive en un solo archivo: `public/index.html` (~4000+ líneas)
-- Sin frameworks frontend (vanilla JS, CSS custom)
+- Todo el UI de la app vive de forma estructural en `public/index.html`
+- Lógica separada por directrices en `public/js/` (`api.js`, `state.js`, `utils.js`, `bom.js`, `analyzer.js`, `visualizer.js`, `main.js`, `docs.js`)
+- Todos los estilos centralizados en `public/css/styles.css`
+- Sin frameworks frontend modernos, puro Vanilla JS
 - Librerías externas via CDN:
   - `vis-network` — diagramas de red (Visualizer)
-  - `exceljs` — exportación a Excel
+  - `jszip` — creación nativa de excel en frontend (.xlsx)
+  - `exceljs` — exportación manual a Excel
   - `emailjs/browser` — envío de feedback por mail
 
 ### Backend (Vercel Serverless)
