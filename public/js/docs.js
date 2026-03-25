@@ -290,7 +290,7 @@ function parseDataflow(dfEl, dsIdx, ffIdx, srcDSFallback, dstDSFallback) {
   }
   if (!loaderEl) return null;
 
-  let targetTable, targetDS;
+  let targetTable, targetDS, fileLoaderFileName = '';
   if (isFile) {
     // Fix #9: target name from FlatFileFormat index; DS from batch.csv
     const ref = loaderEl.getAttribute('referencedFileFormat') || '';
@@ -298,6 +298,14 @@ function parseDataflow(dfEl, dsIdx, ffIdx, srcDSFallback, dstDSFallback) {
     targetTable = mx ? (ffIdx[+mx[1]] || ref) : ref;
     if (!targetTable) targetTable = loaderEl.getAttribute('displayName') || '';
     targetDS = dstDSFallback || 'FILE_DC';
+    // Extract file_name property from FileLoader for "filename".table.field format
+    for (const child of loaderEl.children) {
+      if (child.localName === 'properties' && child.getAttribute('name') === 'file_name') {
+        const fn = child.getAttribute('value') || '';
+        if (fn) fileLoaderFileName = fn;
+        break;
+      }
+    }
   } else {
     targetTable = loaderEl.getAttribute('tableName') || loaderEl.getAttribute('displayName') || '';
     targetDS    = dsFromRef(loaderEl.getAttribute('referencedDataStore') || '', dsIdx) || dstDSFallback || '';
@@ -381,7 +389,7 @@ function parseDataflow(dfEl, dsIdx, ffIdx, srcDSFallback, dstDSFallback) {
   // DataFlow display name
   const dataflowName = dfEl.getAttribute('name') || dfEl.getAttribute('displayName') || '';
 
-  return { mappings, filters, lookups, targetTable, targetDS, dataflowName };
+  return { mappings, filters, lookups, targetTable, targetDS, dataflowName, fileLoaderFileName };
 }
 
 /**
@@ -458,6 +466,7 @@ function parseIntegration(xmlStr, batchEntry) {
       jobName, jobDesc,
       tipoIntegracion: getTipo(jobName, isFile),
       dataflowName:    r.dataflowName,
+      fileLoaderFileName: r.fileLoaderFileName || '',
       srcDSName,
       dstDSName:   dstDSFinal,
       targetTable: r.targetTable,
@@ -785,7 +794,10 @@ function buildIntegrationSheet(parsed) {
     ], 18);
   } else {
     mappings.forEach((m, i) => {
-      const campoDestino = [m.dstTable, m.dstField].filter(Boolean).join('.');
+      // Campo Destino: "archivo.csv".TABLA.CAMPO for file targets, else TABLA.CAMPO
+      const filePrefix = parsed.fileLoaderFileName
+        ? `"${parsed.fileLoaderFileName}".` : '';
+      const campoDestino = filePrefix + [m.dstTable, m.dstField].filter(Boolean).join('.');
       sb.addRow([
         {v:'', s:XF.DEFAULT},
         {v: i + 1,              s:XF.T1_NUM},
