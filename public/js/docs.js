@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════
 let files = [];
 let xlsBuf = null;
+let parsedIntegrations = [];   // [{sheetName, pkg, parsed, paramRow}] — filled after scan
 
 // ════════════════════════════════════════════════════════════
 //  UI HELPERS
@@ -951,25 +952,24 @@ async function assembleXlsx(sheets) {
 // ════════════════════════════════════════════════════════════
 //  MAIN GENERATE
 // ════════════════════════════════════════════════════════════
+// ── Phase 1: scan ZIPs, parse XMLs, show selection panel ─────
 async function generate() {
   docsLogEl.innerHTML = '';
   docsLogEl.style.display = 'block';
   docsLogHint.style.display = 'none';
   document.getElementById('stats-card').style.display = 'none';
+  document.getElementById('sel-card').style.display = 'none';
   document.getElementById('dl-btn').style.display = 'none';
   document.getElementById('gen-btn').disabled = true;
   xlsBuf = null;
+  parsedIntegrations = [];
 
-  docsLog('Iniciando…', 'l-info');
+  docsLog('Escaneando ZIPs…', 'l-info');
   setP(2);
 
-  const sheets = [];   // [{name, sb}]
-  const paramRows = [];
-  let totalJobs = 0, totalMaps = 0, totalFilts = 0;
+  // Unique sheet-name generator (scoped to scan, reset on each scan)
   const usedNames = new Set();
-
   function uniq(base) {
-    // Excel sheet names: max 31 chars, no special chars
     let clean = base.replace(/[:\\\/\?\*\[\]]/g, '_').substring(0, 28);
     let n = clean, k = 0;
     while (usedNames.has(n)) n = clean.substring(0,25) + '_' + (++k);
@@ -983,7 +983,6 @@ async function generate() {
     try { zip = await JSZip.loadAsync(zf.data); }
     catch(e) { docsLog(`  ✗ ${e.message}`, 'l-err'); continue; }
 
-    // batch.csv
     const batchMap = {};
     const bf = zip.file('batch.csv');
     if (bf) {
@@ -1015,35 +1014,137 @@ async function generate() {
       catch(e) { docsLog(`  ✗ Parse ${fname}: ${e.message}`, 'l-err'); continue; }
       if (!dfResults || !dfResults.length) { docsLog(`  ⚠ Sin DataFlows: ${fname}`, 'l-warn'); continue; }
 
-      // Fix #8: one sheet per DataFlow result (one XML can have multiple target tables)
       const multiDF = dfResults.length > 1;
       for (const parsed of dfResults) {
         const { jobName, jobDesc, srcDSName, dstDSName, targetTable, mappings, filters, lookups } = parsed;
-        totalJobs++;
-        totalMaps  += mappings.length;
-        totalFilts += filters.length;
-
-        // When a single XML writes to multiple tables, suffix the sheet name with the target table
         const baseName = jobName || fname.replace('.xml','');
-        const sheetName = multiDF
-          ? uniq(baseName + '_' + targetTable)
-          : uniq(baseName);
-        paramRows.push({ jobName, jobDesc, tipoIntegracion: parsed.tipoIntegracion, dataflowName: parsed.dataflowName, srcDS: srcDSName, dstDS: dstDSName, targetTable, sheetName });
-
-        const sb = buildIntegrationSheet(parsed);
-        sheets.push({ name: sheetName, sb });
+        const sheetName = multiDF ? uniq(baseName + '_' + targetTable) : uniq(baseName);
+        const paramRow = {
+          jobName, jobDesc,
+          tipoIntegracion: parsed.tipoIntegracion,
+          dataflowName: parsed.dataflowName,
+          srcDS: srcDSName, dstDS: dstDSName,
+          targetTable, sheetName
+        };
+        parsedIntegrations.push({ sheetName, pkg: zf.name, parsed, paramRow });
         docsLog(`  ✔ ${sheetName}  (${mappings.length} mapeos · ${filters.length} filtros · ${lookups.length} lookups)`, 'l-ok');
       }
     }
     done++;
   }
 
-  // Build Parámetros sheet (insert at front)
+  setP(100);
+  docsLog(`✅ Escaneado — ${parsedIntegrations.length} integraciones encontradas`, 'l-ok');
+  document.getElementById('gen-btn').disabled = false;
+  renderSelList();
+}
+
+// ── Render the selection list ─────────────────────────────────
+function renderSelList() {
+  const list = document.getElementById('sel-list');
+  list.innerHTML = parsedIntegrations.map((item, i) => {
+    const t = (item.paramRow.tipoIntegracion || '').toUpperCase();
+    const badgeClass = t === 'KF' ? 'badge-kf' : t === 'MD' ? 'badge-md' : 'badge-file';
+    const jobName = item.paramRow.jobName || item.sheetName;
+    const df = item.paramRow.dataflowName
+      ? `<span class="si-df">${item.paramRow.dataflowName}</span>` : '';
+    return `<label class="sel-item" data-idx="${i}">
+      <input type="checkbox" checked onchange="updateCounter()">
+      <span class="si-badge ${badgeClass}">${t || '?'}</span>
+      <span class="si-name">${jobName}${df}</span>
+      <span class="badge-pkg" title="${item.pkg}">${item.pkg}</span>
+    </label>`;
+  }).join('');
+  document.getElementById('sel-search').value = '';
+  updateCounter();
+  document.getElementById('sel-card').style.display = 'block';
+  document.getElementById('sel-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ── Filter list by search text ────────────────────────────────
+function filterSelList() {
+  const q = document.getElementById('sel-search').value.toLowerCase();
+  document.querySelectorAll('#sel-list .sel-item').forEach(item => {
+    const idx = +item.dataset.idx;
+    const it  = parsedIntegrations[idx];
+    const text = [
+      it.sheetName,
+      it.paramRow.tipoIntegracion,
+      it.paramRow.dataflowName,
+      it.paramRow.jobName,
+      it.paramRow.srcDS,
+      it.paramRow.dstDS,
+      it.pkg,
+    ].join(' ').toLowerCase();
+    item.classList.toggle('hidden', q !== '' && !text.includes(q));
+  });
+  updateCounter();
+}
+
+// ── Toggle all currently-visible items ───────────────────────
+function toggleFiltered(state) {
+  document.querySelectorAll('#sel-list .sel-item:not(.hidden) input[type=checkbox]')
+    .forEach(cb => cb.checked = state);
+  updateCounter();
+}
+
+// ── Update "N / T selected" counter ──────────────────────────
+function updateCounter() {
+  const all     = document.querySelectorAll('#sel-list .sel-item');
+  const visible = document.querySelectorAll('#sel-list .sel-item:not(.hidden)');
+  const checked = document.querySelectorAll('#sel-list .sel-item input:checked');
+  const q = document.getElementById('sel-search').value.trim();
+  const counterEl = document.getElementById('sel-counter');
+  if (q) {
+    const visChecked = [...visible].filter(el => el.querySelector('input').checked).length;
+    counterEl.textContent = `${visChecked} / ${visible.length} filtradas · ${checked.length} / ${all.length} total`;
+  } else {
+    counterEl.textContent = `${checked.length} / ${all.length} seleccionadas`;
+  }
+}
+
+// ── Phase 2: build Excel with selected integrations only ──────
+async function buildExcel() {
+  docsLogEl.innerHTML = '';
+  docsLogEl.style.display = 'block';
+  document.getElementById('stats-card').style.display = 'none';
+  document.getElementById('dl-btn').style.display = 'none';
+  xlsBuf = null;
+
+  // Gather selected indices
+  const selected = [];
+  document.querySelectorAll('#sel-list .sel-item').forEach(item => {
+    if (item.querySelector('input').checked)
+      selected.push(parsedIntegrations[+item.dataset.idx]);
+  });
+
+  if (!selected.length) {
+    docsLog('⚠ No hay integraciones seleccionadas.', 'l-warn');
+    return;
+  }
+
+  docsLog(`📋 Generando Excel con ${selected.length} integraciones…`, 'l-info');
+  setP(5);
+
+  const sheets   = [];
+  const paramRows = [];
+  let totalJobs = 0, totalMaps = 0, totalFilts = 0;
+
+  for (const item of selected) {
+    const { parsed, paramRow } = item;
+    totalJobs++;
+    totalMaps  += parsed.mappings.length;
+    totalFilts += parsed.filters.length;
+    paramRows.push(paramRow);
+    const sb = buildIntegrationSheet(parsed);
+    sheets.push({ name: paramRow.sheetName, sb });
+  }
+
   docsLog('📋 Generando hoja Parámetros…', 'l-info');
   const paramSb = buildParamSheet(paramRows);
   sheets.unshift({ name: 'Parámetros', sb: paramSb });
 
-  docsLog('📦 Ensamblando archivo Excel con estilos…', 'l-info');
+  docsLog('📦 Ensamblando archivo Excel…', 'l-info');
   xlsBuf = await assembleXlsx(sheets);
   setP(100);
   docsLog(`✅ Listo — ${totalJobs} jobs · ${totalMaps} mapeos · ${totalFilts} filtros`, 'l-ok');
@@ -1053,7 +1154,6 @@ async function generate() {
   document.getElementById('s-filt').textContent = totalFilts;
   document.getElementById('stats-card').style.display = 'block';
   document.getElementById('dl-btn').style.display = 'flex';
-  document.getElementById('gen-btn').disabled = false;
 }
 
 // ════════════════════════════════════════════════════════════
