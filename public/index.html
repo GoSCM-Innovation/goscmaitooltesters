@@ -33,7 +33,8 @@
         ⚙ Requisitos técnicos <span id="techReqArrow">▼</span>
       </button>
       <div class="header-divider"></div>
-      <button onclick="toggleConnectPanel()" id="btnHeaderConnect" class="btn btn-primary btn-small" style="padding:5px 12px;font-size:11px;display:flex;align-items:center;gap:6px;">
+      <button onclick="toggleConnectPanel()" id="btnHeaderConnect" class="btn btn-primary btn-small"
+        style="padding:5px 12px;font-size:11px;display:flex;align-items:center;gap:6px;">
         🔗 Conectar SAP IBP <span id="connectArrow">▼</span>
       </button>
       <div class="header-divider"></div>
@@ -50,7 +51,8 @@
       <div class="form-grid" style="max-width:800px;">
         <div class="form-group full">
           <label>API Base URL</label>
-          <input type="url" id="inpUrl" name="api_url" list="urlsList" autocomplete="url" placeholder="https://my400444-api.scmibp.ondemand.com" value="" required>
+          <input type="url" id="inpUrl" name="api_url" list="urlsList" autocomplete="url"
+            placeholder="https://my400444-api.scmibp.ondemand.com" value="" required>
           <datalist id="urlsList"></datalist>
         </div>
         <div class="form-group">
@@ -59,17 +61,19 @@
         </div>
         <div class="form-group">
           <label>Contraseña</label>
-          <input type="password" id="inpPass" name="password" autocomplete="current-password" placeholder="••••••••" required>
+          <input type="password" id="inpPass" name="password" autocomplete="current-password" placeholder="••••••••"
+            required>
         </div>
         <div class="form-group">
           <label>Planning Area</label>
-          <input type="text" id="inpPA" name="planning_area" list="paList" autocomplete="on" placeholder="ID del área de planificación" style="font-family:var(--mono);" required>
+          <input type="text" id="inpPA" name="planning_area" list="paList" autocomplete="on"
+            placeholder="ID del área de planificación" style="font-family:var(--mono);" required>
           <datalist id="paList"></datalist>
         </div>
         <div class="form-group">
           <label>Versión</label>
-          <input type="text" id="inpPver" name="pver" list="pverList" autocomplete="on" placeholder="ID de la versión (vacío = Baseline)"
-            style="font-family:var(--mono);">
+          <input type="text" id="inpPver" name="pver" list="pverList" autocomplete="on"
+            placeholder="ID de la versión (vacío = Baseline)" style="font-family:var(--mono);">
           <datalist id="pverList"></datalist>
         </div>
         <input type="hidden" id="inpService" value="MASTER_DATA_API_SRV">
@@ -290,13 +294,16 @@
   <!-- ═══ TAB NAVIGATION ═══ -->
   <div class="tab-nav" id="tabNav">
     <button class="tab-btn req-conn" onclick="switchTab('bom')" id="tabBtn-bom">
-      <span>📦</span> Production Hierarchy <span class="lock-icon" style="font-size:10px;opacity:0.7;margin-left:4px;">🔒</span>
+      <span>📦</span> Production Hierarchy <span class="lock-icon"
+        style="font-size:10px;opacity:0.7;margin-left:4px;">🔒</span>
     </button>
     <button class="tab-btn req-conn" onclick="switchTab('network')" id="tabBtn-network">
-      <span>🌐</span> Supply Network Analyzer <span class="lock-icon" style="font-size:10px;opacity:0.7;margin-left:4px;">🔒</span>
+      <span>🌐</span> Supply Network Analyzer <span class="lock-icon"
+        style="font-size:10px;opacity:0.7;margin-left:4px;">🔒</span>
     </button>
     <button class="tab-btn req-conn" onclick="switchTab('visualizer')" id="tabBtn-visualizer">
-      <span>🔭</span> Supply Network Visualizer <span class="lock-icon" style="font-size:10px;opacity:0.7;margin-left:4px;">🔒</span>
+      <span>🔭</span> Supply Network Visualizer <span class="lock-icon"
+        style="font-size:10px;opacity:0.7;margin-left:4px;">🔒</span>
     </button>
     <button class="tab-btn" onclick="switchTab('docs')" id="tabBtn-docs">
       <span>📄</span> Mapping Dataflow Generator
@@ -320,16 +327,19 @@
       <div class="icon" style="font-size:48px; opacity:0.8; margin-bottom:16px;">🔒</div>
       <strong style="font-size:16px;color:var(--text)">Módulo restringido</strong>
       <p style="font-size:13px;color:var(--text2);margin-top:8px;max-width:400px;margin-left:auto;margin-right:auto;">
-        La jerarquía de producción requiere leer datos en tiempo real. Por favor, conéctate a tu entorno de SAP IBP para acceder.
+        La jerarquía de producción requiere leer datos en tiempo real. Por favor, conéctate a tu entorno de SAP IBP para
+        acceder.
       </p>
-      <button class="btn btn-primary" style="margin-top:20px; font-size:13px; padding:10px 20px;" onclick="toggleConnectPanel()">
+      <button class="btn btn-primary" style="margin-top:20px; font-size:13px; padding:10px 20px;"
+        onclick="toggleConnectPanel()">
         🔗 Conectar a SAP IBP
       </button>
     </div>
 
     <!-- ═══ PANEL 2: MDT MAPPING ═══ -->
     <div class="panel hidden" id="panelMDT">
-      <div class="panel-title" onclick="toggleMappingBody('bodyMDT', 'arrMDT')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
+      <div class="panel-title" onclick="toggleMappingBody('bodyMDT', 'arrMDT')"
+        style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
         <span>② Mapeo de entidades (Master Data Types)</span>
         <span id="arrMDT" style="font-size:11px;">▼</span>
       </div>
@@ -338,47 +348,47 @@
           La auto-detección asignó las entidades más probables. Ajusta manualmente si es necesario.
         </p>
         <div class="mdt-grid">
-        <div class="mdt-card">
-          <div class="mdt-label">Production Source Header</div>
-          <div class="ss-wrap">
-            <input type="hidden" id="selHeader">
-            <input class="ss-input-vis" id="ssVis-selHeader" type="text" placeholder="Buscar entidad..."
-              autocomplete="off">
-            <div class="ss-list" id="ssList-selHeader"></div>
+          <div class="mdt-card">
+            <div class="mdt-label">Production Source Header</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selHeader">
+              <input class="ss-input-vis" id="ssVis-selHeader" type="text" placeholder="Buscar entidad..."
+                autocomplete="off">
+              <div class="ss-list" id="ssList-selHeader"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsHeader"></div>
           </div>
-          <div class="mdt-fields" id="fieldsHeader"></div>
-        </div>
-        <div class="mdt-card">
-          <div class="mdt-label">Production Source Item</div>
-          <div class="ss-wrap">
-            <input type="hidden" id="selItem">
-            <input class="ss-input-vis" id="ssVis-selItem" type="text" placeholder="Buscar entidad..."
-              autocomplete="off">
-            <div class="ss-list" id="ssList-selItem"></div>
+          <div class="mdt-card">
+            <div class="mdt-label">Production Source Item</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selItem">
+              <input class="ss-input-vis" id="ssVis-selItem" type="text" placeholder="Buscar entidad..."
+                autocomplete="off">
+              <div class="ss-list" id="ssList-selItem"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsItem"></div>
           </div>
-          <div class="mdt-fields" id="fieldsItem"></div>
-        </div>
-        <div class="mdt-card">
-          <div class="mdt-label">Production Source Resource</div>
-          <div class="ss-wrap">
-            <input type="hidden" id="selResource">
-            <input class="ss-input-vis" id="ssVis-selResource" type="text" placeholder="Buscar entidad..."
-              autocomplete="off">
-            <div class="ss-list" id="ssList-selResource"></div>
+          <div class="mdt-card">
+            <div class="mdt-label">Production Source Resource</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selResource">
+              <input class="ss-input-vis" id="ssVis-selResource" type="text" placeholder="Buscar entidad..."
+                autocomplete="off">
+              <div class="ss-list" id="ssList-selResource"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsResource"></div>
           </div>
-          <div class="mdt-fields" id="fieldsResource"></div>
-        </div>
-        <div class="mdt-card">
-          <div class="mdt-label">Product</div>
-          <div class="ss-wrap">
-            <input type="hidden" id="selProduct">
-            <input class="ss-input-vis" id="ssVis-selProduct" type="text" placeholder="Buscar entidad..."
-              autocomplete="off">
-            <div class="ss-list" id="ssList-selProduct"></div>
+          <div class="mdt-card">
+            <div class="mdt-label">Product</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selProduct">
+              <input class="ss-input-vis" id="ssVis-selProduct" type="text" placeholder="Buscar entidad..."
+                autocomplete="off">
+              <div class="ss-list" id="ssList-selProduct"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsProduct"></div>
           </div>
-          <div class="mdt-fields" id="fieldsProduct"></div>
         </div>
-      </div>
       </div>
       <div class="btn-row">
         <button class="btn btn-primary" id="btnFetch" onclick="doFetchAll()">Descargar datos y construir
@@ -476,84 +486,87 @@
       <p style="font-size:13px;color:var(--text2);margin-top:8px;max-width:400px;margin-left:auto;margin-right:auto;">
         El análisis de red evalúa múltiples entidades. Por favor, conéctate a tu entorno de SAP IBP para acceder.
       </p>
-      <button class="btn btn-primary" style="margin-top:20px; font-size:13px; padding:10px 20px;" onclick="toggleConnectPanel()">
+      <button class="btn btn-primary" style="margin-top:20px; font-size:13px; padding:10px 20px;"
+        onclick="toggleConnectPanel()">
         🔗 Conectar a SAP IBP
       </button>
     </div>
 
     <!-- ═══ SUPPLY NETWORK: MDT MAPPING ═══ -->
     <div class="panel hidden" id="panelSNMDT">
-      <div class="panel-title" onclick="toggleMappingBody('bodySNMDT', 'arrSNMDT')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
+      <div class="panel-title" onclick="toggleMappingBody('bodySNMDT', 'arrSNMDT')"
+        style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
         <span>② Mapeo de entidades — Supply Network</span>
         <span id="arrSNMDT" style="font-size:11px;">▼</span>
       </div>
       <div id="bodySNMDT">
         <p style="font-size:12px;color:var(--text2);margin-bottom:8px;">
-          Selecciona las entidades de datos maestros para analizar la red de suministro. La auto-detección asignó las más
+          Selecciona las entidades de datos maestros para analizar la red de suministro. La auto-detección asignó las
+          más
           probables.
         </p>
         <div class="mdt-grid">
-        <div class="mdt-card">
-          <div class="mdt-label">Location Source</div>
-          <div class="ss-wrap">
-            <input type="hidden" id="selSNLocation">
-            <input class="ss-input-vis" id="ssVis-selSNLocation" type="text" placeholder="Buscar entidad..."
-              autocomplete="off">
-            <div class="ss-list" id="ssList-selSNLocation"></div>
+          <div class="mdt-card">
+            <div class="mdt-label">Location Source</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selSNLocation">
+              <input class="ss-input-vis" id="ssVis-selSNLocation" type="text" placeholder="Buscar entidad..."
+                autocomplete="off">
+              <div class="ss-list" id="ssList-selSNLocation"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsSNLocation"></div>
           </div>
-          <div class="mdt-fields" id="fieldsSNLocation"></div>
-        </div>
-        <div class="mdt-card">
-          <div class="mdt-label">Customer Source</div>
-          <div class="ss-wrap">
-            <input type="hidden" id="selSNCustomer">
-            <input class="ss-input-vis" id="ssVis-selSNCustomer" type="text" placeholder="Buscar entidad..."
-              autocomplete="off">
-            <div class="ss-list" id="ssList-selSNCustomer"></div>
+          <div class="mdt-card">
+            <div class="mdt-label">Customer Source</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selSNCustomer">
+              <input class="ss-input-vis" id="ssVis-selSNCustomer" type="text" placeholder="Buscar entidad..."
+                autocomplete="off">
+              <div class="ss-list" id="ssList-selSNCustomer"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsSNCustomer"></div>
           </div>
-          <div class="mdt-fields" id="fieldsSNCustomer"></div>
-        </div>
-        <div class="mdt-card">
-          <div class="mdt-label">Product</div>
-          <div class="ss-wrap">
-            <input type="hidden" id="selSNProduct">
-            <input class="ss-input-vis" id="ssVis-selSNProduct" type="text" placeholder="Buscar entidad..."
-              autocomplete="off">
-            <div class="ss-list" id="ssList-selSNProduct"></div>
+          <div class="mdt-card">
+            <div class="mdt-label">Product</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selSNProduct">
+              <input class="ss-input-vis" id="ssVis-selSNProduct" type="text" placeholder="Buscar entidad..."
+                autocomplete="off">
+              <div class="ss-list" id="ssList-selSNProduct"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsSNProduct"></div>
           </div>
-          <div class="mdt-fields" id="fieldsSNProduct"></div>
-        </div>
-        <div class="mdt-card">
-          <div class="mdt-label">Production Source Header</div>
-          <div class="ss-wrap">
-            <input type="hidden" id="selSNSourceProd">
-            <input class="ss-input-vis" id="ssVis-selSNSourceProd" type="text" placeholder="Buscar entidad..."
-              autocomplete="off">
-            <div class="ss-list" id="ssList-selSNSourceProd"></div>
+          <div class="mdt-card">
+            <div class="mdt-label">Production Source Header</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selSNSourceProd">
+              <input class="ss-input-vis" id="ssVis-selSNSourceProd" type="text" placeholder="Buscar entidad..."
+                autocomplete="off">
+              <div class="ss-list" id="ssList-selSNSourceProd"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsSNSourceProd"></div>
           </div>
-          <div class="mdt-fields" id="fieldsSNSourceProd"></div>
-        </div>
-        <div class="mdt-card">
-          <div class="mdt-label">Location</div>
-          <div class="ss-wrap">
-            <input type="hidden" id="selSNLocMaster">
-            <input class="ss-input-vis" id="ssVis-selSNLocMaster" type="text" placeholder="Buscar entidad..."
-              autocomplete="off">
-            <div class="ss-list" id="ssList-selSNLocMaster"></div>
+          <div class="mdt-card">
+            <div class="mdt-label">Location</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selSNLocMaster">
+              <input class="ss-input-vis" id="ssVis-selSNLocMaster" type="text" placeholder="Buscar entidad..."
+                autocomplete="off">
+              <div class="ss-list" id="ssList-selSNLocMaster"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsSNLocMaster"></div>
           </div>
-          <div class="mdt-fields" id="fieldsSNLocMaster"></div>
-        </div>
-        <div class="mdt-card">
-          <div class="mdt-label">Customer</div>
-          <div class="ss-wrap">
-            <input type="hidden" id="selSNCustMaster">
-            <input class="ss-input-vis" id="ssVis-selSNCustMaster" type="text" placeholder="Buscar entidad..."
-              autocomplete="off">
-            <div class="ss-list" id="ssList-selSNCustMaster"></div>
+          <div class="mdt-card">
+            <div class="mdt-label">Customer</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selSNCustMaster">
+              <input class="ss-input-vis" id="ssVis-selSNCustMaster" type="text" placeholder="Buscar entidad..."
+                autocomplete="off">
+              <div class="ss-list" id="ssList-selSNCustMaster"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsSNCustMaster"></div>
           </div>
-          <div class="mdt-fields" id="fieldsSNCustMaster"></div>
         </div>
-      </div>
       </div>
       <div class="btn-row">
         <button class="btn btn-primary" id="btnFetchSN" onclick="doAnalyzeAndExport()">Analizar red y Exportar
@@ -598,16 +611,19 @@
       <div class="icon" style="font-size:48px; opacity:0.8; margin-bottom:16px;">🔒</div>
       <strong style="font-size:16px;color:var(--text)">Módulo restringido</strong>
       <p style="font-size:13px;color:var(--text2);margin-top:8px;max-width:400px;margin-left:auto;margin-right:auto;">
-        El visualizador dinámico requiere extraer nodos y dependencias. Por favor, conéctate a tu entorno de SAP IBP para acceder.
+        El visualizador dinámico requiere extraer nodos y dependencias. Por favor, conéctate a tu entorno de SAP IBP
+        para acceder.
       </p>
-      <button class="btn btn-primary" style="margin-top:20px; font-size:13px; padding:10px 20px;" onclick="toggleConnectPanel()">
+      <button class="btn btn-primary" style="margin-top:20px; font-size:13px; padding:10px 20px;"
+        onclick="toggleConnectPanel()">
         🔗 Conectar a SAP IBP
       </button>
     </div>
 
     <!-- ═══ VISUALIZER: MDT MAPPING ═══ -->
     <div class="panel" id="panelVizMDT" style="display:none;">
-      <div class="panel-title" onclick="toggleMappingBody('bodyVizMDT', 'arrVizMDT')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
+      <div class="panel-title" onclick="toggleMappingBody('bodyVizMDT', 'arrVizMDT')"
+        style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
         <span>② Mapeo de entidades — Visualizer</span>
         <span id="arrVizMDT" style="font-size:11px;">▼</span>
       </div>
@@ -617,67 +633,67 @@
           productos.
         </p>
         <div class="mdt-grid">
-        <div class="mdt-card">
-          <div class="mdt-label">Location Source</div>
-          <div class="ss-wrap">
-            <input type="hidden" id="selVizLocation">
-            <input class="ss-input-vis" id="ssVis-selVizLocation" type="text" placeholder="Buscar entidad..."
-              autocomplete="off">
-            <div class="ss-list" id="ssList-selVizLocation"></div>
+          <div class="mdt-card">
+            <div class="mdt-label">Location Source</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selVizLocation">
+              <input class="ss-input-vis" id="ssVis-selVizLocation" type="text" placeholder="Buscar entidad..."
+                autocomplete="off">
+              <div class="ss-list" id="ssList-selVizLocation"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsVizLocation"></div>
           </div>
-          <div class="mdt-fields" id="fieldsVizLocation"></div>
-        </div>
-        <div class="mdt-card">
-          <div class="mdt-label">Customer Source</div>
-          <div class="ss-wrap">
-            <input type="hidden" id="selVizCustomer">
-            <input class="ss-input-vis" id="ssVis-selVizCustomer" type="text" placeholder="Buscar entidad..."
-              autocomplete="off">
-            <div class="ss-list" id="ssList-selVizCustomer"></div>
+          <div class="mdt-card">
+            <div class="mdt-label">Customer Source</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selVizCustomer">
+              <input class="ss-input-vis" id="ssVis-selVizCustomer" type="text" placeholder="Buscar entidad..."
+                autocomplete="off">
+              <div class="ss-list" id="ssList-selVizCustomer"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsVizCustomer"></div>
           </div>
-          <div class="mdt-fields" id="fieldsVizCustomer"></div>
-        </div>
-        <div class="mdt-card">
-          <div class="mdt-label">Product</div>
-          <div class="ss-wrap">
-            <input type="hidden" id="selVizProduct">
-            <input class="ss-input-vis" id="ssVis-selVizProduct" type="text" placeholder="Buscar entidad..."
-              autocomplete="off">
-            <div class="ss-list" id="ssList-selVizProduct"></div>
+          <div class="mdt-card">
+            <div class="mdt-label">Product</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selVizProduct">
+              <input class="ss-input-vis" id="ssVis-selVizProduct" type="text" placeholder="Buscar entidad..."
+                autocomplete="off">
+              <div class="ss-list" id="ssList-selVizProduct"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsVizProduct"></div>
           </div>
-          <div class="mdt-fields" id="fieldsVizProduct"></div>
-        </div>
-        <div class="mdt-card">
-          <div class="mdt-label">Production Source Header</div>
-          <div class="ss-wrap">
-            <input type="hidden" id="selVizSourceProd">
-            <input class="ss-input-vis" id="ssVis-selVizSourceProd" type="text" placeholder="Buscar entidad..."
-              autocomplete="off">
-            <div class="ss-list" id="ssList-selVizSourceProd"></div>
+          <div class="mdt-card">
+            <div class="mdt-label">Production Source Header</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selVizSourceProd">
+              <input class="ss-input-vis" id="ssVis-selVizSourceProd" type="text" placeholder="Buscar entidad..."
+                autocomplete="off">
+              <div class="ss-list" id="ssList-selVizSourceProd"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsVizSourceProd"></div>
           </div>
-          <div class="mdt-fields" id="fieldsVizSourceProd"></div>
-        </div>
-        <div class="mdt-card">
-          <div class="mdt-label">Location</div>
-          <div class="ss-wrap">
-            <input type="hidden" id="selVizLocMaster">
-            <input class="ss-input-vis" id="ssVis-selVizLocMaster" type="text" placeholder="Buscar entidad..."
-              autocomplete="off">
-            <div class="ss-list" id="ssList-selVizLocMaster"></div>
+          <div class="mdt-card">
+            <div class="mdt-label">Location</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selVizLocMaster">
+              <input class="ss-input-vis" id="ssVis-selVizLocMaster" type="text" placeholder="Buscar entidad..."
+                autocomplete="off">
+              <div class="ss-list" id="ssList-selVizLocMaster"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsVizLocMaster"></div>
           </div>
-          <div class="mdt-fields" id="fieldsVizLocMaster"></div>
-        </div>
-        <div class="mdt-card">
-          <div class="mdt-label">Customer</div>
-          <div class="ss-wrap">
-            <input type="hidden" id="selVizCustMaster">
-            <input class="ss-input-vis" id="ssVis-selVizCustMaster" type="text" placeholder="Buscar entidad..."
-              autocomplete="off">
-            <div class="ss-list" id="ssList-selVizCustMaster"></div>
+          <div class="mdt-card">
+            <div class="mdt-label">Customer</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selVizCustMaster">
+              <input class="ss-input-vis" id="ssVis-selVizCustMaster" type="text" placeholder="Buscar entidad..."
+                autocomplete="off">
+              <div class="ss-list" id="ssList-selVizCustMaster"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsVizCustMaster"></div>
           </div>
-          <div class="mdt-fields" id="fieldsVizCustMaster"></div>
         </div>
-      </div>
       </div>
       <div class="btn-row">
         <button class="btn btn-primary" id="btnVizConfirm" onclick="vizConfirmMapping()">Confirmar mapeo y cargar
@@ -936,7 +952,8 @@
         <span class="zip-help-icon" tabindex="0">?
           <div class="zip-help-tooltip">
             <img src="ci-ds-export.png" alt="CI-DS Export" style="width:100%;border-radius:6px;margin-bottom:8px;">
-            <p>Debes exportar el project desde CI-DS y obtendrás el archivo comprimido, luego adjúntalo aquí. Puedes exportar y adjuntar los que necesites.</p>
+            <p>Debes exportar el project desde CI-DS y obtendrás el archivo comprimido, luego adjúntalo aquí. Puedes
+              exportar y adjuntar los que necesites.</p>
           </div>
         </span>
       </div>
@@ -951,9 +968,7 @@
         <div class="progress-bar" id="pb"></div>
       </div>
       <div class="btn-row">
-        <button class="btn btn-primary" id="gen-btn" disabled onclick="generate()">⚙️ Generar Excel</button>
-        <button class="btn btn-primary" id="dl-btn" style="display:none; background: var(--green);"
-          onclick="downloadExcel()">⬇️ Descargar Excel</button>
+        <button class="btn btn-primary" id="gen-btn" disabled onclick="generate()">⚙️ Analizar Integraciones</button>
       </div>
     </div>
 
@@ -961,13 +976,18 @@
     <div class="panel" id="sel-card" style="display:none">
       <div class="panel-title">✅ Selección de integraciones</div>
       <div class="sel-toolbar">
-        <input class="sel-search" id="sel-search" type="text" placeholder="🔍  Buscar por nombre, tipo, dataflow…" oninput="filterSelList()">
+        <input class="sel-search" id="sel-search" type="text" placeholder="🔍  Buscar por nombre, tipo, dataflow…"
+          oninput="filterSelList()">
         <button class="btn-sm" onclick="toggleFiltered(true)">Activar filtradas</button>
         <button class="btn-sm" onclick="toggleFiltered(false)">Desactivar filtradas</button>
         <span class="sel-counter" id="sel-counter"></span>
       </div>
       <div class="sel-list" id="sel-list"></div>
-      <button class="btn btn-primary" style="margin-top:18px" onclick="buildExcel()">⚙️ Generar Excel</button>
+      <div class="btn-row">
+        <button class="btn btn-primary" style="margin-top:18px" onclick="buildExcel()">⚙️ Generar Excel</button>
+        <button class="btn btn-primary" style="margin-top:18px" id="dl-btn"
+          style="display:none; background: var(--green);" onclick="downloadExcel()">⬇️ Descargar Excel</button>
+      </div>
     </div>
 
     <!-- RESULTS PANEL -->
