@@ -957,6 +957,19 @@
       </div>
     </div>
 
+    <!-- SELECTION PANEL -->
+    <div class="panel" id="sel-card" style="display:none">
+      <div class="panel-title">✅ Selección de integraciones</div>
+      <div class="sel-toolbar">
+        <input class="sel-search" id="sel-search" type="text" placeholder="🔍  Buscar por nombre, tipo, dataflow…" oninput="filterSelList()">
+        <button class="btn-sm" onclick="toggleFiltered(true)">Activar filtradas</button>
+        <button class="btn-sm" onclick="toggleFiltered(false)">Desactivar filtradas</button>
+        <span class="sel-counter" id="sel-counter"></span>
+      </div>
+      <div class="sel-list" id="sel-list"></div>
+      <button class="btn btn-primary" style="margin-top:18px" onclick="buildExcel()">⚙️ Generar Excel</button>
+    </div>
+
     <!-- RESULTS PANEL -->
     <div class="panel" id="stats-card" style="display:none">
       <div class="panel-title">📊 Resultado</div>
