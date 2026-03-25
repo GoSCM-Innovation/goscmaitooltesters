@@ -742,3 +742,6 @@
       popList('ibp_h_pver', 'pverList');
     } catch(e) {}
 
+    // Default tab on load
+    switchTab('bom');
+

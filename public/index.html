@@ -23,9 +23,7 @@
     <img src="logo-goscm.png" alt="GoSCM" class="logo-img">
     <div class="header-divider"></div>
     <div>
-      <div class="app-title">Production Hierarchy and Supply Network Analysis</div>
-      <div class="app-sub">Production Hierarchy: Explore all levels of the production process · Supply Network Analysis:
-        Know the quality of your Supply Network</div>
+      <div class="app-title">Applications Hub</div>
     </div>
     <div class="header-status">
       <button onclick="toggleTechReq()" id="btnTechReq"
@@ -300,8 +298,8 @@
     <button class="tab-btn req-conn" onclick="switchTab('visualizer')" id="tabBtn-visualizer">
       <span>🔭</span> Supply Network Visualizer <span class="lock-icon" style="font-size:10px;opacity:0.7;margin-left:4px;">🔒</span>
     </button>
-    <button class="tab-btn active" onclick="switchTab('docs')" id="tabBtn-docs">
-      <span>📄</span> Doc Generator
+    <button class="tab-btn" onclick="switchTab('docs')" id="tabBtn-docs">
+      <span>📄</span> Mapping Dataflow Generator
     </button>
   </div>
 
@@ -922,18 +920,26 @@
   </div><!-- /tab-visualizer -->
 
   <!-- ═══ TAB: DOC GENERATOR ═══ -->
-  <div class="tab-panel active" id="tab-docs">
+  <div class="tab-panel" id="tab-docs">
     <div class="tab-info-banner" id="infoBannerDocs">
       <span class="tab-info-icon">📄</span>
       <div class="tab-info-content">
-        <div class="tab-info-title">Doc Generator</div>
-        <div class="tab-info-desc">Generador de documentación para tu Supply Network y Production Hierarchy.</div>
+        <div class="tab-info-title">Mapping Dataflow Generator</div>
+        <div class="tab-info-desc">Generador de Mapping Dataflow para tareas de integración de SAP CI-DS</div>
       </div>
     </div>
 
     <!-- MAIN UPLOAD PANEL -->
     <div class="panel">
-      <div class="panel-title">📦 Archivos ZIP de entrada</div>
+      <div class="panel-title" style="display:flex;align-items:center;gap:8px;">
+        📦 Archivos ZIP de entrada
+        <span class="zip-help-icon" tabindex="0">?
+          <div class="zip-help-tooltip">
+            <img src="ci-ds-export.png" alt="CI-DS Export" style="width:100%;border-radius:6px;margin-bottom:8px;">
+            <p>Debes exportar el project desde CI-DS y obtendrás el archivo comprimido, luego adjúntalo aquí. Puedes exportar y adjuntar los que necesites.</p>
+          </div>
+        </span>
+      </div>
       <div class="drop-zone" id="dz">
         <input type="file" id="fi" accept=".zip" multiple>
         <span class="drop-icon">🗂️</span>
