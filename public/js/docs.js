@@ -256,6 +256,17 @@ function buildSchemaMapFull(dfEl, dsIdx) {
   return map;
 }
 
+// ── Known field descriptions (fallback when XML has no description) ──────────
+const FIELD_DESC_FALLBACK = {
+  PRDID:        'Id de producto',
+  CUSTID:       'Id de cliente',
+  LOCID:        'Id de centro',
+  CURRID:       'Id de divisa',
+  ID:           'Id interno',
+  KEYFIGUREDATE:'Fecha',
+  DATE:         'Fecha',
+};
+
 /**
  * Parse one <dataflow:DataFlow> element.
  * Fix #8: now returns an ARRAY of results (one per writer element found),
@@ -294,46 +305,76 @@ function parseDataflow(dfEl, dsIdx, ffIdx, srcDSFallback, dstDSFallback) {
 
   const mappings = [], filters = [], lookups = [];
 
+
+  // ── LOOKUPS — paren-counting to capture full expression including nested calls
+  for (const [tfName, tfData] of Object.entries(ts)) {
+    for (const f of tfData.fields) {
+      if (!f.proj || !/\blookup\s*\(/i.test(f.proj)) continue;
+      const proj = f.proj;
+      let pos = 0;
+      while (pos < proj.length) {
+        // find each 'lookup(' using indexOf from current pos
+        const lo = proj.toLowerCase().indexOf('lookup(', pos);
+        if (lo === -1) break;
+        // Walk forward counting parens to find matching close
+        let depth = 0, i = lo + 'lookup('.length - 1;
+        for (; i < proj.length; i++) {
+          if (proj[i] === '(') depth++;
+          else if (proj[i] === ')') { depth--; if (depth === 0) break; }
+        }
+        const fullExpr = proj.slice(lo, i + 1);
+        lookups.push({ func: fullExpr, transform: tfName });
+        pos = i + 1;
+      }
+    }
+  }
+
   // ── MAPPINGS ──────────────────────────────────────────────
   const finalTF = ts['Target_Query'] || Object.values(ts).at(-1) || null;
   if (finalTF) {
     for (const f of finalTF.fields) {
       if (!f.proj) continue;
-
-      if (/\blookup\s*\(/i.test(f.proj)) {
-        const lm = f.proj.match(/lookup\s*\(\s*['"]?([^'",()\s]+)/i);
-        lookups.push({ func:'lookup()', file: lm ? lm[1] : '?', transform: finalTF ? Object.keys(ts).find(k => ts[k] === finalTF) || '' : '', desc:`Campo destino: ${f.name}` });
-      }
-
       const { srcDS, srcTable, srcField, ops } = processField(f.proj, ts, schemaMap);
       mappings.push({ srcDS: srcDS || srcDSFallback || '', srcTable, srcField,
                       dstDS: targetDS, dstTable: targetTable,
-                      dstField: f.name, dstDesc: f.desc, ops });
+                      dstField: f.name, dstDesc: f.desc || FIELD_DESC_FALLBACK[f.name] || FIELD_DESC_FALLBACK[(f.name||"").toUpperCase()] || "", ops });
     }
   }
 
   // ── FILTERS ──────────────────────────────────────────────
+  // Each transform's filterExpression is treated as ONE filter row.
+  // The full multi-line expression is preserved as-is in the cell.
+  // We extract the first real-table reference for the Tabla/Campo columns.
   const seenF = new Set();
   for (const info of Object.values(ts)) {
     const fe = info.filterExpr;
     if (!fe) continue;
+    // Expand transform refs, decode XML newlines
     const feExp = expandExpr(fe.replace(/&#xA;/g, '\n'), ts);
-    const lines = feExp.split('\n').map(l => l.trim()).filter(Boolean);
-    for (const line of lines) {
-      if (/^(and|or|\(|\))$/i.test(line)) continue;
-      const re2 = new RegExp(_REF.source);
-      const ref = line.match(re2);
-      if (!ref) continue;
-      const r = refFromMatch(Array.from(ref));
-      if (r.schema in ts) continue;
-      const tbl = schemaMap[r.schema]?.table || r.schema;
-      const key = tbl + '|' + r.field + '|' + line.substring(0,80);
-      if (seenF.has(key)) continue;
-      seenF.add(key);
-      filters.push({ sourceTable:tbl, sourceField:r.field,
-                     expression: line.length > 400 ? line.substring(0,400)+'…' : line,
-                     description:'' });
+
+    // Find first real-table reference in the whole expression
+    const re2 = new RegExp(_REF.source, 'g');
+    let firstTbl = '', firstFld = '';
+    let m2;
+    while ((m2 = re2.exec(feExp)) !== null) {
+      const r = refFromMatch(Array.from(m2));
+      if (r.schema in ts) continue;   // skip transform refs
+      firstTbl = schemaMap[r.schema]?.table || r.schema;
+      firstFld = r.field;
+      break;
     }
+
+    // Deduplicate by expression (first 120 chars as key)
+    const key = feExp.substring(0, 120);
+    if (seenF.has(key)) continue;
+    seenF.add(key);
+
+    filters.push({
+      sourceTable: firstTbl,
+      sourceField: firstFld,
+      expression:  feExp,   // full expression, newlines preserved for multi-line cell
+      description: '',
+    });
   }
 
   // DataFlow display name
@@ -381,13 +422,18 @@ function parseIntegration(xmlStr, batchEntry) {
     return 'MD';
   }
 
-  // Global variables from <globalVariables> elements at root level
+  // Global variables from <globalVariables> inside the <Job> element
   const variables = [];
   for (const c of root.children) {
-    if (c.localName === 'globalVariables') {
-      const name = c.getAttribute('name') || '';
-      const val  = c.getAttribute('defaultValue') || '';
-      if (name) variables.push({ name, value: val });
+    if (c.localName === 'Job') {
+      for (const gv of c.children) {
+        if (gv.localName === 'globalVariables') {
+          const name = gv.getAttribute('name') || '';
+          const val  = gv.getAttribute('defaultValue') || '';
+          if (name) variables.push({ name, value: val });
+        }
+      }
+      break;
     }
   }
 
@@ -716,7 +762,8 @@ function buildIntegrationSheet(parsed) {
   // Helper: fila vacía
   const emptyRow = () => sb.addRow(Array(N).fill({v:'', s:XF.DEFAULT}), 6);
 
-  // ── Fila 1: Back button en A1 + headers tabla 1 en B1-G1
+  // ── Fila 1: Back button en A1 (con hyperlink → Parámetros) + headers tabla 1
+  sb.addHyperlink(0, 0, "#'Parámetros'!A1");
   sb.addRow([
     {v:'<--',                    s:XF.BACK_BTN},
     {v:' #',                     s:XF.T1_HDR},
