@@ -6,6 +6,39 @@ let xlsBuf = null;
 let parsedIntegrations = [];   // [{sheetName, pkg, parsed, paramRow}] — filled after scan
 
 // ════════════════════════════════════════════════════════════
+//  IBP FIELD DESCRIPTIONS — fetched from OData $metadata
+//  Queries MASTER_DATA_API_SRV and PLANNING_DATA_API_SRV in
+//  parallel; extracts Property[Name] → sap:label mappings.
+//  Returns {} silently when no IBP connection is available.
+// ════════════════════════════════════════════════════════════
+async function fetchIbpFieldDescriptions() {
+  if (typeof CFG === 'undefined' || !CFG.url || !CFG.user || !CFG.pass) return {};
+  const services = ['MASTER_DATA_API_SRV', 'PLANNING_DATA_API_SRV'];
+  const descs = {};
+  const results = await Promise.allSettled(
+    services.map(svc => {
+      const url = `${CFG.url}/sap/opu/odata/IBP/${svc}/$metadata`;
+      return fetch('/api/proxy-xml', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, user: CFG.user, password: CFG.pass })
+      }).then(r => r.ok ? r.text() : Promise.reject(r.status));
+    })
+  );
+  for (const r of results) {
+    if (r.status !== 'fulfilled') continue;
+    const xml = new DOMParser().parseFromString(r.value, 'text/xml');
+    xml.querySelectorAll('Property').forEach(p => {
+      const name  = p.getAttribute('Name');
+      const label = p.getAttribute('sap:label') || '';
+      // MASTER_DATA_API_SRV is processed first — don't overwrite with PLANNING_DATA
+      if (name && label && !descs[name]) descs[name] = label;
+    });
+  }
+  return descs;
+}
+
+// ════════════════════════════════════════════════════════════
 //  UI HELPERS
 // ════════════════════════════════════════════════════════════
 const docsLogEl   = document.getElementById('docs-log');
@@ -1138,12 +1171,33 @@ async function buildExcel() {
   docsLog(`📋 Generando Excel con ${selected.length} integraciones…`, 'l-info');
   setP(5);
 
+  // ── Fetch IBP field descriptions (MASTER_DATA_API_SRV + PLANNING_DATA_API_SRV)
+  docsLog('🔍 Obteniendo descripciones de campos desde IBP…', 'l-info');
+  let ibpDescs = {};
+  try {
+    ibpDescs = await fetchIbpFieldDescriptions();
+    const n = Object.keys(ibpDescs).length;
+    docsLog(
+      n > 0
+        ? `✔ ${n} descripciones de campos obtenidas de IBP`
+        : '⚠ Sin conexión a IBP — se usarán descripciones del XML',
+      n > 0 ? 'l-ok' : 'l-warn'
+    );
+  } catch (e) {
+    docsLog('⚠ No se pudo consultar IBP: ' + e.message, 'l-warn');
+  }
+  setP(15);
+
   const sheets   = [];
   const paramRows = [];
   let totalJobs = 0, totalMaps = 0, totalFilts = 0;
 
   for (const item of selected) {
     const { parsed, paramRow } = item;
+    // Enrich dstDesc with IBP labels when the XML carried no description
+    parsed.mappings.forEach(m => {
+      if (!m.dstDesc && ibpDescs[m.dstField]) m.dstDesc = ibpDescs[m.dstField];
+    });
     totalJobs++;
     totalMaps  += parsed.mappings.length;
     totalFilts += parsed.filters.length;
