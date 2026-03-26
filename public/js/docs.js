@@ -3,6 +3,40 @@
 // ════════════════════════════════════════════════════════════
 let files = [];
 let xlsBuf = null;
+let parsedIntegrations = [];   // [{sheetName, pkg, parsed, paramRow}] — filled after scan
+
+// ════════════════════════════════════════════════════════════
+//  IBP FIELD DESCRIPTIONS — fetched from OData $metadata
+//  Queries MASTER_DATA_API_SRV and PLANNING_DATA_API_SRV in
+//  parallel; extracts Property[Name] → sap:label mappings.
+//  Returns {} silently when no IBP connection is available.
+// ════════════════════════════════════════════════════════════
+async function fetchIbpFieldDescriptions() {
+  if (typeof CFG === 'undefined' || !CFG.url || !CFG.user || !CFG.pass) return {};
+  const services = ['MASTER_DATA_API_SRV', 'PLANNING_DATA_API_SRV'];
+  const descs = {};
+  const results = await Promise.allSettled(
+    services.map(svc => {
+      const url = `${CFG.url}/sap/opu/odata/IBP/${svc}/$metadata`;
+      return fetch('/api/proxy-xml', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, user: CFG.user, password: CFG.pass })
+      }).then(r => r.ok ? r.text() : Promise.reject(r.status));
+    })
+  );
+  for (const r of results) {
+    if (r.status !== 'fulfilled') continue;
+    const xml = new DOMParser().parseFromString(r.value, 'text/xml');
+    xml.querySelectorAll('Property').forEach(p => {
+      const name  = p.getAttribute('Name');
+      const label = p.getAttribute('sap:label') || '';
+      // MASTER_DATA_API_SRV is processed first — don't overwrite with PLANNING_DATA
+      if (name && label && !descs[name]) descs[name] = label;
+    });
+  }
+  return descs;
+}
 
 // ════════════════════════════════════════════════════════════
 //  UI HELPERS
@@ -220,74 +254,191 @@ function processField(proj, ts, schemaMap) {
   return { srcDS, srcTable, srcField, ops };
 }
 
-/** Parse one <dataflow:DataFlow> element → { mappings, filters, lookups, targetTable, targetDS } */
-function parseDataflow(dfEl, dsIdx) {
-  const schemaMap = buildSchemaMap(dfEl, dsIdx);
+// ── Fix #9: FlatFileFormat index (for FileLoader targets: FILE_DC, ARCHIVOS) ──
+function buildFfIdx(root) {
+  const m = {}; let i = 0;
+  for (const c of root.children) {
+    const ln = c.localName;
+    if (ln === 'FlatFileFormat' || ln === 'DelimitedFileFormat' ||
+        ln === 'FixedWidthFileFormat' || ln.includes('FileFormat'))
+      m[i] = c.getAttribute('name') || ('FILE_' + i);
+    i++;
+  }
+  return m;
+}
+
+// ── Fix #9: buildSchemaMap extended with FileReader support ──
+function buildSchemaMapFull(dfEl, dsIdx) {
+  const map = {};
+  for (const el of dfEl.children) {
+    if (el.localName !== 'elements') continue;
+    const typ   = xmiType(el);
+    const dname = el.getAttribute('displayName') || '';
+    if (typ.includes('TableReader')) {
+      const tname = el.getAttribute('tableName') || el.getAttribute('outputSchemaName') || dname;
+      const ds    = dsFromRef(el.getAttribute('referencedDataStore') || '', dsIdx);
+      map[dname]  = { table: tname, ds };
+      const oname = el.getAttribute('outputSchemaName');
+      if (oname && oname !== dname) map[oname] = { table: tname, ds };
+    } else if (typ.includes('FileReader')) {
+      // FileReader: source is a flat file; displayName/outputSchemaName is the file alias
+      const tn = el.getAttribute('outputSchemaName') || dname;
+      map[dname] = { table: tn, ds: 'FILE' };
+      if (tn && tn !== dname) map[tn] = { table: tn, ds: 'FILE' };
+    }
+  }
+  return map;
+}
+
+// ── Known field descriptions (fallback when XML has no description) ──────────
+const FIELD_DESC_FALLBACK = {
+  PRDID:        'Id de producto',
+  CUSTID:       'Id de cliente',
+  LOCID:        'Id de centro',
+  CURRID:       'Id de divisa',
+  ID:           'Id interno',
+  KEYFIGUREDATE:'Fecha',
+  DATE:         'Fecha',
+};
+
+/**
+ * Parse one <dataflow:DataFlow> element.
+ * Fix #8: now returns an ARRAY of results (one per writer element found),
+ *         so that XMLs with multiple DataFlows writing to different targets
+ *         each produce their own entry.
+ * Fix #9: handles FileLoader (writes to flat file) in addition to TableLoader.
+ */
+function parseDataflow(dfEl, dsIdx, ffIdx, srcDSFallback, dstDSFallback) {
+  // Use extended schema map that includes FileReader sources
+  const schemaMap = buildSchemaMapFull(dfEl, dsIdx);
   const ts        = parseTransforms(dfEl);
 
-  let loaderEl = null;
+  // Find the writer: prefer TableLoader, fall back to FileLoader
+  let loaderEl = null, isFile = false;
   for (const el of dfEl.children) {
-    if (el.localName === 'elements' && xmiType(el).includes('TableLoader')) { loaderEl = el; break; }
+    if (el.localName !== 'elements') continue;
+    const t = xmiType(el);
+    if (t.includes('TableLoader')) { loaderEl = el; isFile = false; break; }
+    if (t.includes('FileLoader'))  { loaderEl = el; isFile = true; }  // keep scanning for TableLoader
   }
-  const targetTable = loaderEl ? (loaderEl.getAttribute('tableName') || loaderEl.getAttribute('displayName') || '') : '';
-  const targetDS    = loaderEl ? dsFromRef(loaderEl.getAttribute('referencedDataStore') || '', dsIdx) : '';
+  if (!loaderEl) return null;
+
+  let targetTable, targetDS, fileLoaderFileName = '';
+  if (isFile) {
+    // Fix #9: target name from FlatFileFormat index; DS from batch.csv
+    const ref = loaderEl.getAttribute('referencedFileFormat') || '';
+    const mx  = ref.match(/\/(\d+)/);
+    targetTable = mx ? (ffIdx[+mx[1]] || ref) : ref;
+    if (!targetTable) targetTable = loaderEl.getAttribute('displayName') || '';
+    targetDS = dstDSFallback || 'FILE_DC';
+    // Extract file_name property from FileLoader for "filename".table.field format
+    for (const child of loaderEl.children) {
+      if (child.localName === 'properties' && child.getAttribute('name') === 'file_name') {
+        const fn = child.getAttribute('value') || '';
+        if (fn) fileLoaderFileName = fn;
+        break;
+      }
+    }
+  } else {
+    targetTable = loaderEl.getAttribute('tableName') || loaderEl.getAttribute('displayName') || '';
+    targetDS    = dsFromRef(loaderEl.getAttribute('referencedDataStore') || '', dsIdx) || dstDSFallback || '';
+  }
+  if (!targetTable) return null;
 
   const mappings = [], filters = [], lookups = [];
+
+
+  // ── LOOKUPS — paren-counting to capture full expression including nested calls
+  for (const [tfName, tfData] of Object.entries(ts)) {
+    for (const f of tfData.fields) {
+      if (!f.proj || !/\blookup\s*\(/i.test(f.proj)) continue;
+      const proj = f.proj;
+      let pos = 0;
+      while (pos < proj.length) {
+        // find each 'lookup(' using indexOf from current pos
+        const lo = proj.toLowerCase().indexOf('lookup(', pos);
+        if (lo === -1) break;
+        // Walk forward counting parens to find matching close
+        let depth = 0, i = lo + 'lookup('.length - 1;
+        for (; i < proj.length; i++) {
+          if (proj[i] === '(') depth++;
+          else if (proj[i] === ')') { depth--; if (depth === 0) break; }
+        }
+        const fullExpr = proj.slice(lo, i + 1);
+        lookups.push({ func: fullExpr, transform: tfName });
+        pos = i + 1;
+      }
+    }
+  }
 
   // ── MAPPINGS ──────────────────────────────────────────────
   const finalTF = ts['Target_Query'] || Object.values(ts).at(-1) || null;
   if (finalTF) {
     for (const f of finalTF.fields) {
       if (!f.proj) continue;
-
-      if (/\blookup\s*\(/i.test(f.proj)) {
-        const lm = f.proj.match(/lookup\s*\(\s*['"]?([^'",()\s]+)/i);
-        lookups.push({ func:'lookup()', file: lm ? lm[1] : '?', desc:`Campo destino: ${f.name}` });
-      }
-
       const { srcDS, srcTable, srcField, ops } = processField(f.proj, ts, schemaMap);
-      mappings.push({ srcDS, srcTable, srcField,
+      mappings.push({ srcDS: srcDS || srcDSFallback || '', srcTable, srcField,
                       dstDS: targetDS, dstTable: targetTable,
-                      dstField: f.name, dstDesc: f.desc, ops });
+                      dstField: f.name, dstDesc: f.desc || FIELD_DESC_FALLBACK[f.name] || FIELD_DESC_FALLBACK[(f.name||"").toUpperCase()] || "", ops });
     }
   }
 
   // ── FILTERS ──────────────────────────────────────────────
-  // Expand filter expressions too so they show real table names
+  // Each transform's filterExpression is treated as ONE filter row.
+  // The full multi-line expression is preserved as-is in the cell.
+  // We extract the first real-table reference for the Tabla/Campo columns.
   const seenF = new Set();
   for (const info of Object.values(ts)) {
     const fe = info.filterExpr;
     if (!fe) continue;
-    const feExp   = expandExpr(fe.replace(/&#xA;/g, '\n'), ts);
-    const lines   = feExp.split('\n').map(l => l.trim()).filter(Boolean);
-    for (const line of lines) {
-      if (/^(and|or|\(|\))$/i.test(line)) continue;
-      // Match first table.field ref in this line (quoted or normal)
-      const re2 = new RegExp(_REF.source);
-      const ref = line.match(re2);
-      if (!ref) continue;
-      const r = refFromMatch(Array.from(ref));
-      if (r.schema in ts) continue;  // guard: still a transform
-      const tbl = schemaMap[r.schema]?.table || r.schema;
-      const key = tbl + '|' + r.field + '|' + line.substring(0,80);
-      if (seenF.has(key)) continue;
-      seenF.add(key);
-      filters.push({ sourceTable:tbl, sourceField:r.field,
-                     expression: line.length > 400 ? line.substring(0,400)+'…' : line,
-                     description:'' });
+    // Expand transform refs, decode XML newlines
+    const feExp = expandExpr(fe.replace(/&#xA;/g, '\n'), ts);
+
+    // Find first real-table reference in the whole expression
+    const re2 = new RegExp(_REF.source, 'g');
+    let firstTbl = '', firstFld = '';
+    let m2;
+    while ((m2 = re2.exec(feExp)) !== null) {
+      const r = refFromMatch(Array.from(m2));
+      if (r.schema in ts) continue;   // skip transform refs
+      firstTbl = schemaMap[r.schema]?.table || r.schema;
+      firstFld = r.field;
+      break;
     }
+
+    // Deduplicate by expression (first 120 chars as key)
+    const key = feExp.substring(0, 120);
+    if (seenF.has(key)) continue;
+    seenF.add(key);
+
+    filters.push({
+      sourceTable: firstTbl,
+      sourceField: firstFld,
+      expression:  feExp,   // full expression, newlines preserved for multi-line cell
+      description: '',
+    });
   }
 
-  return { mappings, filters, lookups, targetTable, targetDS };
+  // DataFlow display name
+  const dataflowName = dfEl.getAttribute('name') || dfEl.getAttribute('displayName') || '';
+
+  return { mappings, filters, lookups, targetTable, targetDS, dataflowName, fileLoaderFileName };
 }
 
-/** Parse one integration XML + batch entry → full parsed object */
+/**
+ * Parse one integration XML + batch entry.
+ * Fix #8 (complete): returns an ARRAY — one entry per DataFlow that has a writer
+ * (TableLoader or FileLoader). XMLs with N distinct target tables produce N entries,
+ * each becoming its own Excel sheet instead of being silently merged into one.
+ * Fix #9: passes ffIdx so FileLoader targets are resolved from FlatFileFormat index.
+ */
 function parseIntegration(xmlStr, batchEntry) {
   const doc = new DOMParser().parseFromString(xmlStr, 'application/xml');
-  if (doc.getElementsByTagName('parsererror').length) return null;
+  if (doc.getElementsByTagName('parsererror').length) return [];
   const root = doc.documentElement;
 
   const dsIdx = buildDsIndexMap(root);
+  const ffIdx = buildFfIdx(root);
 
   // Job metadata
   let jobName = '', jobDesc = '';
@@ -298,298 +449,195 @@ function parseIntegration(xmlStr, batchEntry) {
       break;
     }
   }
-
-  // All DataFlows
-  let allMaps = [], allFilts = [], allLooks = [], targetTable = '', targetDS = '';
-  for (const c of root.children) {
-    if (c.localName !== 'DataFlow') continue;
-    const { mappings, filters, lookups, targetTable:tt, targetDS:tds } = parseDataflow(c, dsIdx);
-    allMaps.push(...mappings); allFilts.push(...filters); allLooks.push(...lookups);
-    if (tt) targetTable = tt;
-    if (tds) targetDS   = tds;
-  }
+  if (!jobName) return [];
 
   const srcDSName = batchEntry?.src_datastore_Name || '';
-  const dstDSName = batchEntry?.target_datastorename || targetDS || '';
+  const dstDSName = batchEntry?.target_datastorename || '';
 
-  for (const m of allMaps) {
-    if (!m.srcDS && srcDSName) m.srcDS = srcDSName;
-    if (!m.dstDS && dstDSName) m.dstDS = dstDSName;
+  // Tipo de integración from job name
+  function getTipo(name, isFile) {
+    if (isFile) return 'FILE';
+    const u = (name || '').toUpperCase();
+    if (/_KF_/.test(u)) return 'KF';
+    if (/_MD_|_DM_/.test(u)) return 'MD';
+    if (/_FILE_/.test(u)) return 'FILE';
+    return 'MD';
   }
 
-  return { jobName, jobDesc, srcDSName, dstDSName, targetTable,
-           mappings: allMaps, filters: allFilts, lookups: allLooks };
+  // Global variables from <globalVariables> inside the <Job> element
+  const variables = [];
+  for (const c of root.children) {
+    if (c.localName === 'Job') {
+      for (const gv of c.children) {
+        if (gv.localName === 'globalVariables') {
+          const name = gv.getAttribute('name') || '';
+          const val  = gv.getAttribute('defaultValue') || '';
+          if (name) variables.push({ name, value: val });
+        }
+      }
+      break;
+    }
+  }
+
+  const results = [];
+  for (const c of root.children) {
+    if (c.localName !== 'DataFlow') continue;
+    const r = parseDataflow(c, dsIdx, ffIdx, srcDSName, dstDSName);
+    if (!r || !r.targetTable) continue;
+
+    const dstDSFinal = dstDSName || r.targetDS || '';
+    for (const m of r.mappings) {
+      if (!m.srcDS && srcDSName)   m.srcDS = srcDSName;
+      if (!m.dstDS && dstDSFinal)  m.dstDS = dstDSFinal;
+    }
+
+    const isFile = (dstDSFinal || '').toLowerCase().includes('file') ||
+                   (dstDSFinal || '').toUpperCase() === 'FILE_DC' ||
+                   (dstDSFinal || '').toUpperCase() === 'ARCHIVOS';
+
+    results.push({
+      jobName, jobDesc,
+      tipoIntegracion: getTipo(jobName, isFile),
+      dataflowName:    r.dataflowName,
+      fileLoaderFileName: r.fileLoaderFileName || '',
+      srcDSName,
+      dstDSName:   dstDSFinal,
+      targetTable: r.targetTable,
+      mappings:    r.mappings,
+      filters:     r.filters,
+      lookups:     r.lookups,
+      variables,
+    });
+  }
+  return results;
 }
 
 // ════════════════════════════════════════════════════════════
-//  XLSX GENERATOR — Pure XML via JSZip (full style support)
-//  Builds a real .xlsx from scratch without SheetJS Pro.
+//  XLSX GENERATOR — Fiel al template plantilla_documentador.xlsx
+//  Colores y fuentes exactas de la plantilla entregada.
 // ════════════════════════════════════════════════════════════
 
-// ── Style index constants ────────────────────────────────────
-// These numbers match the xf index in styles.xml (0-based)
+// ── Colores tomados directamente de la plantilla ─────────────
+// Parámetros header:  theme:5  → Office Blue Medium = 4472C4  (rgb FF4472C4)
+// Parámetros data A-C: theme:8 → Blue lighter      = 9DC3E6  (rgb FF9DC3E6)
+// Parámetros data D-G: theme:9 → Blue lightest      = DDEBF7  (rgb FFDDEBF7)
+// Integ header (T1):  FF00B0F0  cyan/blue
+// Integ data (T1):    theme:9 = DDEBF7
+// Tabla2,3,4 header:  theme:6 → Orange             = ED7D31  (rgb FFED7D31)
+// Tabla2,3,4 data:    no fill (white)
+// Tabla3,4 data font: bold FF002060 navy
+// Back button A1:     theme:4 → Blue dark           = 4472C4 dark = 2E74B5 → 255E94
+// Col A width: 4.6
+
+// Style index constants (0-based xf index in styles.xml)
 const XF = {
+  DEFAULT:       0,
   // Parámetros sheet
-  PRM_TITLE:     1,   // Title row: white bold 15 on dark navy, center, bottom-medium
-  PRM_TITLE_PAD: 2,   // Padding cells in title row
-  PRM_SUBTITLE:  3,   // Subtitle italic on dark navy
-  SPACER:        4,   // Spacer fill
-  PRM_HDR:       5,   // Column header: white bold 9 on cobalt, center, bottom-medium
-  // Parámetros data rows (white bg)
-  PRM_TBL:      6,   // Target table: bold teal-dark
-  PRM_LINK:     7,   // Hyperlink: bold blue underline
-  PRM_TASK:     8,   // Task name: normal dark
-  PRM_DESC:     9,   // Description: italic mid-gray
-  PRM_SRC:      10,  // DS Origen: bold teal
-  PRM_DST:      11,  // DS Destino: bold emerald
-  // Parámetros data rows (alt bg EEF4FF)
-  PRM_TBL_A:   12,
-  PRM_LINK_A:  13,
-  PRM_TASK_A:  14,
-  PRM_DESC_A:  15,
-  PRM_SRC_A:   16,
-  PRM_DST_A:   17,
-  // Integration sheet header
-  INT_JOBTITLE: 18,  // Job title: bold 13 dark-navy on lightBlue
-  INT_JOBTPAD:  19,  // Padding in job title row
-  INT_JOBDESC:  20,  // Job description: 9 mid on F7F9FD
-  INT_JOBDPAD:  21,  // Padding in desc row
-  INT_DSLAB:    22,  // "Origen:"/"Destino:" label
-  INT_DSSRC:    23,  // DS origin value: bold teal
-  INT_DSDST:    24,  // DS destination value: bold emerald (reuse 24→same as PRM_DST on F0F4FF)
-  INT_DSPAD:    21,  // Padding in DS row (same shade as desc)
-  // Map section
-  MAP_SEC:      27,  // Section title: white bold 12 on map1, bottom-medium
-  MAP_SEC_PAD:  28,  // Section title padding
-  MAP_HDR:      29,  // Column header: white bold 9 on map2, bottom-medium
-  MAP_DS:       30,  // DS col white bg: bold teal
-  MAP_TBL:      31,  // Table col white: bold mid
-  MAP_FLD:      32,  // Field col white: normal dark
-  MAP_OPS:      32,  // Ops: italic ops-color (same idx, different fill for alt)
-  MAP_DS_A:     33,  // DS col alt bg EDF3FC
-  MAP_TBL_A:    34,
-  MAP_FLD_A:    35,
-  // Filter section
-  FLT_SEC:      39,  // Section title on flt1
-  FLT_SEC_PAD:  40,
-  FLT_HDR:      41,  // Header on flt2
-  FLT_TBL:      44,  // Table col white
-  FLT_FLD:      45,  // Field col white
-  FLT_OPS:      47,  // Ops/expr: italic
-  FLT_TBL_A:    44,  // alt (reuse; fill differs in XML but same xf for simplicity - we'll handle below)
+  PRM_HDR:       1,  // Header: white bold Calibri 11 on theme:5 (4472C4), thin border, vcenter
+  PRM_ABC:       2,  // Data cols A-B-C: Calibri 11 on theme:8 (9DC3E6), center, wrap, thin border
+  PRM_DEF:       3,  // Data cols D-E-F-G: Calibri 11 on theme:9 (DDEBF7), left, wrap, thin border
+  PRM_LINK:      4,  // Col A: numeric id, hyperlink style (blue underline) on theme:8
+  // Integration back button A1
+  BACK_BTN:      5,  // "<--" bold Calibri 11 on theme:4 (255E94), center, thin border
+  // Table 1 header (cyan FF00B0F0), white bold Arial 10, center, wrap, thin
+  T1_HDR:        6,
+  // Table 1 data (theme:9 DDEBF7), Arial 10, thin border
+  T1_NUM:        7,  // # col: center
+  T1_CAMPO:      8,  // Campo Destino: left bold
+  T1_DATA:       9,  // other cols: left
+  // Tables 2/3/4 header (theme:6 ED7D31), Arial 10 bold, thin
+  T234_HDR:     10,
+  // Tables 2/3/4 data: no fill, Calibri 11, left, thin B/C only
+  T2_DATA:      11,  // normal
+  // Tables 3/4 data: no fill, Calibri 11 BOLD color FF002060
+  T34_DATA:     12,
 };
 
-// ── Hardcoded styles.xml ─────────────────────────────────────
-// Built from the openpyxl reference file and extended for all needed combinations
+// ── styles.xml — colores exactos extraídos de plantilla_documentador.xlsx ────
+// Fills decodificados del tema Office 2013-2022:
+//   fill[2] = 00B0F0  cyan explícito (T1 header)
+//   fill[3] = A9CE91  verde claro  theme:9 tint+0.4 (T1 data)
+//   fill[4] = EDEDED  gris claro   theme:6 tint+0.8 (PRM D-G, T234 header)
+//   fill[5] = ED7D31  naranja      theme:5 sin tint  (PRM header)
+//   fill[6] = FBE5D6  naranja pálido theme:5 tint+0.8 (no usado)
+//   fill[7] = DEEBF7  azul claro   theme:8 tint+0.8 (PRM data A-C)
+//   fill[8] = E2EFDA  verde pálido theme:9 tint+0.8 (no usado)
+//   fill[9] = 223962  navy oscuro  theme:4 tint-0.5 (back button)
 const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <numFmts count="0"/>
-<fonts count="17">
-  <font><name val="Calibri"/><family val="2"/><sz val="11"/></font>
-  <font><name val="Calibri"/><b val="1"/><color rgb="FFFFFFFF"/><sz val="15"/></font>
-  <font><name val="Calibri"/><color rgb="FF1A1D27"/><sz val="10"/></font>
-  <font><name val="Calibri"/><i val="1"/><color rgb="FF99AACC"/><sz val="9"/></font>
-  <font><name val="Calibri"/><b val="1"/><color rgb="FFFFFFFF"/><sz val="9"/></font>
-  <font><name val="Calibri"/><b val="1"/><color rgb="FF0A3B5C"/><sz val="9"/></font>
-  <font><name val="Calibri"/><b val="1"/><color rgb="FF2B6CB0"/><sz val="9"/><u val="single"/></font>
-  <font><name val="Calibri"/><color rgb="FF1A1D27"/><sz val="9"/></font>
-  <font><name val="Calibri"/><i val="1"/><color rgb="FF3D4560"/><sz val="9"/></font>
-  <font><name val="Calibri"/><b val="1"/><color rgb="FF0E6674"/><sz val="9"/></font>
-  <font><name val="Calibri"/><b val="1"/><color rgb="FF0E6B3F"/><sz val="9"/></font>
-  <font><name val="Calibri"/><b val="1"/><color rgb="FF0D2137"/><sz val="13"/></font>
-  <font><name val="Calibri"/><b val="1"/><color rgb="FF6B7494"/><sz val="8"/></font>
-  <font><name val="Calibri"/><b val="1"/><color rgb="FFFFFFFF"/><sz val="12"/></font>
-  <font><name val="Calibri"/><b val="1"/><color rgb="FF3D4560"/><sz val="9"/></font>
-  <font><name val="Calibri"/><i val="1"/><color rgb="FF6B7494"/><sz val="9"/></font>
-  <font><name val="Calibri"/><i val="1"/><color rgb="FF444466"/><sz val="8"/></font>
+<fonts count="8">
+  <font><sz val="11"/><name val="Calibri"/><family val="2"/></font>
+  <font><sz val="10"/><name val="Arial"/><family val="2"/></font>
+  <font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Arial"/><family val="2"/></font>
+  <font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/></font>
+  <font><b/><sz val="11"/><name val="Calibri"/><family val="2"/></font>
+  <font><b/><sz val="11"/><color rgb="FF002060"/><name val="Calibri"/><family val="2"/></font>
+  <font><sz val="11"/><color rgb="FF0563C1"/><u val="single"/><name val="Calibri"/><family val="2"/></font>
+  <font><b/><sz val="10"/><name val="Arial"/><family val="2"/></font>
 </fonts>
-<fills count="20">
-  <fill><patternFill/></fill>
+<fills count="10">
+  <fill><patternFill patternType="none"/></fill>
   <fill><patternFill patternType="gray125"/></fill>
-  <fill><patternFill patternType="solid"><fgColor rgb="FF0A1628"/></patternFill></fill>
-  <fill><patternFill patternType="solid"><fgColor rgb="FFF4F6FB"/></patternFill></fill>
-  <fill><patternFill patternType="solid"><fgColor rgb="FF1A3A6E"/></patternFill></fill>
-  <fill><patternFill patternType="solid"><fgColor rgb="FFFFFFFF"/></patternFill></fill>
-  <fill><patternFill patternType="solid"><fgColor rgb="FFEEF4FF"/></patternFill></fill>
-  <fill><patternFill patternType="solid"><fgColor rgb="FFEBF0FA"/></patternFill></fill>
-  <fill><patternFill patternType="solid"><fgColor rgb="FFF7F9FD"/></patternFill></fill>
-  <fill><patternFill patternType="solid"><fgColor rgb="FFF0F4FF"/></patternFill></fill>
-  <fill><patternFill patternType="solid"><fgColor rgb="FF0D2137"/></patternFill></fill>
-  <fill><patternFill patternType="solid"><fgColor rgb="FF1B4B82"/></patternFill></fill>
-  <fill><patternFill patternType="solid"><fgColor rgb="FFEDF3FC"/></patternFill></fill>
-  <fill><patternFill patternType="solid"><fgColor rgb="FF0D3B2E"/></patternFill></fill>
-  <fill><patternFill patternType="solid"><fgColor rgb="FF1A6B4A"/></patternFill></fill>
-  <fill><patternFill patternType="solid"><fgColor rgb="FFEDFAF4"/></patternFill></fill>
-  <fill><patternFill patternType="solid"><fgColor rgb="FF2D1B69"/></patternFill></fill>
-  <fill><patternFill patternType="solid"><fgColor rgb="FF5B3FC9"/></patternFill></fill>
-  <fill><patternFill patternType="solid"><fgColor rgb="FFF3EFFE"/></patternFill></fill>
-  <fill><patternFill patternType="solid"><fgColor rgb="FF0A1628"/></patternFill></fill>
+  <fill><patternFill patternType="solid"><fgColor rgb="FF00B0F0"/><bgColor indexed="64"/></patternFill></fill>
+  <fill><patternFill patternType="solid"><fgColor rgb="FFA9CE91"/><bgColor indexed="64"/></patternFill></fill>
+  <fill><patternFill patternType="solid"><fgColor rgb="FFEDEDED"/><bgColor indexed="64"/></patternFill></fill>
+  <fill><patternFill patternType="solid"><fgColor rgb="FFED7D31"/></patternFill></fill>
+  <fill><patternFill patternType="solid"><fgColor rgb="FFFBE5D6"/><bgColor indexed="65"/></patternFill></fill>
+  <fill><patternFill patternType="solid"><fgColor rgb="FFDEEBF7"/><bgColor indexed="64"/></patternFill></fill>
+  <fill><patternFill patternType="solid"><fgColor rgb="FFE2EFDA"/><bgColor indexed="64"/></patternFill></fill>
+  <fill><patternFill patternType="solid"><fgColor rgb="FF223962"/><bgColor indexed="64"/></patternFill></fill>
 </fills>
-<borders count="12">
-  <border><left/><right/><top/><bottom/></border>
+<borders count="3">
+  <border><left/><right/><top/><bottom/><diagonal/></border>
   <border>
-    <left style="thin"><color rgb="FF1A3A6E"/></left><right style="thin"><color rgb="FF1A3A6E"/></right>
-    <top style="thin"><color rgb="FF1A3A6E"/></top><bottom style="medium"><color rgb="FF1A3A6E"/></bottom>
+    <left style="thin"><color indexed="64"/></left>
+    <right style="thin"><color indexed="64"/></right>
+    <top style="thin"><color indexed="64"/></top>
+    <bottom style="thin"><color indexed="64"/></bottom>
+    <diagonal/>
   </border>
   <border>
-    <left style="thin"><color rgb="FF0A1628"/></left><right style="thin"><color rgb="FF0A1628"/></right>
-    <top style="thin"><color rgb="FF0A1628"/></top><bottom style="thin"><color rgb="FF0A1628"/></bottom>
-  </border>
-  <border>
-    <left style="thin"><color rgb="FFB0BCDB"/></left><right style="thin"><color rgb="FFB0BCDB"/></right>
-    <top style="thin"><color rgb="FFB0BCDB"/></top><bottom style="medium"><color rgb="FFB0BCDB"/></bottom>
-  </border>
-  <border>
-    <left style="thin"><color rgb="FFD0D7E8"/></left><right style="thin"><color rgb="FFD0D7E8"/></right>
-    <top style="thin"><color rgb="FFD0D7E8"/></top><bottom style="thin"><color rgb="FFD0D7E8"/></bottom>
-  </border>
-  <border>
-    <left style="thin"><color rgb="FFB0BCDB"/></left><right style="thin"><color rgb="FFB0BCDB"/></right>
-    <top style="thin"><color rgb="FFB0BCDB"/></top><bottom style="thin"><color rgb="FFB0BCDB"/></bottom>
-  </border>
-  <border>
-    <left style="thin"><color rgb="FF1B4B82"/></left><right style="thin"><color rgb="FF1B4B82"/></right>
-    <top style="thin"><color rgb="FF1B4B82"/></top><bottom style="medium"><color rgb="FF1B4B82"/></bottom>
-  </border>
-  <border>
-    <left style="thin"><color rgb="FFB8C8E8"/></left><right style="thin"><color rgb="FFB8C8E8"/></right>
-    <top style="thin"><color rgb="FFB8C8E8"/></top><bottom style="thin"><color rgb="FFB8C8E8"/></bottom>
-  </border>
-  <border>
-    <left style="thin"><color rgb="FF1A6B4A"/></left><right style="thin"><color rgb="FF1A6B4A"/></right>
-    <top style="thin"><color rgb="FF1A6B4A"/></top><bottom style="medium"><color rgb="FF1A6B4A"/></bottom>
-  </border>
-  <border>
-    <left style="thin"><color rgb="FF5B3FC9"/></left><right style="thin"><color rgb="FF5B3FC9"/></right>
-    <top style="thin"><color rgb="FF5B3FC9"/></top><bottom style="medium"><color rgb="FF5B3FC9"/></bottom>
-  </border>
-  <border>
-    <left style="thin"><color rgb="FF0D3B2E"/></left><right style="thin"><color rgb="FF0D3B2E"/></right>
-    <top style="thin"><color rgb="FF0D3B2E"/></top><bottom style="thin"><color rgb="FF0D3B2E"/></bottom>
-  </border>
-  <border>
-    <left style="thin"><color rgb="FF1A6B4A"/></left><right style="thin"><color rgb="FF1A6B4A"/></right>
-    <top style="thin"><color rgb="FF1A6B4A"/></top><bottom style="thin"><color rgb="FF1A6B4A"/></bottom>
+    <left style="thin"><color indexed="64"/></left>
+    <right style="thin"><color indexed="64"/></right>
+    <top/>
+    <bottom style="thin"><color indexed="64"/></bottom>
+    <diagonal/>
   </border>
 </borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="55">
-  <!-- 0: default -->
+<cellXfs count="13">
+  <!-- 0 DEFAULT -->
   <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
-  <!-- 1: PRM title white bold 15 navy center bottom-medium -->
-  <xf numFmtId="0" fontId="1" fillId="2" borderId="1" applyAlignment="1" xfId="0"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
-  <!-- 2: PRM title padding -->
-  <xf numFmtId="0" fontId="0" fillId="2" borderId="2" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 3: PRM subtitle italic -->
-  <xf numFmtId="0" fontId="3" fillId="2" borderId="2" applyAlignment="1" xfId="0"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
-  <!-- 4: spacer -->
-  <xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="0"/>
-  <!-- 5: PRM col header white bold 9 cobalt center bottom-medium -->
-  <xf numFmtId="0" fontId="4" fillId="4" borderId="3" applyAlignment="1" xfId="0"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
-  <!-- 6: PRM table bold teal-dark white bg -->
-  <xf numFmtId="0" fontId="5" fillId="5" borderId="4" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 7: PRM link bold blue underline white bg -->
-  <xf numFmtId="0" fontId="6" fillId="5" borderId="4" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 8: PRM task normal dark white bg -->
-  <xf numFmtId="0" fontId="7" fillId="5" borderId="4" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 9: PRM desc italic mid white bg -->
-  <xf numFmtId="0" fontId="8" fillId="5" borderId="4" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 10: PRM src bold teal white bg -->
-  <xf numFmtId="0" fontId="9" fillId="5" borderId="4" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 11: PRM dst bold emerald white bg -->
-  <xf numFmtId="0" fontId="10" fillId="5" borderId="4" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 12: PRM table alt bg EEF4FF -->
-  <xf numFmtId="0" fontId="5" fillId="6" borderId="5" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 13: PRM link alt bg -->
-  <xf numFmtId="0" fontId="6" fillId="6" borderId="5" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 14: PRM task alt bg -->
-  <xf numFmtId="0" fontId="7" fillId="6" borderId="5" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 15: PRM desc alt bg -->
-  <xf numFmtId="0" fontId="8" fillId="6" borderId="5" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 16: PRM src alt bg -->
-  <xf numFmtId="0" fontId="9" fillId="6" borderId="5" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 17: PRM dst alt bg -->
-  <xf numFmtId="0" fontId="10" fillId="6" borderId="5" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 18: INT job title bold 13 dark-navy on lightBlue EBF0FA bottom-medium -->
-  <xf numFmtId="0" fontId="11" fillId="7" borderId="6" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 19: INT job title padding -->
-  <xf numFmtId="0" fontId="0" fillId="7" borderId="7" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 20: INT desc italic 9 mid on F7F9FD -->
-  <xf numFmtId="0" fontId="8" fillId="8" borderId="4" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 21: INT desc padding F7F9FD -->
-  <xf numFmtId="0" fontId="0" fillId="8" borderId="4" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 22: INT DS label bold 8 gray on F0F4FF -->
-  <xf numFmtId="0" fontId="12" fillId="9" borderId="4" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 23: INT DS src bold teal on F0F4FF -->
-  <xf numFmtId="0" fontId="9" fillId="9" borderId="4" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 24: INT DS dst bold emerald on F0F4FF -->
-  <xf numFmtId="0" fontId="10" fillId="9" borderId="4" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 25: empty -->
-  <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
-  <!-- 26: empty -->
-  <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
-  <!-- 27: MAP section title white bold 12 on 0D2137 bottom-medium -->
-  <xf numFmtId="0" fontId="13" fillId="10" borderId="6" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 28: MAP section title padding -->
-  <xf numFmtId="0" fontId="0" fillId="10" borderId="2" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center"/></xf>
-  <!-- 29: MAP col header white bold 9 on 1B4B82 bottom-medium -->
-  <xf numFmtId="0" fontId="4" fillId="11" borderId="6" applyAlignment="1" xfId="0"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
-  <!-- 30: MAP DS src bold teal white bg -->
-  <xf numFmtId="0" fontId="9" fillId="5" borderId="4" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 31: MAP table bold mid white bg -->
-  <xf numFmtId="0" fontId="14" fillId="5" borderId="4" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 32: MAP field normal dark white bg -->
-  <xf numFmtId="0" fontId="7" fillId="5" borderId="4" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 33: MAP DS src alt bg EDF3FC -->
-  <xf numFmtId="0" fontId="9" fillId="12" borderId="5" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 34: MAP table alt bg -->
-  <xf numFmtId="0" fontId="14" fillId="12" borderId="5" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 35: MAP field alt bg -->
-  <xf numFmtId="0" fontId="7" fillId="12" borderId="5" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 36: MAP ops italic white bg -->
-  <xf numFmtId="0" fontId="16" fillId="5" borderId="4" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 37: MAP ops italic alt bg -->
-  <xf numFmtId="0" fontId="16" fillId="12" borderId="5" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 38: MAP desc italic white bg -->
-  <xf numFmtId="0" fontId="15" fillId="5" borderId="4" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 39: FLT section title white bold 12 on 0D3B2E -->
-  <xf numFmtId="0" fontId="13" fillId="13" borderId="8" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 40: FLT section padding -->
-  <xf numFmtId="0" fontId="0" fillId="13" borderId="10" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center"/></xf>
-  <!-- 41: FLT col header white bold 9 on 1A6B4A -->
-  <xf numFmtId="0" fontId="4" fillId="14" borderId="8" applyAlignment="1" xfId="0"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
-  <!-- 42: FLT hdr padding -->
-  <xf numFmtId="0" fontId="0" fillId="14" borderId="11" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center"/></xf>
-  <!-- 43: FLT table bold mid white -->
-  <xf numFmtId="0" fontId="14" fillId="5" borderId="4" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 44: FLT table bold mid alt EDFAF4 -->
-  <xf numFmtId="0" fontId="14" fillId="15" borderId="5" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 45: FLT field white -->
-  <xf numFmtId="0" fontId="7" fillId="5" borderId="4" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 46: FLT field alt -->
-  <xf numFmtId="0" fontId="7" fillId="15" borderId="5" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 47: FLT ops italic white -->
-  <xf numFmtId="0" fontId="16" fillId="5" borderId="4" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 48: FLT ops italic alt -->
-  <xf numFmtId="0" fontId="16" fillId="15" borderId="5" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 49: LKP section title white bold 12 on 2D1B69 -->
-  <xf numFmtId="0" fontId="13" fillId="16" borderId="9" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 50: LKP section padding -->
-  <xf numFmtId="0" fontId="0" fillId="16" borderId="2" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center"/></xf>
-  <!-- 51: LKP col header white bold 9 on 5B3FC9 -->
-  <xf numFmtId="0" fontId="4" fillId="17" borderId="9" applyAlignment="1" xfId="0"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
-  <!-- 52: LKP data white -->
-  <xf numFmtId="0" fontId="7" fillId="5" borderId="4" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 53: LKP data alt F3EFFE -->
-  <xf numFmtId="0" fontId="7" fillId="18" borderId="5" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
-  <!-- 54: MAP dst bold emerald white bg -->
-  <xf numFmtId="0" fontId="10" fillId="5" borderId="4" applyAlignment="1" xfId="0"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
+  <!-- 1 PRM_HDR: Calibri11 blanco bold, naranja ED7D31, thin, vcenter -->
+  <xf numFmtId="0" fontId="3" fillId="5" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf>
+  <!-- 2 PRM_ABC: Calibri11 normal, azul claro DEEBF7, thin, center+wrap -->
+  <xf numFmtId="0" fontId="0" fillId="7" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+  <!-- 3 PRM_DEF: Calibri11 normal, gris claro EDEDED, thin, left+wrap -->
+  <xf numFmtId="0" fontId="0" fillId="4" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
+  <!-- 4 PRM_LINK: Calibri11 azul subrayado, azul claro DEEBF7, thin, center -->
+  <xf numFmtId="0" fontId="6" fillId="7" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+  <!-- 5 BACK_BTN: Calibri11 bold, navy 223962, thin, center -->
+  <xf numFmtId="0" fontId="4" fillId="9" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+  <!-- 6 T1_HDR: Arial10 bold blanco, cyan 00B0F0, thin, center+wrap -->
+  <xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+  <!-- 7 T1_NUM: Arial10 normal, verde claro A9CE91, thin, center+wrap -->
+  <xf numFmtId="0" fontId="1" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+  <!-- 8 T1_CAMPO: Arial10 bold, verde claro A9CE91, thin, left+wrap -->
+  <xf numFmtId="0" fontId="7" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
+  <!-- 9 T1_DATA: Arial10 normal, verde claro A9CE91, thin, left+wrap -->
+  <xf numFmtId="0" fontId="1" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
+  <!-- 10 T234_HDR: Arial10 bold, gris claro EDEDED, thin, left -->
+  <xf numFmtId="0" fontId="7" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>
+  <!-- 11 T2_DATA: Calibri11 normal, sin fondo, thin, left -->
+  <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>
+  <!-- 12 T34_DATA: Calibri11 bold 002060, sin fondo, thin, left -->
+  <xf numFmtId="0" fontId="5" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>
 </cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`.replace(/\n\s*/g, '');
 
 // ── XML helpers ──────────────────────────────────────────────
-
 function esc(v) {
   if (v === null || v === undefined) return '';
   return String(v)
@@ -599,7 +647,6 @@ function esc(v) {
     .replace(/"/g, '&quot;');
 }
 
-// Convert (row, col) 0-based to Excel reference like "A1"
 function cellRef(r, c) {
   let col = '';
   let n = c + 1;
@@ -608,14 +655,11 @@ function cellRef(r, c) {
 }
 
 // ── Sheet builder ────────────────────────────────────────────
-// A sheet is built row by row. Each cell is { v: value, s: xfIndex }
-// Merges are tracked separately.
-
 class SheetBuilder {
   constructor() {
     this.rows = [];
     this.merges = [];
-    this.hyperlinks = []; // [{cellRef, target}]  target = "#'SheetName'!A1"
+    this.hyperlinks = [];
     this.colWidths = [];
     this.rowHeights = [];
   }
@@ -625,30 +669,14 @@ class SheetBuilder {
     this.rowHeights.push(height);
   }
 
-  merge(r1, c1, r2, c2) {
-    this.merges.push({ r1, c1, r2, c2 });
-  }
+  merge(r1, c1, r2, c2) { this.merges.push({ r1, c1, r2, c2 }); }
 
-  // Register a hyperlink on a cell (row/col 0-based)
   addHyperlink(r, c, target) {
     this.hyperlinks.push({ ref: cellRef(r, c), target });
   }
 
   setColWidths(widths) { this.colWidths = widths; }
 
-  addMergedRow(value, xfValue, xfPad, totalCols, height = 22) {
-    const r = this.rows.length;
-    const cells = [{ v: value, s: xfValue }];
-    for (let c = 1; c < totalCols; c++) cells.push({ v: '', s: xfPad });
-    this.addRow(cells, height);
-    this.merge(r, 0, r, totalCols - 1);
-  }
-
-  addSpacerRow(totalCols, height = 6) {
-    this.addRow(Array(totalCols).fill({ v: '', s: 4 }), height);
-  }
-
-  // Returns { xml, relsXml } — relsXml is null when no hyperlinks
   toXML() {
     const cols = this.colWidths.map((w, i) =>
       `<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join('');
@@ -677,7 +705,6 @@ class SheetBuilder {
           `<mergeCell ref="${cellRef(m.r1,m.c1)}:${cellRef(m.r2,m.c2)}"/>`).join('') + '</mergeCells>'
       : '';
 
-    // Hyperlinks section in sheet XML (reference rId1, rId2, ...)
     let hyperlinkXml = '';
     let relsXml = null;
     if (this.hyperlinks.length > 0) {
@@ -686,8 +713,6 @@ class SheetBuilder {
         this.hyperlinks.map((hl, i) =>
           `<hyperlink ${NS} ref="${hl.ref}" r:id="rId${i+1}"/>`
         ).join('') + '</hyperlinks>';
-
-      // Build the _rels XML for this sheet
       const REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
       const relEntries = this.hyperlinks.map((hl, i) =>
         `<Relationship Type="${REL_TYPE}" Target="${esc(hl.target)}" TargetMode="External" Id="rId${i+1}"/>`
@@ -717,130 +742,196 @@ class SheetBuilder {
 }
 
 // ── Parámetros sheet ─────────────────────────────────────────
+// Columnas (A–G): Dato | Tipo | Task CI-DS | Desc Task | Dataflow CIDS | Sis.Fuente | Sis.Destino
+// Col A: hyperlink al detalle; A-C en theme:8 (9DC3E6); D-G en theme:9 (DDEBF7)
+// Header: theme:5 (4472C4) bold Calibri 11 blanco
+// Col widths según template: A=33.4, B≈20, C=64.6, D=35.9, E=71.1, F=71.1, G=79.2
 function buildParamSheet(rows) {
   const sb = new SheetBuilder();
-  const N = 6;
+  const N = 7; // 7 columns A-G
 
-  sb.addMergedRow('PARÁMETROS DE INTEGRACIONES SAP CIDS', 1, 2, N, 34);
-  sb.addMergedRow(`${rows.length} integraciones documentadas`, 3, 2, N, 16);
-  sb.addSpacerRow(N, 8);
+  // Header row (row 1)
   sb.addRow([
-    {v:'Tabla de Destino',s:5},{v:'Nombre del Dato',s:5},{v:'Nombre del Task',s:5},
-    {v:'Descripción',s:5},{v:'DS Origen',s:5},{v:'DS Destino',s:5}
-  ], 22);
+    {v:'Dato - Click Aquí para más detalle', s:XF.PRM_HDR},
+    {v:'Tipo de Integración',               s:XF.PRM_HDR},
+    {v:'Task CI-DS',                        s:XF.PRM_HDR},
+    {v:'Descripción de la task',            s:XF.PRM_HDR},
+    {v:'Dataflow CIDS',                     s:XF.PRM_HDR},
+    {v:'Sistema fuente',                    s:XF.PRM_HDR},
+    {v:'Sistema Destino',                   s:XF.PRM_HDR},
+  ], 18);
 
   rows.forEach((p, i) => {
-    const a = i % 2 === 1;
-    const dataRowIdx = sb.rows.length; // current row index before adding
+    const dataRowIdx = sb.rows.length;
     sb.addRow([
-      {v: p.targetTable||'', s: a?12:6},
-      {v: p.jobName||'',     s: a?13:7},  // col 1 = "Nombre del Dato" with link style
-      {v: p.jobName||'',     s: a?14:8},
-      {v: p.jobDesc||'',     s: a?15:9},
-      {v: p.srcDS||'',       s: a?16:10},
-      {v: p.dstDS||'',       s: a?17:11},
+      {v: i + 1,              s: XF.PRM_LINK},   // A: número ascendente, hyperlink
+      {v: p.tipoIntegracion || '', s: XF.PRM_ABC}, // B
+      {v: p.jobName || '',    s: XF.PRM_ABC},    // C
+      {v: p.jobDesc || '',    s: XF.PRM_DEF},    // D
+      {v: p.dataflowName || '', s: XF.PRM_DEF},  // E
+      {v: p.srcDS || '',      s: XF.PRM_DEF},    // F
+      {v: p.dstDS || '',      s: XF.PRM_DEF},    // G
     ], 20);
-    // Register hyperlink on col 1 (Nombre del Dato) → target sheet
-    sb.addHyperlink(dataRowIdx, 1, `#'${p.sheetName}'!A1`);
+    // Hyperlink en col A (índice 0) → hoja de detalle
+    sb.addHyperlink(dataRowIdx, 0, `#'${p.sheetName}'!A1`);
   });
 
-  sb.setColWidths([28, 34, 38, 52, 18, 18]);
+  // Col widths: A=33.4, B=20, C=64.6, D=35.9, E=71.1, F=71.1, G=79.2
+  sb.setColWidths([33.4, 20, 64.6, 35.9, 71.1, 71.1, 79.2]);
   return sb;
 }
 
 // ── Integration sheet ────────────────────────────────────────
-function buildIntegrationSheet(parsed, srcDS, dstDS) {
+// Layout fiel al template PLantilla integracion:
+//   A1: botón "<--" (theme:4, bold, center, thin border)
+//   B1-G1: headers tabla 1 (cyan 00B0F0, white bold Arial10)
+//   B2-G+: data tabla 1 (theme:9 DDEBF7)
+//   Fila separadora vacía
+//   B?:D?: header tabla 2 (orange ED7D31)
+//   B?:C?: data tabla 2 (no fill, Calibri 11)
+//   Fila separadora
+//   B?:C?: header tabla 3 (orange)
+//   B?:C?: data tabla 3 (no fill, bold 002060)
+//   Fila separadora
+//   B?:C?: header tabla 4 (orange)
+//   B?:C?: data tabla 4 (no fill, bold 002060)
+//
+// Col widths: A=4.6, B=22.4, C=29.1, D=62.3, E=41.7, F=41.7, G=40.4
+function buildIntegrationSheet(parsed) {
   const sb = new SheetBuilder();
-  const { jobName, jobDesc, mappings, filters, lookups } = parsed;
-  const N = 8;
+  const { jobName, jobDesc, srcDSName, dstDSName, mappings, filters, lookups, variables } = parsed;
+  const N = 7; // cols A-G
 
-  // Header block
-  sb.addMergedRow(jobName || '', 18, 19, N, 30);
-  if (jobDesc) sb.addMergedRow(jobDesc, 20, 21, N, 18);
-  // DS bar
-  const dsRow = [
-    {v:'  Origen:', s:22}, {v:srcDS||'', s:23}, {v:'', s:21},
-    {v:'  Destino:', s:22}, {v:dstDS||'', s:24},
-    {v:'',s:21},{v:'',s:21},{v:'',s:21}
-  ];
-  const dsRowIdx = sb.rows.length;
-  sb.addRow(dsRow, 18);
-  sb.merge(dsRowIdx, 1, dsRowIdx, 2);
-  sb.merge(dsRowIdx, 4, dsRowIdx, 7);
-  sb.addSpacerRow(N, 6);
+  // Helper: fila vacía
+  const emptyRow = () => sb.addRow(Array(N).fill({v:'', s:XF.DEFAULT}), 6);
 
-  // TABLE 1 — MAPEOS
-  sb.addMergedRow('▸  TABLA 1  —  MAPEO DE CAMPOS', 27, 28, N, 22);
+  // ── Fila 1: Back button en A1 (con hyperlink → Parámetros) + headers tabla 1
+  sb.addHyperlink(0, 0, "#'Parámetros'!A1");
   sb.addRow([
-    {v:'DS Origen',s:29},{v:'Tabla Origen',s:29},{v:'Campo Origen',s:29},
-    {v:'DS Destino',s:29},{v:'Tabla Destino',s:29},{v:'Campo Destino',s:29},
-    {v:'Descripción',s:29},{v:'Operaciones',s:29}
+    {v:'<--',                    s:XF.BACK_BTN},
+    {v:' #',                     s:XF.T1_HDR},
+    {v:'Campo Destino',          s:XF.T1_HDR},
+    {v:'Descripción Campo Destino', s:XF.T1_HDR},
+    {v:'Tabla Origen',           s:XF.T1_HDR},
+    {v:'Campo Origen',           s:XF.T1_HDR},
+    {v:'Mapping',                s:XF.T1_HDR},
   ], 22);
+
+  // ── Datos tabla 1
   if (!mappings.length) {
-    sb.addMergedRow('Sin mapeos detectados en esta integración', 32, 28, N, 18);
+    sb.addRow([
+      {v:'', s:XF.DEFAULT},
+      {v:'Sin mapeos', s:XF.T1_DATA},
+      {v:'', s:XF.T1_DATA},{v:'', s:XF.T1_DATA},
+      {v:'', s:XF.T1_DATA},{v:'', s:XF.T1_DATA},{v:'', s:XF.T1_DATA}
+    ], 18);
   } else {
     mappings.forEach((m, i) => {
-      const a = i % 2 === 1;
+      // Campo Destino: "archivo.csv".TABLA.CAMPO for file targets, else TABLA.CAMPO
+      const filePrefix = parsed.fileLoaderFileName
+        ? `"${parsed.fileLoaderFileName}".` : '';
+      const campoDestino = filePrefix + [m.dstTable, m.dstField].filter(Boolean).join('.');
       sb.addRow([
-        {v:m.srcDS||srcDS||'', s:a?33:30},
-        {v:m.srcTable||'',     s:a?34:31},
-        {v:m.srcField||'',     s:a?35:32},
-        {v:m.dstDS||dstDS||'', s:a?33:54},
-        {v:m.dstTable||'',     s:a?34:31},
-        {v:m.dstField||'',     s:a?35:32},
-        {v:m.dstDesc||'',      s:a?35:38},
-        {v:m.ops||'',          s:a?37:36},
+        {v:'', s:XF.DEFAULT},
+        {v: i + 1,              s:XF.T1_NUM},
+        {v: campoDestino,       s:XF.T1_CAMPO},
+        {v: m.dstDesc || '',    s:XF.T1_DATA},
+        {v: m.srcTable || '',   s:XF.T1_DATA},
+        {v: m.srcField || '',   s:XF.T1_DATA},
+        {v: m.ops || '',        s:XF.T1_DATA},
       ], 18);
     });
   }
-  sb.addSpacerRow(N, 6);
-  sb.addSpacerRow(N, 6);
 
-  // TABLE 2 — FILTROS
-  sb.addMergedRow('▸  TABLA 2  —  FILTROS UTILIZADOS', 39, 40, N, 22);
+  emptyRow();
+
+  // ── Tabla 2 — Filtros
   sb.addRow([
-    {v:'Tabla Origen',s:41},{v:'Campo Origen',s:41},{v:'Expresión Filtrada',s:41},
-    {v:'Descripción del Filtro',s:41},
-    {v:'',s:42},{v:'',s:42},{v:'',s:42},{v:'',s:42}
-  ], 22);
+    {v:'', s:XF.DEFAULT},
+    {v:'Tabla',              s:XF.T234_HDR},
+    {v:'Filtro',             s:XF.T234_HDR},
+    {v:'Descripción de filtro', s:XF.T234_HDR},
+    {v:'', s:XF.DEFAULT},{v:'', s:XF.DEFAULT},{v:'', s:XF.DEFAULT}
+  ], 18);
+
   if (!filters.length) {
-    sb.addMergedRow('Sin filtros detectados en esta integración', 45, 40, N, 18);
+    sb.addRow([
+      {v:'', s:XF.DEFAULT},
+      {v:'Sin filtros', s:XF.T2_DATA},
+      {v:'', s:XF.T2_DATA},{v:'', s:XF.T2_DATA},
+      {v:'', s:XF.DEFAULT},{v:'', s:XF.DEFAULT},{v:'', s:XF.DEFAULT}
+    ], 18);
   } else {
-    filters.forEach((f, i) => {
-      const a = i % 2 === 1;
+    filters.forEach(f => {
+      const tabla = [f.sourceTable, f.sourceField].filter(Boolean).join('.');
       sb.addRow([
-        {v:f.sourceTable||'', s:a?44:43},
-        {v:f.sourceField||'', s:a?46:45},
-        {v:f.expression||'',  s:a?48:47},
-        {v:f.description||'', s:a?46:45},
-        {v:'',s:a?44:43},{v:'',s:a?44:43},{v:'',s:a?44:43},{v:'',s:a?44:43}
+        {v:'', s:XF.DEFAULT},
+        {v: tabla,              s:XF.T2_DATA},
+        {v: f.expression || '', s:XF.T2_DATA},
+        {v: f.description || '',s:XF.T2_DATA},
+        {v:'', s:XF.DEFAULT},{v:'', s:XF.DEFAULT},{v:'', s:XF.DEFAULT}
       ], 18);
     });
   }
-  sb.addSpacerRow(N, 6);
-  sb.addSpacerRow(N, 6);
 
-  // TABLE 3 — LOOKUPS
-  sb.addMergedRow('▸  TABLA 3  —  FUNCIONES LOOKUP', 49, 50, N, 22);
+  emptyRow();
+
+  // ── Tabla 3 — Variables (Parámetros Globales)
   sb.addRow([
-    {v:'Función Lookup',s:51},{v:'Archivo / Tabla Utilizada',s:51},{v:'Descripción',s:51},
-    {v:'',s:51},{v:'',s:51},{v:'',s:51},{v:'',s:51},{v:'',s:51}
-  ], 22);
-  if (!lookups.length) {
-    sb.addMergedRow('Sin lookups detectados en esta integración', 52, 50, N, 18);
+    {v:'', s:XF.DEFAULT},
+    {v:'Parámetro Global', s:XF.T234_HDR},
+    {v:'Valor',            s:XF.T234_HDR},
+    {v:'', s:XF.DEFAULT},{v:'', s:XF.DEFAULT},{v:'', s:XF.DEFAULT},{v:'', s:XF.DEFAULT}
+  ], 18);
+
+  if (!variables || !variables.length) {
+    sb.addRow([
+      {v:'', s:XF.DEFAULT},
+      {v:'Sin variables', s:XF.T34_DATA},
+      {v:'', s:XF.T34_DATA},
+      {v:'', s:XF.DEFAULT},{v:'', s:XF.DEFAULT},{v:'', s:XF.DEFAULT},{v:'', s:XF.DEFAULT}
+    ], 18);
   } else {
-    lookups.forEach((l, i) => {
-      const a = i % 2 === 1;
+    variables.forEach(v => {
       sb.addRow([
-        {v:l.func||'', s:a?53:52},
-        {v:l.file||'', s:a?53:52},
-        {v:l.desc||'', s:a?53:52},
-        {v:'',s:a?53:52},{v:'',s:a?53:52},{v:'',s:a?53:52},{v:'',s:a?53:52},{v:'',s:a?53:52}
+        {v:'', s:XF.DEFAULT},
+        {v: v.name  || '', s:XF.T34_DATA},
+        {v: v.value || '', s:XF.T34_DATA},
+        {v:'', s:XF.DEFAULT},{v:'', s:XF.DEFAULT},{v:'', s:XF.DEFAULT},{v:'', s:XF.DEFAULT}
       ], 18);
     });
   }
 
-  sb.setColWidths([16, 22, 30, 16, 24, 24, 26, 52]);
+  emptyRow();
+
+  // ── Tabla 4 — Lookups
+  sb.addRow([
+    {v:'', s:XF.DEFAULT},
+    {v:'Función Lookup', s:XF.T234_HDR},
+    {v:'Transform',      s:XF.T234_HDR},
+    {v:'', s:XF.DEFAULT},{v:'', s:XF.DEFAULT},{v:'', s:XF.DEFAULT},{v:'', s:XF.DEFAULT}
+  ], 18);
+
+  if (!lookups.length) {
+    sb.addRow([
+      {v:'', s:XF.DEFAULT},
+      {v:'Sin lookups', s:XF.T34_DATA},
+      {v:'', s:XF.T34_DATA},
+      {v:'', s:XF.DEFAULT},{v:'', s:XF.DEFAULT},{v:'', s:XF.DEFAULT},{v:'', s:XF.DEFAULT}
+    ], 18);
+  } else {
+    lookups.forEach(l => {
+      sb.addRow([
+        {v:'', s:XF.DEFAULT},
+        {v: l.func || '',      s:XF.T34_DATA},
+        {v: l.transform || l.file || '', s:XF.T34_DATA},
+        {v:'', s:XF.DEFAULT},{v:'', s:XF.DEFAULT},{v:'', s:XF.DEFAULT},{v:'', s:XF.DEFAULT}
+      ], 18);
+    });
+  }
+
+  // Col widths: A=4.6, B=22.4, C=29.1, D=62.3, E=41.7, F=41.7, G=40.4
+  sb.setColWidths([4.6, 22.4, 29.1, 62.3, 41.7, 41.7, 40.4]);
   return sb;
 }
 
@@ -906,25 +997,24 @@ async function assembleXlsx(sheets) {
 // ════════════════════════════════════════════════════════════
 //  MAIN GENERATE
 // ════════════════════════════════════════════════════════════
+// ── Phase 1: scan ZIPs, parse XMLs, show selection panel ─────
 async function generate() {
   docsLogEl.innerHTML = '';
   docsLogEl.style.display = 'block';
   docsLogHint.style.display = 'none';
   document.getElementById('stats-card').style.display = 'none';
+  document.getElementById('sel-card').style.display = 'none';
   document.getElementById('dl-btn').style.display = 'none';
   document.getElementById('gen-btn').disabled = true;
   xlsBuf = null;
+  parsedIntegrations = [];
 
-  docsLog('Iniciando…', 'l-info');
+  docsLog('Escaneando ZIPs…', 'l-info');
   setP(2);
 
-  const sheets = [];   // [{name, sb}]
-  const paramRows = [];
-  let totalJobs = 0, totalMaps = 0, totalFilts = 0;
+  // Unique sheet-name generator (scoped to scan, reset on each scan)
   const usedNames = new Set();
-
   function uniq(base) {
-    // Excel sheet names: max 31 chars, no special chars
     let clean = base.replace(/[:\\\/\?\*\[\]]/g, '_').substring(0, 28);
     let n = clean, k = 0;
     while (usedNames.has(n)) n = clean.substring(0,25) + '_' + (++k);
@@ -938,7 +1028,6 @@ async function generate() {
     try { zip = await JSZip.loadAsync(zf.data); }
     catch(e) { docsLog(`  ✗ ${e.message}`, 'l-err'); continue; }
 
-    // batch.csv
     const batchMap = {};
     const bf = zip.file('batch.csv');
     if (bf) {
@@ -965,32 +1054,163 @@ async function generate() {
       try { xmlStr = await zip.file(fname).async('string'); }
       catch(e) { docsLog(`  ✗ ${fname}: ${e.message}`, 'l-err'); continue; }
 
-      let parsed;
-      try { parsed = parseIntegration(xmlStr, batchMap[fname] || {}); }
+      let dfResults;
+      try { dfResults = parseIntegration(xmlStr, batchMap[fname] || {}); }
       catch(e) { docsLog(`  ✗ Parse ${fname}: ${e.message}`, 'l-err'); continue; }
-      if (!parsed) { docsLog(`  ⚠ XML inválido: ${fname}`, 'l-warn'); continue; }
+      if (!dfResults || !dfResults.length) { docsLog(`  ⚠ Sin DataFlows: ${fname}`, 'l-warn'); continue; }
 
-      const { jobName, jobDesc, srcDSName, dstDSName, targetTable, mappings, filters, lookups } = parsed;
-      totalJobs++;
-      totalMaps  += mappings.length;
-      totalFilts += filters.length;
-
-      const sheetName = uniq(jobName || fname.replace('.xml',''));
-      paramRows.push({ jobName, jobDesc, srcDS: srcDSName, dstDS: dstDSName, targetTable, sheetName });
-
-      const sb = buildIntegrationSheet(parsed, srcDSName, dstDSName);
-      sheets.push({ name: sheetName, sb });
-      docsLog(`  ✔ ${sheetName}  (${mappings.length} mapeos · ${filters.length} filtros · ${lookups.length} lookups)`, 'l-ok');
+      const multiDF = dfResults.length > 1;
+      for (const parsed of dfResults) {
+        const { jobName, jobDesc, srcDSName, dstDSName, targetTable, mappings, filters, lookups } = parsed;
+        const baseName = jobName || fname.replace('.xml','');
+        const sheetName = multiDF ? uniq(baseName + '_' + targetTable) : uniq(baseName);
+        const paramRow = {
+          jobName, jobDesc,
+          tipoIntegracion: parsed.tipoIntegracion,
+          dataflowName: parsed.dataflowName,
+          srcDS: srcDSName, dstDS: dstDSName,
+          targetTable, sheetName
+        };
+        parsedIntegrations.push({ sheetName, pkg: zf.name, parsed, paramRow });
+        docsLog(`  ✔ ${sheetName}  (${mappings.length} mapeos · ${filters.length} filtros · ${lookups.length} lookups)`, 'l-ok');
+      }
     }
     done++;
   }
 
-  // Build Parámetros sheet (insert at front)
+  setP(100);
+  docsLog(`✅ Escaneado — ${parsedIntegrations.length} integraciones encontradas`, 'l-ok');
+  document.getElementById('gen-btn').disabled = false;
+  renderSelList();
+}
+
+// ── Render the selection list ─────────────────────────────────
+function renderSelList() {
+  const list = document.getElementById('sel-list');
+  list.innerHTML = parsedIntegrations.map((item, i) => {
+    const t = (item.paramRow.tipoIntegracion || '').toUpperCase();
+    const badgeClass = t === 'KF' ? 'badge-kf' : t === 'MD' ? 'badge-md' : 'badge-file';
+    const jobName = item.paramRow.jobName || item.sheetName;
+    const df = item.paramRow.dataflowName
+      ? `<span class="si-df">${item.paramRow.dataflowName}</span>` : '';
+    return `<label class="sel-item" data-idx="${i}">
+      <input type="checkbox" checked onchange="updateCounter()">
+      <span class="si-badge ${badgeClass}">${t || '?'}</span>
+      <span class="si-name">${jobName}${df}</span>
+      <span class="badge-pkg" title="${item.pkg}">${item.pkg}</span>
+    </label>`;
+  }).join('');
+  document.getElementById('sel-search').value = '';
+  updateCounter();
+  document.getElementById('sel-card').style.display = 'block';
+  document.getElementById('sel-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ── Filter list by search text ────────────────────────────────
+function filterSelList() {
+  const q = document.getElementById('sel-search').value.toLowerCase();
+  document.querySelectorAll('#sel-list .sel-item').forEach(item => {
+    const idx = +item.dataset.idx;
+    const it  = parsedIntegrations[idx];
+    const text = [
+      it.sheetName,
+      it.paramRow.tipoIntegracion,
+      it.paramRow.dataflowName,
+      it.paramRow.jobName,
+      it.paramRow.srcDS,
+      it.paramRow.dstDS,
+      it.pkg,
+    ].join(' ').toLowerCase();
+    item.classList.toggle('hidden', q !== '' && !text.includes(q));
+  });
+  updateCounter();
+}
+
+// ── Toggle all currently-visible items ───────────────────────
+function toggleFiltered(state) {
+  document.querySelectorAll('#sel-list .sel-item:not(.hidden) input[type=checkbox]')
+    .forEach(cb => cb.checked = state);
+  updateCounter();
+}
+
+// ── Update "N / T selected" counter ──────────────────────────
+function updateCounter() {
+  const all     = document.querySelectorAll('#sel-list .sel-item');
+  const visible = document.querySelectorAll('#sel-list .sel-item:not(.hidden)');
+  const checked = document.querySelectorAll('#sel-list .sel-item input:checked');
+  const q = document.getElementById('sel-search').value.trim();
+  const counterEl = document.getElementById('sel-counter');
+  if (q) {
+    const visChecked = [...visible].filter(el => el.querySelector('input').checked).length;
+    counterEl.textContent = `${visChecked} / ${visible.length} filtradas · ${checked.length} / ${all.length} total`;
+  } else {
+    counterEl.textContent = `${checked.length} / ${all.length} seleccionadas`;
+  }
+}
+
+// ── Phase 2: build Excel with selected integrations only ──────
+async function buildExcel() {
+  docsLogEl.innerHTML = '';
+  docsLogEl.style.display = 'block';
+  document.getElementById('stats-card').style.display = 'none';
+  document.getElementById('dl-btn').style.display = 'none';
+  xlsBuf = null;
+
+  // Gather selected indices
+  const selected = [];
+  document.querySelectorAll('#sel-list .sel-item').forEach(item => {
+    if (item.querySelector('input').checked)
+      selected.push(parsedIntegrations[+item.dataset.idx]);
+  });
+
+  if (!selected.length) {
+    docsLog('⚠ No hay integraciones seleccionadas.', 'l-warn');
+    return;
+  }
+
+  docsLog(`📋 Generando Excel con ${selected.length} integraciones…`, 'l-info');
+  setP(5);
+
+  // ── Fetch IBP field descriptions (MASTER_DATA_API_SRV + PLANNING_DATA_API_SRV)
+  docsLog('🔍 Obteniendo descripciones de campos desde IBP…', 'l-info');
+  let ibpDescs = {};
+  try {
+    ibpDescs = await fetchIbpFieldDescriptions();
+    const n = Object.keys(ibpDescs).length;
+    docsLog(
+      n > 0
+        ? `✔ ${n} descripciones de campos obtenidas de IBP`
+        : '⚠ Sin conexión a IBP — se usarán descripciones del XML',
+      n > 0 ? 'l-ok' : 'l-warn'
+    );
+  } catch (e) {
+    docsLog('⚠ No se pudo consultar IBP: ' + e.message, 'l-warn');
+  }
+  setP(15);
+
+  const sheets   = [];
+  const paramRows = [];
+  let totalJobs = 0, totalMaps = 0, totalFilts = 0;
+
+  for (const item of selected) {
+    const { parsed, paramRow } = item;
+    // Enrich dstDesc with IBP labels when the XML carried no description
+    parsed.mappings.forEach(m => {
+      if (!m.dstDesc && ibpDescs[m.dstField]) m.dstDesc = ibpDescs[m.dstField];
+    });
+    totalJobs++;
+    totalMaps  += parsed.mappings.length;
+    totalFilts += parsed.filters.length;
+    paramRows.push(paramRow);
+    const sb = buildIntegrationSheet(parsed);
+    sheets.push({ name: paramRow.sheetName, sb });
+  }
+
   docsLog('📋 Generando hoja Parámetros…', 'l-info');
   const paramSb = buildParamSheet(paramRows);
   sheets.unshift({ name: 'Parámetros', sb: paramSb });
 
-  docsLog('📦 Ensamblando archivo Excel con estilos…', 'l-info');
+  docsLog('📦 Ensamblando archivo Excel…', 'l-info');
   xlsBuf = await assembleXlsx(sheets);
   setP(100);
   docsLog(`✅ Listo — ${totalJobs} jobs · ${totalMaps} mapeos · ${totalFilts} filtros`, 'l-ok');
@@ -1000,7 +1220,6 @@ async function generate() {
   document.getElementById('s-filt').textContent = totalFilts;
   document.getElementById('stats-card').style.display = 'block';
   document.getElementById('dl-btn').style.display = 'flex';
-  document.getElementById('gen-btn').disabled = false;
 }
 
 // ════════════════════════════════════════════════════════════
