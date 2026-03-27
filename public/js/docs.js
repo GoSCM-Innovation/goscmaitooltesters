@@ -388,35 +388,42 @@ function parseDataflow(dfEl, dsIdx, ffIdx, srcDSFallback, dstDSFallback) {
   // The full multi-line expression is preserved as-is in the cell.
   // We extract the first real-table reference for the Tabla/Campo columns.
   const seenF = new Set();
-  for (const info of Object.values(ts)) {
-    const fe = info.filterExpr;
-    if (!fe) continue;
-    // Expand transform refs, decode XML newlines
-    const feExp = expandExpr(fe.replace(/&#xA;/g, '\n'), ts);
 
-    // Find first real-table reference in the whole expression
+  function pushFilterExpr(rawExpr) {
+    if (!rawExpr) return;
+    const feExp = expandExpr(rawExpr.replace(/&#xA;/g, '\n'), ts);
     const re2 = new RegExp(_REF.source, 'g');
-    let firstTbl = '', firstFld = '';
+    const seenTbls = new Set();
     let m2;
     while ((m2 = re2.exec(feExp)) !== null) {
       const r = refFromMatch(Array.from(m2));
-      if (r.schema in ts) continue;   // skip transform refs
-      firstTbl = schemaMap[r.schema]?.table || r.schema;
-      firstFld = r.field;
-      break;
+      if (r.schema in ts) continue;
+      seenTbls.add(schemaMap[r.schema]?.table || r.schema);
     }
-
-    // Deduplicate by expression (first 120 chars as key)
     const key = feExp.substring(0, 120);
-    if (seenF.has(key)) continue;
+    if (seenF.has(key)) return;
     seenF.add(key);
+    filters.push({ sourceTable: [...seenTbls].join(', '), sourceField: '', expression: feExp, description: '' });
+  }
 
-    filters.push({
-      sourceTable: firstTbl,
-      sourceField: firstFld,
-      expression:  feExp,   // full expression, newlines preserved for multi-line cell
-      description: '',
-    });
+  // Filters from transform outputSchema filterExpression
+  for (const info of Object.values(ts)) {
+    pushFilterExpr(info.filterExpr);
+  }
+
+  // Filters from <joins> inside QueryTransform > outputSchema
+  for (const el of dfEl.children) {
+    if (el.localName !== 'elements') continue;
+    const typ = xmiType(el);
+    if (!typ.includes('QueryTransform')) continue;
+    for (const child of el.children) {
+      if (child.localName !== 'outputSchema') continue;
+      for (const jn of child.children) {
+        if (jn.localName !== 'joins') continue;
+        const expr = jn.getAttribute('expression') || '';
+        pushFilterExpr(expr);
+      }
+    }
   }
 
   // DataFlow display name
