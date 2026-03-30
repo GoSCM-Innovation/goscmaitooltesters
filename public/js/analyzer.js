@@ -137,7 +137,7 @@
           setStatusSN('info', 'Descargando Production Source Item → IDB...');
           log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + sourceItemEntity);
           var nPsi = await fetchAndIndex(baseOData + sourceItemEntity, logEl, paFilter,
-            'SOURCEID,PRDID,COMPONENTCOEFFICIENT,UOMID',
+            'SOURCEID,PRDID,COMPONENTCOEFFICIENT',
             function (rows) {
               rows.forEach(function (r) { var p = str(r.PRDID); if (p) SN_IDX.psiCompPrds[p] = true; });
               return idbBulkPut('sn_psi', rows);

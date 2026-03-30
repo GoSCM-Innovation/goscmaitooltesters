@@ -186,7 +186,7 @@
             var psiFilter = sourceIds.map(function (s) { return "SOURCEID eq '" + s + "'"; }).join(' or ');
             if (paBase) psiFilter = '(' + psiFilter + ') and ' + paBase;
             log(logEl, 'info', '[GET] ' + cfg.base + cfg.sourceItem + ' | PSI para ' + sourceIds.length + ' fuentes');
-            psiRows = await fetchAllPages(cfg.base + cfg.sourceItem, logEl, psiFilter, 'SOURCEID,PRDID,INPUTCOEFFICIENT');
+            psiRows = await fetchAllPages(cfg.base + cfg.sourceItem, logEl, psiFilter, 'SOURCEID,PRDID,COMPONENTCOEFFICIENT');
             log(logEl, 'ok', '✓ PSI: ' + psiRows.length + ' componentes');
           }
         }

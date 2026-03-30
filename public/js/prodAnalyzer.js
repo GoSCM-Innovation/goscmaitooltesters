@@ -14,7 +14,7 @@
       document.getElementById('progBarPA').classList.remove('hidden');
       document.getElementById('progStatusPA').style.cssText =
         'display:flex;font-size:12px;color:var(--text2);margin-top:4px;align-items:center;gap:8px;';
-      document.getElementById('btnRunPA').disabled = true;
+      document.getElementById('btnFetchPA').disabled = true;
       document.getElementById('paSuccessBanner').classList.add('hidden');
       var timer = createTimer();
 
@@ -26,19 +26,19 @@
 
       // Read entity selectors
       var ent = {
-        psh:    document.getElementById('selPAPSH').value,
-        psi:    document.getElementById('selPAPSI').value,
-        psr:    document.getElementById('selPAPSR').value,
+        psh:    document.getElementById('selPAHeader').value,
+        psi:    document.getElementById('selPAItem').value,
+        psr:    document.getElementById('selPAResource').value,
         prd:    document.getElementById('selPAProduct').value,
-        loc:    document.getElementById('selPALocation').value,
-        res:    document.getElementById('selPAResource').value,
+        loc:    document.getElementById('selPALocMaster').value,
+        res:    document.getElementById('selPAResMaster').value,
         locPrd: document.getElementById('selPALocProd').value,
         locSrc: document.getElementById('selPALocSrc').value
       };
 
       if (!ent.psh) {
         log(logEl, 'err', timer.fmt() + ' Configura al menos la entidad Production Source Header antes de analizar');
-        document.getElementById('btnRunPA').disabled = false;
+        document.getElementById('btnFetchPA').disabled = false;
         return;
       }
 
@@ -89,7 +89,7 @@
           setStatusPA('Descargando Production Source Item → IDB...', 12);
           log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + ent.psi);
           var nPsi = await fetchAndIndex(baseOData + ent.psi, logEl, paFilter,
-            'SOURCEID,PRDID,INPUTCOEFFICIENT,UOMID',
+            'SOURCEID,PRDID,COMPONENTCOEFFICIENT',
             function (rows) { return idbBulkPut('pa_psi', rows); });
           log(logEl, 'ok', timer.fmt() + ' PSI: ' + nPsi + ' reg → IDB');
         }
@@ -192,7 +192,7 @@
         var errEl = document.getElementById('progStatusTextPA');
         if (errEl) { errEl.style.color = 'var(--red)'; errEl.textContent = 'Error: ' + e.message; }
       }
-      document.getElementById('btnRunPA').disabled = false;
+      document.getElementById('btnFetchPA').disabled = false;
     }
 
     function togglePALogs() {
@@ -330,15 +330,14 @@
             } else {
               psiRecs.forEach(function (pi) {
                 var compId = str(pi.PRDID  || '');
-                var coeff  = str(pi.INPUTCOEFFICIENT || '');
-                var uom    = str(pi.UOMID  || '');
+                var coeff  = str(pi.COMPONENTCOEFFICIENT || '');
 
                 /* Case B🔴 — coeficiente cero o nulo */
                 if (coeff === '' || Number(coeff) === 0) {
                   counts.B++; findingCount++;
                   addRow(S1, ['B', sid, outPrd, pd(outPrd), outLoc, ld(outLoc),
                     compId, pd(compId), 'High',
-                    'Componente con coeficiente de consumo = 0 o no definido (UOMID: ' + uom + ')']);
+                    'Componente con coeficiente de consumo = 0 o no definido']);
                 }
 
                 /* Case F🟡 — componente no existe en maestro de productos */

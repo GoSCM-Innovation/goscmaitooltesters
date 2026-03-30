@@ -217,7 +217,7 @@
           Entidades OData consumidas por módulo</div>
         <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;font-size:11px;">
           <div>
-            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Production Hierarchy Visualizer</div>
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Production Visualizer</div>
             <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
               <div>• Production Source Header</div>
               <div>• Production Source Item</div>
@@ -228,7 +228,7 @@
             </div>
           </div>
           <div>
-            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Production Hierarchy Analyzer</div>
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Production Analyzer</div>
             <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
               <div>• Production Source Header</div>
               <div>• Production Source Item</div>
@@ -241,7 +241,7 @@
             </div>
           </div>
           <div>
-            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Supply Network Analyzer</div>
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Network Analyzer</div>
             <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
               <div>• Production Source Header</div>
               <div>• Production Source Item</div>
@@ -255,7 +255,7 @@
             </div>
           </div>
           <div>
-            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Supply Network Visualizer</div>
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Network Visualizer</div>
             <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
               <div>• Production Source Header</div>
               <div>• Production Source Item</div>
@@ -269,12 +269,16 @@
             </div>
           </div>
           <div>
-            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Doc Generator</div>
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Mapping Dataflow Generator</div>
             <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
-              <div style="color:var(--text3);font-style:italic;">No consume OData</div>
+              <div style="color:var(--text3);font-style:italic;margin-bottom:2px;">ZIP CIDS (siempre)</div>
               <div>• Procesa archivos ZIP</div>
               <div>• Extrae XMLs CIDS</div>
-              <div>• 100% frontend</div>
+              <div style="color:var(--text3);font-style:italic;margin-top:4px;margin-bottom:2px;">OData IBP (si conectado)</div>
+              <div>• Product <span style="color:var(--text3);">(maestro)</span></div>
+              <div>• Location <span style="color:var(--text3);">(maestro)</span></div>
+              <div>• Customer <span style="color:var(--text3);">(maestro)</span></div>
+              <div>• Production Source Header</div>
             </div>
           </div>
         </div>
@@ -323,19 +327,19 @@
   <!-- ═══ TAB NAVIGATION ═══ -->
   <div class="tab-nav" id="tabNav">
     <button class="tab-btn req-conn" onclick="switchTab('bom')" id="tabBtn-bom">
-      <span>📦</span> Production Hierarchy Visualizer <span class="lock-icon"
-        style="font-size:10px;opacity:0.7;margin-left:4px;">🔒</span>
-    </button>
-    <button class="tab-btn req-conn" onclick="switchTab('network')" id="tabBtn-network">
-      <span>🌐</span> Supply Network Analyzer <span class="lock-icon"
-        style="font-size:10px;opacity:0.7;margin-left:4px;">🔒</span>
-    </button>
-    <button class="tab-btn req-conn" onclick="switchTab('visualizer')" id="tabBtn-visualizer">
-      <span>🔭</span> Supply Network Visualizer <span class="lock-icon"
+      <span>📦</span> Production Visualizer <span class="lock-icon"
         style="font-size:10px;opacity:0.7;margin-left:4px;">🔒</span>
     </button>
     <button class="tab-btn req-conn" onclick="switchTab('pa')" id="tabBtn-pa">
-      <span>🔬</span> Production Hierarchy Analyzer <span class="lock-icon"
+      <span>🔬</span> Production Analyzer <span class="lock-icon"
+        style="font-size:10px;opacity:0.7;margin-left:4px;">🔒</span>
+    </button>
+    <button class="tab-btn req-conn" onclick="switchTab('visualizer')" id="tabBtn-visualizer">
+      <span>🔭</span> Network Visualizer <span class="lock-icon"
+        style="font-size:10px;opacity:0.7;margin-left:4px;">🔒</span>
+    </button>
+    <button class="tab-btn req-conn" onclick="switchTab('network')" id="tabBtn-network">
+      <span>🌐</span> Network Analyzer <span class="lock-icon"
         style="font-size:10px;opacity:0.7;margin-left:4px;">🔒</span>
     </button>
     <button class="tab-btn" onclick="switchTab('docs')" id="tabBtn-docs">
