@@ -5,7 +5,7 @@
        ═══════════════════════════════════════════════════════════════ */
     function openDB() {
       return new Promise(function (resolve, reject) {
-        var req = indexedDB.open('ibp_data', 1);
+        var req = indexedDB.open('ibp_data', 2);
         req.onupgradeneeded = function (e) {
           var db = e.target.result;
           // BOM stores
@@ -25,6 +25,10 @@
           if (!db.objectStoreNames.contains('bom_prd')) {
             db.createObjectStore('bom_prd', { keyPath: 'PRDID' });
           }
+          // BOM Location master (lookup for LOCID→LOCDESCR in BOM tab)
+          if (!db.objectStoreNames.contains('bom_loc')) {
+            db.createObjectStore('bom_loc', { keyPath: 'LOCID' });
+          }
           // SN edge stores (SN lookup tables stay in SN_IDX JS object — they are small)
           if (!db.objectStoreNames.contains('sn_loc')) {
             db.createObjectStore('sn_loc', { autoIncrement: true })
@@ -37,6 +41,50 @@
           if (!db.objectStoreNames.contains('sn_plant')) {
             db.createObjectStore('sn_plant', { autoIncrement: true })
               .createIndex('by_prdid', 'PRDID', { unique: false });
+          }
+          // SN PSI — Production Source Item for SN Analyzer
+          if (!db.objectStoreNames.contains('sn_psi')) {
+            var snPsi = db.createObjectStore('sn_psi', { autoIncrement: true });
+            snPsi.createIndex('by_prdid', 'PRDID', { unique: false });
+            snPsi.createIndex('by_sourceid', 'SOURCEID', { unique: false });
+          }
+          // SN Location Product — large table, stored in IDB
+          if (!db.objectStoreNames.contains('sn_loc_prod')) {
+            var snLp = db.createObjectStore('sn_loc_prod', { autoIncrement: true });
+            snLp.createIndex('by_prdid', 'PRDID', { unique: false });
+            snLp.createIndex('by_locid', 'LOCID', { unique: false });
+          }
+          // SN Customer Product — large table, stored in IDB
+          if (!db.objectStoreNames.contains('sn_cust_prod')) {
+            var snCp = db.createObjectStore('sn_cust_prod', { autoIncrement: true });
+            snCp.createIndex('by_prdid', 'PRDID', { unique: false });
+            snCp.createIndex('by_custid', 'CUSTID', { unique: false });
+          }
+          // PA (Production Analyzer) stores
+          if (!db.objectStoreNames.contains('pa_psh')) {
+            var paPsh = db.createObjectStore('pa_psh', { autoIncrement: true });
+            paPsh.createIndex('by_prdid', 'PRDID', { unique: false });
+            paPsh.createIndex('by_locid', 'LOCID', { unique: false });
+            paPsh.createIndex('by_sourceid', 'SOURCEID', { unique: false });
+          }
+          if (!db.objectStoreNames.contains('pa_psi')) {
+            var paPsi = db.createObjectStore('pa_psi', { autoIncrement: true });
+            paPsi.createIndex('by_sourceid', 'SOURCEID', { unique: false });
+            paPsi.createIndex('by_prdid', 'PRDID', { unique: false });
+          }
+          if (!db.objectStoreNames.contains('pa_psr')) {
+            db.createObjectStore('pa_psr', { autoIncrement: true })
+              .createIndex('by_sourceid', 'SOURCEID', { unique: false });
+          }
+          if (!db.objectStoreNames.contains('pa_loc_prod')) {
+            var paLp = db.createObjectStore('pa_loc_prod', { autoIncrement: true });
+            paLp.createIndex('by_prdid', 'PRDID', { unique: false });
+            paLp.createIndex('by_locid', 'LOCID', { unique: false });
+          }
+          if (!db.objectStoreNames.contains('pa_loc_src')) {
+            var paLs = db.createObjectStore('pa_loc_src', { autoIncrement: true });
+            paLs.createIndex('by_prdid', 'PRDID', { unique: false });
+            paLs.createIndex('by_locfr', 'LOCFR', { unique: false });
           }
         };
         req.onsuccess = function (e) { resolve(e.target.result); };

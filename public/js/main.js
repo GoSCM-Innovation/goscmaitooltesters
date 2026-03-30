@@ -1,7 +1,7 @@
     /* ═══════════════════════════════════════════════════════════════
        TAB NAVIGATION
        ═══════════════════════════════════════════════════════════════ */
-    var TAB_BANNERS = { bom: 'infoBannerBom', network: 'infoBannerNetwork', visualizer: 'infoBannerVisualizer', docs: 'infoBannerDocs' };
+    var TAB_BANNERS = { bom: 'infoBannerBom', network: 'infoBannerNetwork', visualizer: 'infoBannerVisualizer', pa: 'infoBannerPA', docs: 'infoBannerDocs' };
 
     function switchTab(tabId) {
       document.querySelectorAll('.tab-panel').forEach(function (p) { p.classList.remove('active'); });
@@ -157,19 +157,26 @@
         // Auto-detect MDTs and populate BOM panel
         var detected = autoDetectMDTs(ENTITIES, prefix);
         log(logEl, 'info', 'Auto-detección BOM: Header=' + (detected.header || '?') + ', Item=' + (detected.item || '?')
-          + ', Resource=' + (detected.resource || '?') + ', Product=' + (detected.product || '?'));
+          + ', Resource=' + (detected.resource || '?') + ', Product=' + (detected.product || '?')
+          + ', LocMaster=' + (detected.locMaster || '?') + ', ResMaster=' + (detected.resMaster || '?'));
         populateMDTPanel(detected);
 
         // Auto-detect MDTs and populate Supply Network panel
         var detectedSN = autoDetectSNMDTs(ENTITIES, prefix);
         log(logEl, 'info', 'Auto-detección SN: Location=' + (detectedSN.location || '?') + ', Customer=' + (detectedSN.customer || '?')
           + ', Product=' + (detectedSN.product || '?') + ', SourceProd=' + (detectedSN.sourceProd || '?')
-          + ', LocMaster=' + (detectedSN.locMaster || '?') + ', CustMaster=' + (detectedSN.custMaster || '?'));
+          + ', LocMaster=' + (detectedSN.locMaster || '?') + ', CustMaster=' + (detectedSN.custMaster || '?')
+          + ', SourceItem=' + (detectedSN.sourceItem || '?') + ', LocProd=' + (detectedSN.locProd || '?')
+          + ', CustProd=' + (detectedSN.custProd || '?'));
         populateSNMDTPanel(detectedSN);
 
         // Populate Visualizer MDT panel (same auto-detection as SN)
         populateVizMDTPanel(detectedSN);
         document.getElementById('panelVizMDT').style.display = 'block';
+
+        // Populate Production Hierarchy Analyzer MDT panel
+        populatePAMDTPanel(detected, detectedSN);
+        document.getElementById('panelPAMDT').classList.remove('hidden');
 
         setConnected(true);
         setConnStatus('ok', 'Conectado — ' + ENTITIES.length + ' entidades · PA: ' + CFG.pa + (CFG.pver ? ' / ' + CFG.pver : ' (Baseline)'));
@@ -296,11 +303,15 @@
       //   PRODUCTIONSOURCEITM : PRDID, SOURCEID  (+COMPONENTCOEFFICIENT to disambiguate from header)
       //   PRODUCTIONRESOURCE  : RESID, SOURCEID
       //   PRODUCT             : PRDID
+      //   LOCATION (master)   : LOCID — exclude entities with LOCFR+PRDID (=SOURCELOCATION) or SOURCEID
+      //   RESOURCE (master)   : RESID — exclude entities with SOURCEID (=PRODUCTIONRESOURCE)
       return {
         header: best(['LOCID', 'PRDID', 'SOURCEID'], ['SOURCETYPE', 'OUTPUTCOEFFICIENT'], ['sourceprod', 'sourceproduction', 'prodhead']),
         item: best(['PRDID', 'SOURCEID', 'COMPONENTCOEFFICIENT'], [], ['sourceitem', 'proditem', 'sourceproditem', 'productionsourceitm']),
         resource: best(['RESID', 'SOURCEID'], [], ['sourceres', 'prodres', 'sourceresource', 'productionresource']),
-        product: best(['PRDID'], ['PRDDESCR', 'MATTYPEID'], ['product', 'material'])
+        product: best(['PRDID'], ['PRDDESCR', 'MATTYPEID'], ['product', 'material']),
+        locMaster: best(['LOCID'], ['LOCDESCR', 'LOCTYPE'], ['location', 'loc'], ['LOCFR', 'PRDID', 'SOURCEID']),
+        resMaster: best(['RESID'], ['RESDESCR'], ['resource', 'res'], ['SOURCEID'])
       };
     }
 
@@ -309,7 +320,9 @@
         { id: 'selHeader', fields: 'fieldsHeader', val: detected.header },
         { id: 'selItem', fields: 'fieldsItem', val: detected.item },
         { id: 'selResource', fields: 'fieldsResource', val: detected.resource },
-        { id: 'selProduct', fields: 'fieldsProduct', val: detected.product }
+        { id: 'selProduct', fields: 'fieldsProduct', val: detected.product },
+        { id: 'selBomLocMaster', fields: 'fieldsBomLocMaster', val: detected.locMaster },
+        { id: 'selBomResMaster', fields: 'fieldsBomResMaster', val: detected.resMaster }
       ];
       pairs.forEach(function (p) { initSearchSelect(p.id, p.fields, p.val); });
     }
@@ -381,19 +394,25 @@
       }
 
       // Key fields per entity type (always present — used as strict mustHave):
-      //   SOURCELOCATION  : LOCID, LOCFR, PRDID
-      //   SOURCECUSTOMER  : LOCID, PRDID, CUSTID
-      //   PRODUCT         : PRDID
-      //   SOURCEPRODUCTION: LOCID, PRDID, SOURCEID
-      //   LOCATION (master): LOCID  — exclude entities that also have LOCFR+PRDID (=SOURCELOCATION)
-      //   CUSTOMER (master): CUSTID — exclude entities that also have LOCID+PRDID  (=SOURCECUSTOMER)
+      //   SOURCELOCATION     : LOCID, LOCFR, PRDID
+      //   SOURCECUSTOMER     : LOCID, PRDID, CUSTID
+      //   PRODUCT            : PRDID
+      //   SOURCEPRODUCTION   : LOCID, PRDID, SOURCEID
+      //   PRODUCTIONSOURCEITM: PRDID, SOURCEID, COMPONENTCOEFFICIENT
+      //   LOCATION (master)  : LOCID  — exclude entities with LOCFR+PRDID (=SOURCELOCATION)
+      //   CUSTOMER (master)  : CUSTID — exclude entities with LOCID+PRDID  (=SOURCECUSTOMER)
+      //   LOCATIONPRODUCT    : LOCID, PRDID — exclude entities with LOCFR (=SOURCELOCATION)
+      //   CUSTOMERPRODUCT    : CUSTID, PRDID — exclude entities with LOCID (=SOURCECUSTOMER)
       return {
-        location: best(['LOCID', 'LOCFR', 'PRDID'], ['SOURCETYPE'], ['sourcelocation']),
-        customer: best(['LOCID', 'PRDID', 'CUSTID'], [], ['sourcecustomer', 'customer']),
+        location: best(['LOCID', 'LOCFR', 'PRDID'], ['TLEADTIME'], ['sourcelocation']),
+        customer: best(['LOCID', 'PRDID', 'CUSTID'], ['CLEADTIME'], ['sourcecustomer', 'customer']),
         product: best(['PRDID'], ['PRDDESCR', 'MATTYPEID'], ['product', 'material']),
         sourceProd: best(['LOCID', 'PRDID', 'SOURCEID'], ['SOURCETYPE', 'OUTPUTCOEFFICIENT'], ['sourceproduction', 'sourceprod', 'prodhead']),
-        locMaster: best(['LOCID'], ['LOCTYPE'], ['location', 'loc'], ['LOCFR', 'PRDID']),
-        custMaster: best(['CUSTID'], [], ['customer', 'cust'], ['LOCID', 'PRDID'])
+        locMaster: best(['LOCID'], ['LOCTYPE', 'LOCDESCR'], ['location', 'loc'], ['LOCFR', 'PRDID']),
+        custMaster: best(['CUSTID'], ['CUSTDESCR'], ['customer', 'cust'], ['LOCID', 'PRDID']),
+        sourceItem: best(['PRDID', 'SOURCEID', 'COMPONENTCOEFFICIENT'], ['UOMID'], ['sourceitem', 'proditem', 'sourceproditem', 'productionsourceitm']),
+        locProd: best(['LOCID', 'PRDID'], [], ['locationproduct', 'locproduct', 'locprod'], ['LOCFR']),
+        custProd: best(['CUSTID', 'PRDID'], [], ['customerproduct', 'custproduct', 'custprod'], ['LOCID'])
       };
     }
 
@@ -404,7 +423,10 @@
         { id: 'selSNProduct', fields: 'fieldsSNProduct', val: detected.product },
         { id: 'selSNSourceProd', fields: 'fieldsSNSourceProd', val: detected.sourceProd },
         { id: 'selSNLocMaster', fields: 'fieldsSNLocMaster', val: detected.locMaster },
-        { id: 'selSNCustMaster', fields: 'fieldsSNCustMaster', val: detected.custMaster }
+        { id: 'selSNCustMaster', fields: 'fieldsSNCustMaster', val: detected.custMaster },
+        { id: 'selSNSourceItem', fields: 'fieldsSNSourceItem', val: detected.sourceItem },
+        { id: 'selSNLocProd', fields: 'fieldsSNLocProd', val: detected.locProd },
+        { id: 'selSNCustProd', fields: 'fieldsSNCustProd', val: detected.custProd }
       ];
       pairs.forEach(function (p) { initSearchSelect(p.id, p.fields, p.val); });
     }
@@ -416,7 +438,24 @@
         { id: 'selVizProduct', fields: 'fieldsVizProduct', val: detected.product },
         { id: 'selVizSourceProd', fields: 'fieldsVizSourceProd', val: detected.sourceProd },
         { id: 'selVizLocMaster', fields: 'fieldsVizLocMaster', val: detected.locMaster },
-        { id: 'selVizCustMaster', fields: 'fieldsVizCustMaster', val: detected.custMaster }
+        { id: 'selVizCustMaster', fields: 'fieldsVizCustMaster', val: detected.custMaster },
+        { id: 'selVizSourceItem', fields: 'fieldsVizSourceItem', val: detected.sourceItem },
+        { id: 'selVizLocProd', fields: 'fieldsVizLocProd', val: detected.locProd },
+        { id: 'selVizCustProd', fields: 'fieldsVizCustProd', val: detected.custProd }
+      ];
+      pairs.forEach(function (p) { initSearchSelect(p.id, p.fields, p.val); });
+    }
+
+    function populatePAMDTPanel(detectedBom, detectedSN) {
+      var pairs = [
+        { id: 'selPAHeader', fields: 'fieldsPAHeader', val: detectedBom.header },
+        { id: 'selPAItem', fields: 'fieldsPAItem', val: detectedBom.item },
+        { id: 'selPAResource', fields: 'fieldsPAResource', val: detectedBom.resource },
+        { id: 'selPAProduct', fields: 'fieldsPAProduct', val: detectedBom.product },
+        { id: 'selPALocMaster', fields: 'fieldsPALocMaster', val: detectedBom.locMaster },
+        { id: 'selPAResMaster', fields: 'fieldsPAResMaster', val: detectedBom.resMaster },
+        { id: 'selPALocProd', fields: 'fieldsPALocProd', val: detectedSN.locProd },
+        { id: 'selPALocSrc', fields: 'fieldsPALocSrc', val: detectedSN.location }
       ];
       pairs.forEach(function (p) { initSearchSelect(p.id, p.fields, p.val); });
     }
@@ -554,6 +593,8 @@
       var itemEntity = document.getElementById('selItem').value;
       var resourceEntity = document.getElementById('selResource').value;
       var productEntity = document.getElementById('selProduct').value;
+      var bomLocEntity = document.getElementById('selBomLocMaster').value;
+      var bomResEntity = document.getElementById('selBomResMaster').value;
 
       if (!headerEntity || !itemEntity) {
         setStatus('err', 'Selecciona al menos Header e Item');
@@ -575,7 +616,8 @@
         // Open IDB and wipe previous BOM data
         if (!IDB) IDB = await openDB();
         setStatus('info', 'Preparando base de datos local...');
-        await Promise.all(['bom_psh', 'bom_psi', 'bom_psr', 'bom_prd'].map(idbClear));
+        await Promise.all(['bom_psh', 'bom_psi', 'bom_psr', 'bom_prd', 'bom_loc'].map(idbClear));
+        RES_DESCR = {};
 
         // ── Header → IDB ───────────────────────────────────────────────────────
         setStatus('info', 'Descargando Production Source Header...');
@@ -620,6 +662,34 @@
           log(logEl, 'warn', 'Product: sin entidad configurada');
         }
         setProgress(85);
+
+        // ── Location Master → IDB ──────────────────────────────────────────────
+        if (bomLocEntity) {
+          setStatus('info', 'Descargando Location (maestro)...');
+          log(logEl, 'info', 'GET → ' + baseOData + bomLocEntity + (paFilter ? ' [filtro PA/Ver]' : ''));
+          var nLoc = await fetchAndIndex(baseOData + bomLocEntity, logEl, paFilter,
+            'LOCID,LOCDESCR',
+            function (rows) { return idbBulkPut('bom_loc', rows); });
+          log(logEl, 'ok', 'Location: ' + nLoc + ' registros → IDB');
+        } else {
+          log(logEl, 'warn', 'Location: sin entidad configurada');
+        }
+
+        // ── Resource Master → memoria (tabla pequeña) ──────────────────────────
+        if (bomResEntity) {
+          setStatus('info', 'Descargando Resource (maestro)...');
+          log(logEl, 'info', 'GET → ' + baseOData + bomResEntity + (paFilter ? ' [filtro PA/Ver]' : ''));
+          var nResM = await fetchAndIndex(baseOData + bomResEntity, logEl, paFilter,
+            'RESID,RESDESCR',
+            function (rows) {
+              rows.forEach(function (r) { var k = str(r.RESID); if (k) RES_DESCR[k] = str(r.RESDESCR || ''); });
+              return Promise.resolve();
+            });
+          log(logEl, 'ok', 'Resource master: ' + nResM + ' registros → memoria');
+        } else {
+          log(logEl, 'warn', 'Resource master: sin entidad configurada');
+        }
+        setProgress(90);
 
         // Build product suggestion list from IDB (unique PRDIDs + descriptions)
         setStatus('info', 'Indexando lista de productos...');

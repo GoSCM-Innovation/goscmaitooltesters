@@ -51,6 +51,9 @@
       var sourceProdEntity = document.getElementById('selSNSourceProd').value;
       var locMasterEntity = document.getElementById('selSNLocMaster').value;
       var custMasterEntity = document.getElementById('selSNCustMaster').value;
+      var sourceItemEntity = document.getElementById('selSNSourceItem').value;
+      var locProdEntity = document.getElementById('selSNLocProd').value;
+      var custProdEntity = document.getElementById('selSNCustProd').value;
 
       if (!locationEntity && !customerEntity && !sourceProdEntity) {
         log(logEl, 'err', timer.fmt() + ' Configura al menos una entidad de red antes de analizar');
@@ -66,7 +69,7 @@
         : '';
 
       // Reset SN — edge tables go to IDB, only small lookups stay in JS
-      SN_IDX = { allPrds: {}, prdLookup: {}, locLookup: {}, custLookup: {} };
+      SN_IDX = { allPrds: {}, prdLookup: {}, locLookup: {}, custLookup: {}, pshPrds: {}, psiCompPrds: {} };
 
       try {
         var progEl = document.getElementById('progFillSN');
@@ -74,7 +77,7 @@
 
         // Open IDB and wipe previous SN edge data
         if (!IDB) IDB = await openDB();
-        await Promise.all(['sn_loc', 'sn_cust', 'sn_plant'].map(idbClear));
+        await Promise.all(['sn_loc', 'sn_cust', 'sn_plant', 'sn_psi', 'sn_loc_prod', 'sn_cust_prod'].map(idbClear));
 
         // ── PHASE 1: Download + store 6 entities (0 → 50%) ──────────────────
 
@@ -123,10 +126,23 @@
           var nSrc = await fetchAndIndex(baseOData + sourceProdEntity, logEl, paFilter,
             'PRDID,LOCID,PLEADTIME',
             function (rows) {
-              rows.forEach(function (r) { var p = str(r.PRDID); if (p) SN_IDX.allPrds[p] = true; });
+              rows.forEach(function (r) { var p = str(r.PRDID); if (p) { SN_IDX.allPrds[p] = true; SN_IDX.pshPrds[p] = true; } });
               return idbBulkPut('sn_plant', rows);
             });
           log(logEl, 'ok', timer.fmt() + ' Production Source Header: ' + nSrc + ' reg → IDB');
+        }
+        progEl.style.width = '28%';
+
+        if (sourceItemEntity) {
+          setStatusSN('info', 'Descargando Production Source Item → IDB...');
+          log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + sourceItemEntity);
+          var nPsi = await fetchAndIndex(baseOData + sourceItemEntity, logEl, paFilter,
+            'SOURCEID,PRDID,COMPONENTCOEFFICIENT,UOMID',
+            function (rows) {
+              rows.forEach(function (r) { var p = str(r.PRDID); if (p) SN_IDX.psiCompPrds[p] = true; });
+              return idbBulkPut('sn_psi', rows);
+            });
+          log(logEl, 'ok', timer.fmt() + ' Production Source Item: ' + nPsi + ' reg → IDB (' + Object.keys(SN_IDX.psiCompPrds).length + ' componentes únicos)');
         }
         progEl.style.width = '33%';
 
@@ -134,12 +150,22 @@
           setStatusSN('info', 'Indexando Location (lookup en memoria)...');
           log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + locMasterEntity);
           var nLocM = await fetchAndIndex(baseOData + locMasterEntity, logEl, paFilter,
-            'LOCID,LOCDESCR',
+            'LOCID,LOCDESCR,LOCTYPE',
             function (rows) {
               rows.forEach(function (r) { var k = str(r.LOCID); if (k) SN_IDX.locLookup[k] = r; });
               return Promise.resolve();
             });
           log(logEl, 'ok', timer.fmt() + ' Location: ' + nLocM + ' reg');
+        }
+        progEl.style.width = '38%';
+
+        if (locProdEntity) {
+          setStatusSN('info', 'Descargando Location Product → IDB...');
+          log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + locProdEntity);
+          var nLocProd = await fetchAndIndex(baseOData + locProdEntity, logEl, paFilter,
+            'LOCID,PRDID',
+            function (rows) { return idbBulkPut('sn_loc_prod', rows); });
+          log(logEl, 'ok', timer.fmt() + ' Location Product: ' + nLocProd + ' reg → IDB');
         }
         progEl.style.width = '42%';
 
@@ -153,6 +179,16 @@
               return Promise.resolve();
             });
           log(logEl, 'ok', timer.fmt() + ' Customer: ' + nCustM + ' reg');
+        }
+        progEl.style.width = '46%';
+
+        if (custProdEntity) {
+          setStatusSN('info', 'Descargando Customer Product → IDB...');
+          log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + custProdEntity);
+          var nCustProd = await fetchAndIndex(baseOData + custProdEntity, logEl, paFilter,
+            'CUSTID,PRDID',
+            function (rows) { return idbBulkPut('sn_cust_prod', rows); });
+          log(logEl, 'ok', timer.fmt() + ' Customer Product: ' + nCustProd + ' reg → IDB');
         }
         progEl.style.width = '50%';
 
@@ -282,6 +318,10 @@
       }
 
       // Contadores de resumen (sin arrays)
+      var selLocProd    = (document.getElementById('selSNLocProd')    || {}).value || '';
+      var selCustProd   = (document.getElementById('selSNCustProd')   || {}).value || '';
+      var selSourceItem = (document.getElementById('selSNSourceItem') || {}).value || '';
+
       var critNodeMap = {};
       var completeCount = 0;
       var totalPaths = 0;
@@ -359,6 +399,45 @@
                 'PLEADTIME not defined for production at plant ' + lt.loc, 'Medium']);
           });
 
+          // V1 — Location Source arcs vs Location Product
+          if (selLocProd) {
+            var lpRows = await idbGetByIndex('sn_loc_prod', 'by_prdid', prdid);
+            var lpSet = {};
+            lpRows.forEach(function (r) { var k = str(r.LOCID); if (k) lpSet[k] = true; });
+            var lpReported = {};
+            graph.locRawRows.forEach(function (r) {
+              var fr = str(r.LOCFR), to = str(r.LOCID);
+              if (fr && !lpSet[fr] && !lpReported[fr]) {
+                lpReported[fr] = true;
+                addRow(1, ['Missing Location Product (Origin)', prdid, pd(prdid), fr, ld(fr), '', '',
+                  'Transport arc ' + fr + ' → ' + to + ': origin has no Location Product record for this material', 'High']);
+              }
+              if (to && !lpSet[to] && !lpReported[to]) {
+                lpReported[to] = true;
+                addRow(1, ['Missing Location Product (Destination)', prdid, pd(prdid), to, ld(to), '', '',
+                  'Transport arc ' + fr + ' → ' + to + ': destination has no Location Product record for this material', 'High']);
+              }
+            });
+            lpRows = null; lpReported = null;
+          }
+
+          // V2 — Customer Source arcs vs Customer Product
+          if (selCustProd) {
+            var cpRows = await idbGetByIndex('sn_cust_prod', 'by_prdid', prdid);
+            var cpSet = {};
+            cpRows.forEach(function (r) { var k = str(r.CUSTID); if (k) cpSet[k] = true; });
+            var cpReported = {};
+            graph.custRawRows.forEach(function (r) {
+              var cust = str(r.CUSTID);
+              if (cust && !cpSet[cust] && !cpReported[cust]) {
+                cpReported[cust] = true;
+                addRow(1, ['Missing Customer Product', prdid, pd(prdid), str(r.LOCID), ld(str(r.LOCID)), cust, cd(cust),
+                  'Customer Source arc exists but customer ' + cust + ' has no Customer Product record for this material', 'High']);
+              }
+            });
+            cpRows = null; cpReported = null;
+          }
+
           // Sheet 3 — Network Metrics (índice 2)
           addRow(2, [prdid, pd(prdid), metrics.plants, metrics.dcs, metrics.customers,
             metrics.paths, metrics.longestPath, metrics.ghosts, metrics.networkStatus]);
@@ -393,6 +472,44 @@
         if (onStatus) onStatus('Analizando ' + done + '/' + n + ' productos...');
         if (logEl && i > 0 && i % 500 === 0)
           log(logEl, 'info', timer.fmt() + ' Analizados ' + done + '/' + n + ' productos...');
+      }
+
+      // V3 / V3b — Purchased inputs (post-loop, requires PSI + Location)
+      if (selSourceItem && Object.keys(SN_IDX.psiCompPrds).length > 0) {
+        if (onStatus) onStatus('Analizando insumos comprados...');
+        if (logEl) log(logEl, 'info', timer.fmt() + ' Analizando insumos comprados (V3/V3b)...');
+        var purchasedPrds = Object.keys(SN_IDX.psiCompPrds).filter(function (p) { return !SN_IDX.pshPrds[p]; });
+        for (var vi = 0; vi < purchasedPrds.length; vi++) {
+          var compPrd = purchasedPrds[vi];
+          var compSrcRows = await idbGetByIndex('sn_loc', 'by_prdid', compPrd);
+          var supplierArcs = compSrcRows.filter(function (r) {
+            var loc = SN_IDX.locLookup[str(r.LOCFR)] || {};
+            return str(loc.LOCTYPE) === 'V';
+          });
+          if (supplierArcs.length === 0) {
+            // V3 — purchased input with no supplier arc at all
+            addRow(1, ['Purchased Input without Supplier', compPrd, pd(compPrd), '', '', '', '',
+              'Component is consumed in production (PSI) with no production source (PSH) and no supplier arc (no Location Source from LOCTYPE=V)', 'High']);
+          } else if (selLocProd) {
+            // V3b — supplier arcs exist but supplier may lack Location Product
+            var suppLpRows = await idbGetByIndex('sn_loc_prod', 'by_prdid', compPrd);
+            var suppLpSet = {};
+            suppLpRows.forEach(function (r) { var k = str(r.LOCID); if (k) suppLpSet[k] = true; });
+            var suppReported = {};
+            supplierArcs.forEach(function (arc) {
+              var suppLoc = str(arc.LOCFR);
+              if (!suppLpSet[suppLoc] && !suppReported[suppLoc]) {
+                suppReported[suppLoc] = true;
+                addRow(1, ['Supplier Missing Location Product', compPrd, pd(compPrd), suppLoc, ld(suppLoc), '', '',
+                  'Supplier ' + suppLoc + ' has a supplier arc for component ' + compPrd + ' but no Location Product record', 'Medium']);
+              }
+            });
+            suppLpRows = null; suppReported = null;
+          }
+          compSrcRows = null; supplierArcs = null;
+          if (vi % 200 === 0 && vi > 0) await new Promise(function (r) { setTimeout(r, 0); });
+        }
+        if (logEl) log(logEl, 'ok', timer.fmt() + ' V3/V3b: ' + purchasedPrds.length + ' insumos comprados evaluados');
       }
 
       // Sheet 5 — Critical Nodes (después del loop, índice 4)
@@ -491,7 +608,8 @@
         prdid: prdid, plants: plants, plantSet: plantSet,
         locEdges: locEdges, custEdges: custEdges,
         locLeadTimes: locLeadTimes, custLeadTimes: custLeadTimes, plantLeadTimes: plantLeadTimes,
-        allLocations: Object.keys(allLocs), allCustomers: Object.keys(allCusts)
+        allLocations: Object.keys(allLocs), allCustomers: Object.keys(allCusts),
+        locRawRows: locRows, custRawRows: custRows  // exposed for LP/CP validation
       };
     }
 

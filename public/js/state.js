@@ -28,5 +28,8 @@
     var RES_BY_SID = {};  // SOURCEID -> [RESID]
     var CPR_BY_SID = {};  // SOURCEID -> [co-product objects]
     var isCompAtLoc = {};  // "LOCID|PRDID" -> true  (built during item streaming)
+    // BOM enrichment lookups (populated during loadBomSubtree)
+    var LOC_BY_ID = {};   // locid → { LOCID, LOCDESCR }
+    var RES_DESCR = {};   // resid → RESDESCR
 
 
