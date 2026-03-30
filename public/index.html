@@ -215,37 +215,70 @@
         <div
           style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">
           Entidades OData consumidas por módulo</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;font-size:12px;">
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;font-size:11px;">
           <div>
-            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Production Hierarchy</div>
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Production Visualizer</div>
             <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
               <div>• Production Source Header</div>
               <div>• Production Source Item</div>
               <div>• Production Source Resource</div>
               <div>• Product <span style="color:var(--text3);">(maestro)</span></div>
               <div>• Location <span style="color:var(--text3);">(maestro)</span></div>
+              <div>• Resource <span style="color:var(--text3);">(maestro)</span></div>
             </div>
           </div>
           <div>
-            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Supply Network Analyzer</div>
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Production Analyzer</div>
             <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
               <div>• Production Source Header</div>
+              <div>• Production Source Item</div>
+              <div>• Production Source Resource</div>
+              <div>• Product <span style="color:var(--text3);">(maestro)</span></div>
+              <div>• Location <span style="color:var(--text3);">(maestro)</span></div>
+              <div>• Resource <span style="color:var(--text3);">(maestro)</span></div>
+              <div>• Location Product</div>
+              <div>• Location Source</div>
+            </div>
+          </div>
+          <div>
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Network Analyzer</div>
+            <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
+              <div>• Production Source Header</div>
+              <div>• Production Source Item</div>
               <div>• Location Source</div>
               <div>• Customer Source</div>
+              <div>• Location Product</div>
+              <div>• Customer Product</div>
               <div>• Product <span style="color:var(--text3);">(maestro)</span></div>
               <div>• Location <span style="color:var(--text3);">(maestro)</span></div>
               <div>• Customer <span style="color:var(--text3);">(maestro)</span></div>
             </div>
           </div>
           <div>
-            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Visualizer</div>
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Network Visualizer</div>
             <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
               <div>• Production Source Header</div>
+              <div>• Production Source Item</div>
               <div>• Location Source</div>
               <div>• Customer Source</div>
+              <div>• Location Product</div>
+              <div>• Customer Product</div>
               <div>• Product <span style="color:var(--text3);">(maestro)</span></div>
               <div>• Location <span style="color:var(--text3);">(maestro)</span></div>
               <div>• Customer <span style="color:var(--text3);">(maestro)</span></div>
+            </div>
+          </div>
+          <div>
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Mapping Dataflow Generator</div>
+            <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
+              <div style="color:var(--text3);font-style:italic;margin-bottom:2px;">ZIP CIDS (siempre)</div>
+              <div>• Procesa archivos ZIP</div>
+              <div>• Extrae XMLs CIDS</div>
+              <div style="color:var(--text3);font-style:italic;margin-top:4px;margin-bottom:2px;">OData IBP (si conectado)</div>
+              <div>• Product <span style="color:var(--text3);">(maestro)</span></div>
+              <div>• Location <span style="color:var(--text3);">(maestro)</span></div>
+              <div>• Customer <span style="color:var(--text3);">(maestro)</span></div>
+              <div>• Production Source Header</div>
             </div>
           </div>
         </div>
@@ -294,15 +327,19 @@
   <!-- ═══ TAB NAVIGATION ═══ -->
   <div class="tab-nav" id="tabNav">
     <button class="tab-btn req-conn" onclick="switchTab('bom')" id="tabBtn-bom">
-      <span>📦</span> Production Hierarchy <span class="lock-icon"
+      <span>📦</span> Production Visualizer <span class="lock-icon"
         style="font-size:10px;opacity:0.7;margin-left:4px;">🔒</span>
     </button>
-    <button class="tab-btn req-conn" onclick="switchTab('network')" id="tabBtn-network">
-      <span>🌐</span> Supply Network Analyzer <span class="lock-icon"
+    <button class="tab-btn req-conn" onclick="switchTab('pa')" id="tabBtn-pa">
+      <span>🔬</span> Production Analyzer <span class="lock-icon"
         style="font-size:10px;opacity:0.7;margin-left:4px;">🔒</span>
     </button>
     <button class="tab-btn req-conn" onclick="switchTab('visualizer')" id="tabBtn-visualizer">
-      <span>🔭</span> Supply Network Visualizer <span class="lock-icon"
+      <span>🔭</span> Network Visualizer <span class="lock-icon"
+        style="font-size:10px;opacity:0.7;margin-left:4px;">🔒</span>
+    </button>
+    <button class="tab-btn req-conn" onclick="switchTab('network')" id="tabBtn-network">
+      <span>🌐</span> Network Analyzer <span class="lock-icon"
         style="font-size:10px;opacity:0.7;margin-left:4px;">🔒</span>
     </button>
     <button class="tab-btn" onclick="switchTab('docs')" id="tabBtn-docs">
@@ -316,7 +353,7 @@
     <div class="tab-info-banner" id="infoBannerBom">
       <span class="tab-info-icon">📦</span>
       <div class="tab-info-content">
-        <div class="tab-info-title">Production Hierarchy</div>
+        <div class="tab-info-title">Production Hierarchy Visualizer</div>
         <div class="tab-info-desc">Explora la estructura de producción BOM de cualquier material desde SAP IBP. Navega
           cada nivel de la jerarquía, identifica co-productos y componentes, y visualiza las plantas de producción
           asociadas.</div>
@@ -388,6 +425,26 @@
             </div>
             <div class="mdt-fields" id="fieldsProduct"></div>
           </div>
+          <div class="mdt-card">
+            <div class="mdt-label">Location <span style="font-size:10px;color:var(--text3)">(maestro)</span></div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selBomLocMaster">
+              <input class="ss-input-vis" id="ssVis-selBomLocMaster" type="text" placeholder="Buscar entidad..."
+                autocomplete="off">
+              <div class="ss-list" id="ssList-selBomLocMaster"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsBomLocMaster"></div>
+          </div>
+          <div class="mdt-card">
+            <div class="mdt-label">Resource <span style="font-size:10px;color:var(--text3)">(maestro)</span></div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selBomResMaster">
+              <input class="ss-input-vis" id="ssVis-selBomResMaster" type="text" placeholder="Buscar entidad..."
+                autocomplete="off">
+              <div class="ss-list" id="ssList-selBomResMaster"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsBomResMaster"></div>
+          </div>
         </div>
       </div>
       <div class="btn-row">
@@ -448,13 +505,12 @@
             <th class="col-exp"></th>
             <th class="col-lvl">Nivel</th>
             <th class="col-loc">Planta</th>
-            <th class="col-src">SOURCE ID</th>
-            <th class="col-prd">PRD ID</th>
-            <th class="col-desc">Descripción</th>
+            <th class="col-src">ID de producción</th>
+            <th class="col-prd">Material</th>
             <th class="col-coef">Coeficiente</th>
-            <th class="col-mat">Tipo Mat.</th>
+            <th class="col-mat">Tipo de Material</th>
             <th class="col-type">Tipo</th>
-            <th class="col-res">Recursos</th>
+            <th class="col-res">Puestos de trabajo</th>
           </tr>
         </thead>
         <tbody id="bomBody"></tbody>
@@ -565,6 +621,36 @@
               <div class="ss-list" id="ssList-selSNCustMaster"></div>
             </div>
             <div class="mdt-fields" id="fieldsSNCustMaster"></div>
+          </div>
+          <div class="mdt-card">
+            <div class="mdt-label">Production Source Item</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selSNSourceItem">
+              <input class="ss-input-vis" id="ssVis-selSNSourceItem" type="text" placeholder="Buscar entidad..."
+                autocomplete="off">
+              <div class="ss-list" id="ssList-selSNSourceItem"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsSNSourceItem"></div>
+          </div>
+          <div class="mdt-card">
+            <div class="mdt-label">Location Product</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selSNLocProd">
+              <input class="ss-input-vis" id="ssVis-selSNLocProd" type="text" placeholder="Buscar entidad..."
+                autocomplete="off">
+              <div class="ss-list" id="ssList-selSNLocProd"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsSNLocProd"></div>
+          </div>
+          <div class="mdt-card">
+            <div class="mdt-label">Customer Product</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selSNCustProd">
+              <input class="ss-input-vis" id="ssVis-selSNCustProd" type="text" placeholder="Buscar entidad..."
+                autocomplete="off">
+              <div class="ss-list" id="ssList-selSNCustProd"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsSNCustProd"></div>
           </div>
         </div>
       </div>
@@ -693,6 +779,36 @@
             </div>
             <div class="mdt-fields" id="fieldsVizCustMaster"></div>
           </div>
+          <div class="mdt-card">
+            <div class="mdt-label">Production Source Item</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selVizSourceItem">
+              <input class="ss-input-vis" id="ssVis-selVizSourceItem" type="text" placeholder="Buscar entidad..."
+                autocomplete="off">
+              <div class="ss-list" id="ssList-selVizSourceItem"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsVizSourceItem"></div>
+          </div>
+          <div class="mdt-card">
+            <div class="mdt-label">Location Product</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selVizLocProd">
+              <input class="ss-input-vis" id="ssVis-selVizLocProd" type="text" placeholder="Buscar entidad..."
+                autocomplete="off">
+              <div class="ss-list" id="ssList-selVizLocProd"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsVizLocProd"></div>
+          </div>
+          <div class="mdt-card">
+            <div class="mdt-label">Customer Product</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selVizCustProd">
+              <input class="ss-input-vis" id="ssVis-selVizCustProd" type="text" placeholder="Buscar entidad..."
+                autocomplete="off">
+              <div class="ss-list" id="ssList-selVizCustProd"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsVizCustProd"></div>
+          </div>
         </div>
       </div>
       <div class="btn-row">
@@ -808,6 +924,13 @@
               style="width:12px;height:12px;border-radius:2px;background:#10B981;display:inline-block;flex-shrink:0;"></span>
             <span>Cliente</span>
           </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;" title="Mostrar/ocultar proveedores">
+            <input type="checkbox" id="vizChkSupplier" checked onchange="vizToggleType('supplier', this.checked)"
+              style="accent-color:#a78bfa;cursor:pointer;">
+            <span
+              style="width:12px;height:12px;transform:rotate(45deg);background:#a78bfa;display:inline-block;flex-shrink:0;"></span>
+            <span>Proveedor</span>
+          </label>
         </div>
       </div>
       <!-- #vizEmpty vive fuera de #vizCanvas para que innerHTML='' no lo destruya -->
@@ -875,6 +998,13 @@
               style="width:12px;height:12px;border-radius:2px;background:#10B981;display:inline-block;flex-shrink:0;"></span>
             <span>Cliente</span>
           </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#e2e8f0;">
+            <input type="checkbox" id="vizFsChkSupplier" checked onchange="vizToggleType('supplier', this.checked)"
+              style="accent-color:#a78bfa;cursor:pointer;">
+            <span
+              style="width:12px;height:12px;transform:rotate(45deg);background:#a78bfa;display:inline-block;flex-shrink:0;"></span>
+            <span>Proveedor</span>
+          </label>
         </div>
       </div>
     </dialog>
@@ -934,6 +1064,141 @@
     </dialog>
 
   </div><!-- /tab-visualizer -->
+
+  <!-- ═══ TAB: PRODUCTION HIERARCHY ANALYZER ═══ -->
+  <div class="tab-panel" id="tab-pa">
+
+    <div class="tab-info-banner" id="infoBannerPA">
+      <span class="tab-info-icon">🔬</span>
+      <div class="tab-info-content">
+        <div class="tab-info-title">Production Hierarchy Analyzer</div>
+        <div class="tab-info-desc">Analiza la consistencia y calidad de la configuración de producción en SAP IBP.
+          Detecta insumos sin red de compras, productos no habilitados en plantas, componentes sin Lead Time y más.
+          Descarga un Excel con todos los hallazgos clasificados por severidad.</div>
+      </div>
+    </div>
+
+    <div class="locked-message empty-state" style="display:none; margin-top:40px;">
+      <div class="icon" style="font-size:48px; opacity:0.8; margin-bottom:16px;">🔒</div>
+      <strong style="font-size:16px;color:var(--text)">Módulo restringido</strong>
+      <p style="font-size:13px;color:var(--text2);margin-top:8px;max-width:400px;margin-left:auto;margin-right:auto;">
+        El analizador de producción requiere acceso a múltiples entidades de SAP IBP. Por favor, conéctate primero.
+      </p>
+      <button class="btn btn-primary" style="margin-top:20px; font-size:13px; padding:10px 20px;"
+        onclick="toggleConnectPanel()">
+        🔗 Conectar a SAP IBP
+      </button>
+    </div>
+
+    <!-- ═══ PA: MDT MAPPING ═══ -->
+    <div class="panel hidden" id="panelPAMDT">
+      <div class="panel-title" onclick="toggleMappingBody('bodyPAMDT', 'arrPAMDT')"
+        style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
+        <span>② Mapeo de entidades — Production Hierarchy Analyzer</span>
+        <span id="arrPAMDT" style="font-size:11px;">▼</span>
+      </div>
+      <div id="bodyPAMDT">
+        <p style="font-size:12px;color:var(--text2);margin-bottom:8px;">
+          La auto-detección asignó las entidades más probables. Ajusta manualmente si es necesario.
+        </p>
+        <div class="mdt-grid">
+          <div class="mdt-card">
+            <div class="mdt-label">Production Source Header</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selPAHeader">
+              <input class="ss-input-vis" id="ssVis-selPAHeader" type="text" placeholder="Buscar entidad..." autocomplete="off">
+              <div class="ss-list" id="ssList-selPAHeader"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsPAHeader"></div>
+          </div>
+          <div class="mdt-card">
+            <div class="mdt-label">Production Source Item</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selPAItem">
+              <input class="ss-input-vis" id="ssVis-selPAItem" type="text" placeholder="Buscar entidad..." autocomplete="off">
+              <div class="ss-list" id="ssList-selPAItem"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsPAItem"></div>
+          </div>
+          <div class="mdt-card">
+            <div class="mdt-label">Production Source Resource</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selPAResource">
+              <input class="ss-input-vis" id="ssVis-selPAResource" type="text" placeholder="Buscar entidad..." autocomplete="off">
+              <div class="ss-list" id="ssList-selPAResource"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsPAResource"></div>
+          </div>
+          <div class="mdt-card">
+            <div class="mdt-label">Product</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selPAProduct">
+              <input class="ss-input-vis" id="ssVis-selPAProduct" type="text" placeholder="Buscar entidad..." autocomplete="off">
+              <div class="ss-list" id="ssList-selPAProduct"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsPAProduct"></div>
+          </div>
+          <div class="mdt-card">
+            <div class="mdt-label">Location <span style="font-size:10px;color:var(--text3)">(maestro)</span></div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selPALocMaster">
+              <input class="ss-input-vis" id="ssVis-selPALocMaster" type="text" placeholder="Buscar entidad..." autocomplete="off">
+              <div class="ss-list" id="ssList-selPALocMaster"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsPALocMaster"></div>
+          </div>
+          <div class="mdt-card">
+            <div class="mdt-label">Resource <span style="font-size:10px;color:var(--text3)">(maestro)</span></div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selPAResMaster">
+              <input class="ss-input-vis" id="ssVis-selPAResMaster" type="text" placeholder="Buscar entidad..." autocomplete="off">
+              <div class="ss-list" id="ssList-selPAResMaster"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsPAResMaster"></div>
+          </div>
+          <div class="mdt-card">
+            <div class="mdt-label">Location Product</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selPALocProd">
+              <input class="ss-input-vis" id="ssVis-selPALocProd" type="text" placeholder="Buscar entidad..." autocomplete="off">
+              <div class="ss-list" id="ssList-selPALocProd"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsPALocProd"></div>
+          </div>
+          <div class="mdt-card">
+            <div class="mdt-label">Location Source</div>
+            <div class="ss-wrap">
+              <input type="hidden" id="selPALocSrc">
+              <input class="ss-input-vis" id="ssVis-selPALocSrc" type="text" placeholder="Buscar entidad..." autocomplete="off">
+              <div class="ss-list" id="ssList-selPALocSrc"></div>
+            </div>
+            <div class="mdt-fields" id="fieldsPALocSrc"></div>
+          </div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btnFetchPA" onclick="doProductionAnalysis()">Analizar producción y Exportar Excel</button>
+        <button class="btn btn-secondary btn-small" onclick="doConnect()">Reconectar</button>
+      </div>
+      <div class="progress-bar hidden" id="progBarPA">
+        <div class="fill" id="progFillPA" style="width:0%"></div>
+      </div>
+      <div id="progStatusPA"
+        style="display:none;font-size:12px;color:var(--text2);margin-top:4px;align-items:center;gap:8px;">
+        <span id="progStatusTextPA"></span>
+        <button id="btnTogglePALogs" class="btn btn-secondary btn-small" style="padding:2px 8px;font-size:11px;"
+          onclick="togglePALogs()">Ver logs técnicos</button>
+      </div>
+      <div class="log-area hidden" id="logPA"></div>
+    </div>
+
+    <div class="empty-state hidden" id="paSuccessBanner" style="margin-top:40px;">
+      <div class="icon">✅</div>
+      <strong style="font-size:15px;color:var(--green)">¡Análisis completado!</strong>
+      <p style="font-size:13px;color:var(--text2);margin-top:6px;">El informe Excel con los hallazgos de producción ha sido descargado exitosamente.</p>
+    </div>
+
+  </div><!-- /tab-pa -->
 
   <!-- ═══ TAB: DOC GENERATOR ═══ -->
   <div class="tab-panel" id="tab-docs">
@@ -1018,6 +1283,7 @@
   <script src="js/bom.js"></script>
   <script src="js/analyzer.js"></script>
   <script src="js/visualizer.js"></script>
+  <script src="js/prodAnalyzer.js"></script>
   <script src="js/main.js"></script>
   <script src="js/docs.js"></script>
 

@@ -7,7 +7,7 @@
       // Reset BOM indexes — will hold only this product's subtree
       HDR_BY_PRD = {}; HDR_BY_SID = {}; ITM_BY_SID = {};
       RES_BY_SID = {}; CPR_BY_SID = {};
-      isCompAtLoc = {}; prdIndex = {};
+      isCompAtLoc = {}; prdIndex = {}; LOC_BY_ID = {};
 
       var visitedPrds = {}; visitedPrds[prdid] = true;
       var visitedSids = {};
@@ -83,6 +83,18 @@
       for (var k = 0; k < allPids.length; k++) {
         var p = await idbGet('bom_prd', allPids[k]);
         if (p) prdIndex[allPids[k]] = p;
+      }
+
+      // 6. Load Location master for all LOCIDs seen in PSH headers
+      var seenLocs = {};
+      Object.keys(HDR_BY_SID).forEach(function (sid) {
+        var locid = str(HDR_BY_SID[sid].LOCID);
+        if (locid) seenLocs[locid] = true;
+      });
+      var allLocids = Object.keys(seenLocs);
+      for (var li = 0; li < allLocids.length; li++) {
+        var locRec = await idbGet('bom_loc', allLocids[li]);
+        if (locRec) LOC_BY_ID[allLocids[li]] = locRec;
       }
     }
 
@@ -439,19 +451,31 @@
           ? '<span class="badge ' + (stVal === 'C' ? 'badge-coprod' : 'badge-psh') + '">' + escH(stVal) + '</span>'
           : '';
 
-        // Resources
+        // Resources with RESDESCR tooltip
         var resHtml = '';
         if (n.resids && n.resids.length) {
-          resHtml = n.resids.map(function (r) { return '<span class="badge badge-res">' + escH(r) + '</span>'; }).join('');
+          resHtml = n.resids.map(function (rid) {
+            var rdesc = RES_DESCR[rid] || '';
+            var title = rdesc ? ' title="' + escH(rdesc) + '"' : '';
+            return '<span class="badge badge-res"' + title + '>' + escH(rid) + '</span>';
+          }).join('');
         }
+
+        // Plant: LOCID — LOCDESCR
+        var locRec = LOC_BY_ID[n.locid] || {};
+        var locLabel = n.locid
+          ? escH(n.locid) + (locRec.LOCDESCR ? ' <span style="color:var(--text3);font-size:10px">— ' + escH(locRec.LOCDESCR) + '</span>' : '')
+          : '';
+
+        // Material: PRDID — PRDDESCR
+        var matLabel = escH(n.prdid) + (n.prddescr ? ' <span style="color:var(--text3);font-size:10px">— ' + escH(n.prddescr) + '</span>' : '');
 
         html += '<tr class="' + rowClass + '">';
         html += '<td style="padding-left:' + (indent + 6) + 'px">' + expHtml + '</td>';
         html += '<td>' + n.level + '</td>';
-        html += '<td style="font-family:var(--mono);font-size:11px;color:var(--text3)">' + escH(n.locid || '') + '</td>';
+        html += '<td style="font-family:var(--mono);font-size:11px">' + locLabel + '</td>';
         html += '<td style="font-family:var(--mono);font-size:11px">' + escH(n.sourceid) + '</td>';
-        html += '<td style="font-family:var(--mono);font-size:11px">' + escH(n.prdid) + '</td>';
-        html += '<td>' + escH(n.prddescr) + '</td>';
+        html += '<td style="font-family:var(--mono);font-size:11px">' + matLabel + '</td>';
         html += '<td style="text-align:right;font-family:var(--mono)">' + fmtDualCoef(n) + '</td>';
         html += '<td style="font-family:var(--mono);font-size:11px">' + escH(n.mattypeid) + '</td>';
         html += '<td>' + typeBadge + '</td>';
@@ -461,13 +485,13 @@
         // Render co-products (PSH SOURCETYPE=C) as sub-rows if expanded
         if (n.coprods && n.coprods.length > 0 && isExp) {
           n.coprods.forEach(function (cp) {
+            var cpMatLabel = escH(cp.prdid) + (cp.prddescr ? ' <span style="color:var(--text3);font-size:10px">— ' + escH(cp.prddescr) + '</span>' : '');
             html += '<tr class="rt-coprod">';
             html += '<td style="padding-left:' + (indent + 28) + 'px"></td>';
             html += '<td></td>';
             html += '<td></td>';
             html += '<td></td>';
-            html += '<td style="font-family:var(--mono);font-size:11px">' + escH(cp.prdid) + '</td>';
-            html += '<td>' + escH(cp.prddescr) + '</td>';
+            html += '<td style="font-family:var(--mono);font-size:11px">' + cpMatLabel + '</td>';
             html += '<td style="text-align:right;font-family:var(--mono)">' + fmtDualCoef(cp) + '</td>';
             html += '<td style="font-family:var(--mono);font-size:11px">' + escH(cp.mattypeid) + '</td>';
             html += '<td>' + (cp.sourcetype ? '<span class="badge ' + (cp.sourcetype === 'C' ? 'badge-coprod' : 'badge-psh') + '">' + escH(cp.sourcetype) + '</span>' : '') + '</td>';
@@ -480,7 +504,7 @@
         if (hasKids && isExp) {
           html += '<tr class="tr-comp-divider">';
           html += '<td style="padding-left:' + (indent + 28) + 'px"></td>';
-          html += '<td colspan="9"><span class="divider-lbl">↓ Componentes PSI (' + n.children.length + ')</span></td>';
+          html += '<td colspan="8"><span class="divider-lbl">↓ Componentes PSI (' + n.children.length + ')</span></td>';
           html += '</tr>';
         }
       });

@@ -6,7 +6,7 @@
     var vizCurrentPrd = '';
     var vizSuggestions = [];
     var VIZ_DATA = null;  // cached data for current product
-    var VIZ_VISIBLE = { plant: true, location: true, customer: true };
+    var VIZ_VISIBLE = { plant: true, location: true, customer: true, supplier: true };
     var VIZ_HIDDEN_LOC = new Set();
     var VIZ_HIDDEN_CUST = new Set();
 
@@ -110,7 +110,10 @@
         customer: document.getElementById('selVizCustomer').value,
         sourceProd: document.getElementById('selVizSourceProd').value,
         locMaster: document.getElementById('selVizLocMaster').value,
-        custMaster: document.getElementById('selVizCustMaster').value
+        custMaster: document.getElementById('selVizCustMaster').value,
+        sourceItem: (document.getElementById('selVizSourceItem') || {}).value || '',
+        locProd:    (document.getElementById('selVizLocProd')    || {}).value || '',
+        custProd:   (document.getElementById('selVizCustProd')   || {}).value || ''
       };
       var logEl = document.getElementById('logNet');
       var statusBar = document.getElementById('vizLoadStatusBar');
@@ -120,11 +123,11 @@
       logEl.classList.add('hidden');
       document.getElementById('btnToggleNetLogs').textContent = 'Ver logs técnicos';
       // Resetear visibilidad, checkboxes y filtros al cargar nuevo producto
-      VIZ_VISIBLE = { plant: true, location: true, customer: true };
+      VIZ_VISIBLE = { plant: true, location: true, customer: true, supplier: true };
       VIZ_HIDDEN_LOC = new Set();
       VIZ_HIDDEN_CUST = new Set();
       vizUpdateFilterBtn();
-      ['Plant', 'Location', 'Customer'].forEach(function (t) {
+      ['Plant', 'Location', 'Customer', 'Supplier'].forEach(function (t) {
         var el = document.getElementById('vizChk' + t);
         if (el) el.checked = true;
       });
@@ -151,6 +154,7 @@
       try {
         log(logEl, 'info', '▶ Cargando red para: ' + prdid);
         var locRows = [], custRows = [], plantRows = [], locMasters = [], custMasters = [];
+        var psiRows = [], supplierLocRows = [], locProdRows = [], custProdRows = [];
 
         if (cfg.location) {
           log(logEl, 'info', '[GET] ' + cfg.base + cfg.location + ' | $filter=' + prdFilter + ' | $select=PRDID,LOCFR,LOCID,TLEADTIME');
@@ -163,23 +167,65 @@
           log(logEl, 'ok', '✓ Customer Source: ' + custRows.length + ' registros');
         }
         if (cfg.sourceProd) {
-          log(logEl, 'info', '[GET] ' + cfg.base + cfg.sourceProd + ' | $filter=' + prdFilter + ' | $select=PRDID,LOCID,PLEADTIME');
-          plantRows = await fetchAllPages(cfg.base + cfg.sourceProd, logEl, prdFilter, 'PRDID,LOCID,PLEADTIME');
+          log(logEl, 'info', '[GET] ' + cfg.base + cfg.sourceProd + ' | $filter=' + prdFilter + ' | $select=SOURCEID,PRDID,LOCID,PLEADTIME');
+          plantRows = await fetchAllPages(cfg.base + cfg.sourceProd, logEl, prdFilter, 'SOURCEID,PRDID,LOCID,PLEADTIME');
           log(logEl, 'ok', '✓ Production Source Header: ' + plantRows.length + ' registros');
         }
 
-        // Collect unique LOCIDs / CUSTIDs to fetch masters
+        // Collect unique LOCIDs / CUSTIDs (base — before supplier rows)
         var locIds = {}, custIds = {};
         locRows.forEach(function (r) { if (r.LOCFR) locIds[r.LOCFR] = true; if (r.LOCID) locIds[r.LOCID] = true; });
         custRows.forEach(function (r) { if (r.LOCID) locIds[r.LOCID] = true; if (r.CUSTID) custIds[r.CUSTID] = true; });
         plantRows.forEach(function (r) { if (r.LOCID) locIds[r.LOCID] = true; });
 
+        // PSI — BOM components for this product
+        if (cfg.sourceItem && plantRows.length) {
+          var sourceIdSet = {}, sourceIds = [];
+          plantRows.forEach(function (r) { var s = str(r.SOURCEID); if (s && !sourceIdSet[s]) { sourceIdSet[s] = true; sourceIds.push(s); } });
+          if (sourceIds.length) {
+            var psiFilter = sourceIds.map(function (s) { return "SOURCEID eq '" + s + "'"; }).join(' or ');
+            if (paBase) psiFilter = '(' + psiFilter + ') and ' + paBase;
+            log(logEl, 'info', '[GET] ' + cfg.base + cfg.sourceItem + ' | PSI para ' + sourceIds.length + ' fuentes');
+            psiRows = await fetchAllPages(cfg.base + cfg.sourceItem, logEl, psiFilter, 'SOURCEID,PRDID,COMPONENTCOEFFICIENT');
+            log(logEl, 'ok', '✓ PSI: ' + psiRows.length + ' componentes');
+          }
+        }
+
+        // Supplier Location Source arcs (for PSI components)
+        if (cfg.location && psiRows.length) {
+          var compSet = {};
+          psiRows.forEach(function (r) { var c = str(r.PRDID); if (c) compSet[c] = true; });
+          var compList = Object.keys(compSet).slice(0, 100); // cap URL length
+          if (compList.length) {
+            var suppFilter = compList.map(function (c) { return "PRDID eq '" + c + "'"; }).join(' or ');
+            if (paBase) suppFilter = '(' + suppFilter + ') and ' + paBase;
+            log(logEl, 'info', '[GET] ' + cfg.base + cfg.location + ' | Arcos de proveedor para ' + compList.length + ' componentes');
+            supplierLocRows = await fetchAllPages(cfg.base + cfg.location, logEl, suppFilter, 'PRDID,LOCFR,LOCID,TLEADTIME');
+            log(logEl, 'ok', '✓ Arcos de proveedor: ' + supplierLocRows.length + ' registros');
+            supplierLocRows.forEach(function (r) { if (r.LOCFR) locIds[r.LOCFR] = true; if (r.LOCID) locIds[r.LOCID] = true; });
+          }
+        }
+
+        // Location Product (current product)
+        if (cfg.locProd) {
+          log(logEl, 'info', '[GET] ' + cfg.base + cfg.locProd + ' | Location Product → ' + prdid);
+          locProdRows = await fetchAllPages(cfg.base + cfg.locProd, logEl, prdFilter, 'PRDID,LOCID');
+          log(logEl, 'ok', '✓ Location Product: ' + locProdRows.length + ' registros');
+        }
+
+        // Customer Product (current product)
+        if (cfg.custProd) {
+          log(logEl, 'info', '[GET] ' + cfg.base + cfg.custProd + ' | Customer Product → ' + prdid);
+          custProdRows = await fetchAllPages(cfg.base + cfg.custProd, logEl, prdFilter, 'PRDID,CUSTID');
+          log(logEl, 'ok', '✓ Customer Product: ' + custProdRows.length + ' registros');
+        }
+
         if (cfg.locMaster && Object.keys(locIds).length) {
           var ids = Object.keys(locIds);
           var locMFilter = ids.map(function (id) { return "LOCID eq '" + id + "'"; }).join(' or ');
           if (paBase) locMFilter = '(' + locMFilter + ') and ' + paBase;
-          log(logEl, 'info', '[GET] ' + cfg.base + cfg.locMaster + ' | $filter=' + locMFilter + ' | $select=LOCID,LOCDESCR');
-          locMasters = await fetchAllPages(cfg.base + cfg.locMaster, logEl, locMFilter, 'LOCID,LOCDESCR');
+          log(logEl, 'info', '[GET] ' + cfg.base + cfg.locMaster + ' | $filter=' + locMFilter + ' | $select=LOCID,LOCDESCR,LOCTYPE');
+          locMasters = await fetchAllPages(cfg.base + cfg.locMaster, logEl, locMFilter, 'LOCID,LOCDESCR,LOCTYPE');
           log(logEl, 'ok', '✓ Location Master: ' + locMasters.length + ' registros');
         }
         if (cfg.custMaster && Object.keys(custIds).length) {
@@ -195,7 +241,9 @@
         VIZ_DATA = {
           locRows: locRows, custRows: custRows, plantRows: plantRows,
           prdRows: [{ PRDID: prdid, PRDDESCR: prdInfo.prddescr || '' }],
-          locMasters: locMasters, custMasters: custMasters
+          locMasters: locMasters, custMasters: custMasters,
+          psiRows: psiRows, supplierLocRows: supplierLocRows,
+          locProdRows: locProdRows, custProdRows: custProdRows
         };
         // Auto-threshold: si hay más de 20 clientes, ocultar el exceso automáticamente
         var VIZ_CUST_THRESHOLD = 20;
@@ -242,15 +290,16 @@
       var prdDescr = str(prdInfo.PRDDESCR || '');
 
       var COLORS = {
-        product: { background: '#6C63FF', border: '#8B84FF', hover: { background: '#8B84FF' }, highlight: { background: '#8B84FF', border: '#fff' } },
-        plant: { background: '#F59E0B', border: '#FBBF24', hover: { background: '#FBBF24' }, highlight: { background: '#FBBF24', border: '#fff' } },
+        product:  { background: '#6C63FF', border: '#8B84FF', hover: { background: '#8B84FF' }, highlight: { background: '#8B84FF', border: '#fff' } },
+        plant:    { background: '#F59E0B', border: '#FBBF24', hover: { background: '#FBBF24' }, highlight: { background: '#FBBF24', border: '#fff' } },
         location: { background: '#0E8FAD', border: '#06B6D4', hover: { background: '#06B6D4' }, highlight: { background: '#06B6D4', border: '#fff' } },
-        customer: { background: '#0B8A63', border: '#10B981', hover: { background: '#10B981' }, highlight: { background: '#10B981', border: '#fff' } }
+        customer: { background: '#0B8A63', border: '#10B981', hover: { background: '#10B981' }, highlight: { background: '#10B981', border: '#fff' } },
+        supplier: { background: '#5B21B6', border: '#a78bfa', hover: { background: '#7C3AED' }, highlight: { background: '#7C3AED', border: '#fff' } }
       };
 
       function addNode(id, type, label, title) {
         if (nodeMap[id]) return;
-        var shapes = { product: 'star', plant: 'box', location: 'ellipse', customer: 'box' };
+        var shapes = { product: 'star', plant: 'box', location: 'ellipse', customer: 'box', supplier: 'diamond' };
         var hidden = type !== 'product' && VIZ_VISIBLE[type] === false;
         nodeMap[id] = {
           id: id, label: label, title: title,
@@ -324,6 +373,46 @@
         addEdge(locid, custid, true, '', clt ? 'Lead time cliente: ' + clt : '');
       });
 
+      // Supplier arcs (LOCFR=LOCTYPE:V → plant LOCID) — group by supp+dest for clean edges
+      if (data.supplierLocRows && data.supplierLocRows.length) {
+        var plantLocSet = {};
+        data.plantRows.forEach(function (r) { var l = str(r.LOCID); if (l) plantLocSet[l] = true; });
+
+        var suppEdgeMap = {};
+        data.supplierLocRows.forEach(function (r) {
+          var supp = str(r.LOCFR), dest = str(r.LOCID);
+          if (!supp || !dest) return;
+          var lm = locMap[supp] || {};
+          if (str(lm.LOCTYPE) !== 'V') return;   // only supplier-type locations
+          if (!plantLocSet[dest]) return;          // only arcs targeting a production plant
+          if (VIZ_VISIBLE.supplier === false) return;
+          var key = supp + '||' + dest;
+          if (!suppEdgeMap[key]) suppEdgeMap[key] = { supp: supp, dest: dest, lm: lm, comps: [] };
+          var compId = str(r.PRDID || '');
+          var tlt    = str(r.TLEADTIME || '');
+          suppEdgeMap[key].comps.push(compId + (tlt ? ' [LT:' + tlt + ']' : ''));
+        });
+
+        Object.keys(suppEdgeMap).forEach(function (key) {
+          var se = suppEdgeMap[key];
+          var ds = str(se.lm.LOCDESCR || '');
+          addNode(se.supp, 'supplier',
+            se.supp + (ds ? '\n' + ds : ''),
+            'Proveedor: ' + se.supp + (ds ? '\n' + ds : ''));
+          if (!edgesArr.some(function (e) { return e.id === key; })) {
+            edgesArr.push({
+              id: key, from: se.supp, to: se.dest,
+              arrows: { to: { enabled: true, scaleFactor: 0.55 } },
+              dashes: [6, 4],
+              color: { color: 'rgba(167,139,250,0.5)', highlight: 'rgba(167,139,250,0.95)', hover: 'rgba(167,139,250,0.75)' },
+              width: 1.5,
+              title: 'Componentes: ' + se.comps.join(', '),
+              _detail: 'Componentes: ' + se.comps.join(', ')
+            });
+          }
+        });
+      }
+
       return { nodes: Object.values(nodeMap), edges: edgesArr };
     }
 
@@ -333,21 +422,23 @@
       var ROW_H = 80;   // vertical gap between nodes in same column
       var MAX_ROWS = 8;    // max nodes per location column before adding a new column
 
-      // Group by type
-      var byType = { product: [], plant: [], location: [], customer: [] };
+      // Group by type (Suppliers | Product | Plants | Locations | Customers)
+      var byType = { product: [], plant: [], location: [], customer: [], supplier: [] };
       nodes.forEach(function (n) {
         var t = n._type || 'location';
         if (byType[t]) byType[t].push(n); else byType.location.push(n);
       });
 
-      // Number of location columns needed
-      var numLocCols = Math.max(1, Math.ceil(byType.location.length / MAX_ROWS));
+      // Number of columns needed for variable-count groups
+      var numLocCols  = Math.max(1, Math.ceil(byType.location.length  / MAX_ROWS));
+      var numSuppCols = Math.max(1, Math.ceil(byType.supplier.length   / MAX_ROWS));
 
-      // Column x anchors
-      var xPrd = 0;
-      var xPlt = COL_W;
-      var xLoc0 = COL_W * 2;                       // first location column
-      var xCust = COL_W * (2 + numLocCols);         // customer column
+      // Column x anchors (suppliers are leftmost)
+      var xSupp0 = -(numSuppCols * COL_W);          // supplier columns (far left)
+      var xPrd   = 0;                                // product (center-left anchor)
+      var xPlt   = COL_W;                            // plants
+      var xLoc0  = COL_W * 2;                        // first location column
+      var xCust  = COL_W * (2 + numLocCols);         // customers (far right)
 
       // Helper: assign x/y to a list using N sub-columns
       function place(list, startX, numCols) {
@@ -362,10 +453,11 @@
         });
       }
 
-      place(byType.product, xPrd, 1);
-      place(byType.plant, xPlt, 1);
-      place(byType.location, xLoc0, numLocCols);
-      place(byType.customer, xCust, 1);
+      place(byType.supplier, xSupp0, numSuppCols);
+      place(byType.product,  xPrd,   1);
+      place(byType.plant,    xPlt,   1);
+      place(byType.location, xLoc0,  numLocCols);
+      place(byType.customer, xCust,  1);
 
       return nodes;
     }
@@ -729,6 +821,45 @@
         else if (lt.type === 'plant')
           findings.push({ type: 'Lead Time faltante', sev: 'Medium', desc: 'PLEADTIME no definido en planta', node: lt.loc + (ld(lt.loc) ? ' — ' + ld(lt.loc) : '') });
       });
+
+      // V1 — Location Source arcs vs Location Product
+      if (VIZ_DATA.locProdRows && VIZ_DATA.locProdRows.length > 0) {
+        var v1LpSet = {};
+        VIZ_DATA.locProdRows.forEach(function (r) { var k = str(r.LOCID); if (k) v1LpSet[k] = true; });
+        var v1Reported = {};
+        (VIZ_DATA.locRows || []).forEach(function (r) {
+          var fr = str(r.LOCFR), to = str(r.LOCID);
+          if (fr && !v1LpSet[fr] && !v1Reported[fr]) {
+            v1Reported[fr] = true;
+            findings.push({ type: 'Missing Location Product (Origin)', sev: 'High',
+              desc: 'Arco ' + fr + ' → ' + to + ': origen sin Location Product para este material',
+              node: fr + (ld(fr) ? ' — ' + ld(fr) : '') });
+          }
+          if (to && !v1LpSet[to] && !v1Reported[to]) {
+            v1Reported[to] = true;
+            findings.push({ type: 'Missing Location Product (Dest.)', sev: 'High',
+              desc: 'Arco ' + fr + ' → ' + to + ': destino sin Location Product para este material',
+              node: to + (ld(to) ? ' — ' + ld(to) : '') });
+          }
+        });
+      }
+
+      // V2 — Customer Source arcs vs Customer Product
+      if (VIZ_DATA.custProdRows && VIZ_DATA.custProdRows.length > 0) {
+        var v2CpSet = {};
+        VIZ_DATA.custProdRows.forEach(function (r) { var k = str(r.CUSTID); if (k) v2CpSet[k] = true; });
+        var v2Reported = {};
+        (VIZ_DATA.custRows || []).forEach(function (r) {
+          var cust = str(r.CUSTID);
+          if (cust && !v2CpSet[cust] && !v2Reported[cust]) {
+            v2Reported[cust] = true;
+            findings.push({ type: 'Missing Customer Product', sev: 'High',
+              desc: 'Cliente ' + cust + ' sin Customer Product record para este material',
+              node: cust + (cd(cust) ? ' — ' + cd(cust) : '') });
+          }
+        });
+      }
+
       var h2 = '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
         '<th style="' + thStyle() + '">Tipo</th>' +
         '<th style="' + thStyle() + '">Severidad</th>' +
@@ -830,7 +961,7 @@
       document.getElementById('vizFullTitle').textContent = vizCurrentPrd;
       if (vizNetworkFull) { vizNetworkFull.destroy(); vizNetworkFull = null; }
       dlg.showModal();
-      ['Plant', 'Location', 'Customer'].forEach(function (t) {
+      ['Plant', 'Location', 'Customer', 'Supplier'].forEach(function (t) {
         var el = document.getElementById('vizFsChk' + t);
         if (el) el.checked = VIZ_VISIBLE[t.toLowerCase()];
       });
