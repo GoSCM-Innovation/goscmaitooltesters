@@ -130,6 +130,15 @@
       });
     }
 
+    function idbGetAll(storeName) {
+      return new Promise(function (resolve, reject) {
+        var tx = IDB.transaction(storeName, 'readonly');
+        var req = tx.objectStore(storeName).getAll();
+        req.onsuccess = function (e) { resolve(e.target.result || []); };
+        req.onerror = function (e) { reject(e.target.error); };
+      });
+    }
+
     /* Builds prodSuggestions by iterating unique PRDID keys from bom_psh
        and looking up descriptions from bom_prd — single transaction, no N+1. */
     function idbBuildProdSuggestions() {

@@ -467,59 +467,14 @@
     <!-- ═══ CYCLE BANNER ═══ -->
     <div class="cycle-banner" id="cycleBanner">⚠️ <strong>Ciclos detectados:</strong> <span id="cycleList"></span></div>
 
-    <!-- ═══ CONTROLS BAR ═══ -->
-    <div class="controls-bar hidden" id="controlsBar">
-      <div class="prod-search-group">
-        <label>Buscar producto</label>
-        <div class="ss-wrap prod-ss-wrap">
-          <input type="text" id="inpSearch" class="ss-input-vis" placeholder="Código o descripción..."
-            autocomplete="off">
-          <div class="ss-list" id="prodSuggList"></div>
-        </div>
-      </div>
-      <button class="btn btn-secondary btn-small" onclick="expandAll()">⊞ Expandir todo</button>
-      <button class="btn btn-secondary btn-small" onclick="collapseAll()">⊟ Colapsar todo</button>
-      <button class="btn btn-danger btn-small" onclick="clearProductSearch()">✕ Limpiar</button>
-
-      <div class="stats-row">
-        <span>Raíces: <strong id="statRoots">-</strong></span>
-        <span>Visibles: <strong id="statVisible">-</strong></span>
-        <span>Prof.máx: <strong id="statDepth">-</strong></span>
-      </div>
+    <!-- ═══ MULTI-PRODUCT TAB BAR ═══ -->
+    <div class="bom-tabs-bar hidden" id="bomTabsBar">
+      <div class="bom-tabs-scroll" id="bomTabsScroll"></div>
+      <button class="bom-tab-add" id="bomTabAdd" onclick="bomAddTab()" title="Nueva pestaña (máx 15)">+</button>
     </div>
 
-
-    <!-- ═══ PROMPT STATE ═══ -->
-    <div class="empty-state" id="promptState" style="display:none">
-      <div class="icon">🔍</div>
-      Busca un producto en el campo superior para visualizar su jerarquía BOM.<br>
-      <span style="font-size:11px;color:var(--text3)">Se mostrarán todos los SourceID del producto en cada planta y
-        opción de producción.</span>
-    </div>
-
-    <!-- ═══ TABLE ═══ -->
-    <div class="table-wrap hidden" id="tableWrap">
-      <table>
-        <thead id="thead">
-          <tr>
-            <th class="col-exp"></th>
-            <th class="col-lvl">Nivel</th>
-            <th class="col-loc">Planta</th>
-            <th class="col-src">ID de producción</th>
-            <th class="col-prd">Material</th>
-            <th class="col-coef">Coeficiente</th>
-            <th class="col-mat">Tipo de Material</th>
-            <th class="col-type">Tipo</th>
-            <th class="col-res">Puestos de trabajo</th>
-          </tr>
-        </thead>
-        <tbody id="bomBody"></tbody>
-      </table>
-      <div class="empty-state hidden" id="emptyState">
-        <div class="icon">🔍</div>
-        Producto no encontrado como raíz en la jerarquía BOM. Puede ser un componente sin producción propia.
-      </div>
-    </div>
+    <!-- ═══ TAB CONTENT CONTAINER ═══ -->
+    <div id="bomTabsContent" class="hidden"></div>
 
   </div><!-- /tab-bom -->
 
@@ -1207,6 +1162,14 @@
       <div class="tab-info-content">
         <div class="tab-info-title">Mapping Dataflow Generator</div>
         <div class="tab-info-desc">Generador de Mapping Dataflow para tareas de integración de SAP CI-DS</div>
+      </div>
+    </div>
+
+    <!-- PRO TIP BANNER -->
+    <div class="pro-tip-banner">
+      <span class="pro-tip-icon">💡</span>
+      <div class="pro-tip-content">
+        <strong>Pro tip:</strong> Si conectas tu sistema SAP IBP obtendrás una documentación enriquecida con las descripciones y datos de SAP IBP.
       </div>
     </div>
 

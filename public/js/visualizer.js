@@ -416,31 +416,32 @@
       return { nodes: Object.values(nodeMap), edges: edgesArr };
     }
 
-    /* --- Manual column-based positioning ----------------------------- */
+    /* --- Manual column-based positioning (barycenter to reduce crossings) */
     function vizAssignPositions(nodes) {
-      var COL_W = 260;  // horizontal gap between columns
-      var ROW_H = 80;   // vertical gap between nodes in same column
-      var MAX_ROWS = 8;    // max nodes per location column before adding a new column
+      var COL_W = 260;
+      var ROW_H = 80;
+      var MAX_ROWS = 8;
 
-      // Group by type (Suppliers | Product | Plants | Locations | Customers)
       var byType = { product: [], plant: [], location: [], customer: [], supplier: [] };
       nodes.forEach(function (n) {
         var t = n._type || 'location';
         if (byType[t]) byType[t].push(n); else byType.location.push(n);
       });
 
-      // Number of columns needed for variable-count groups
       var numLocCols  = Math.max(1, Math.ceil(byType.location.length  / MAX_ROWS));
       var numSuppCols = Math.max(1, Math.ceil(byType.supplier.length   / MAX_ROWS));
 
-      // Column x anchors (suppliers are leftmost)
-      var xSupp0 = -(numSuppCols * COL_W);          // supplier columns (far left)
-      var xPrd   = 0;                                // product (center-left anchor)
-      var xPlt   = COL_W;                            // plants
-      var xLoc0  = COL_W * 2;                        // first location column
-      var xCust  = COL_W * (2 + numLocCols);         // customers (far right)
+      var xSupp0 = -(numSuppCols * COL_W);
+      var xPrd   = 0;
+      var xPlt   = COL_W;
+      var xLoc0  = COL_W * 2;
+      var xCust  = COL_W * (2 + numLocCols);
 
-      // Helper: assign x/y to a list using N sub-columns
+      // Build adjacency from edges for barycenter sorting
+      var nodeById = {};
+      nodes.forEach(function (n) { nodeById[n.id] = n; });
+
+      // Place function with column splitting
       function place(list, startX, numCols) {
         if (!list.length) return;
         var perCol = Math.ceil(list.length / numCols);
@@ -453,11 +454,93 @@
         });
       }
 
+      // Step 1: Place plants first (anchor column), sort alphabetically
+      byType.plant.sort(function (a, b) { return a.id.localeCompare(b.id); });
+      place(byType.plant, xPlt, 1);
+
+      // Step 2: Sort suppliers by barycenter of their connected plants
+      if (byType.supplier.length && byType.plant.length) {
+        var plantYMap = {};
+        byType.plant.forEach(function (n) { plantYMap[n.id] = n.y; });
+        // Collect supplier→plant connections from edges in VIZ_DATA
+        var suppToPlants = {};
+        if (VIZ_DATA && VIZ_DATA.supplierLocRows) {
+          var plantSet = {};
+          byType.plant.forEach(function (n) { plantSet[n.id] = true; });
+          VIZ_DATA.supplierLocRows.forEach(function (r) {
+            var supp = str(r.LOCFR), dest = str(r.LOCID);
+            if (supp && dest && plantSet[dest]) {
+              if (!suppToPlants[supp]) suppToPlants[supp] = {};
+              suppToPlants[supp][dest] = true;
+            }
+          });
+        }
+        byType.supplier.sort(function (a, b) {
+          var aTargets = suppToPlants[a.id] ? Object.keys(suppToPlants[a.id]) : [];
+          var bTargets = suppToPlants[b.id] ? Object.keys(suppToPlants[b.id]) : [];
+          var aAvg = aTargets.length ? aTargets.reduce(function (s, t) { return s + (plantYMap[t] || 0); }, 0) / aTargets.length : 0;
+          var bAvg = bTargets.length ? bTargets.reduce(function (s, t) { return s + (plantYMap[t] || 0); }, 0) / bTargets.length : 0;
+          return aAvg - bAvg;
+        });
+      }
       place(byType.supplier, xSupp0, numSuppCols);
-      place(byType.product,  xPrd,   1);
-      place(byType.plant,    xPlt,   1);
-      place(byType.location, xLoc0,  numLocCols);
-      place(byType.customer, xCust,  1);
+
+      // Step 3: Sort locations by barycenter of connected plants (incoming edges)
+      if (byType.location.length && byType.plant.length) {
+        var plantYMap2 = {};
+        byType.plant.forEach(function (n) { plantYMap2[n.id] = n.y; });
+        var locIncoming = {};
+        if (VIZ_DATA) {
+          (VIZ_DATA.locRows || []).forEach(function (r) {
+            var fr = str(r.LOCFR), to = str(r.LOCID);
+            if (fr && to) {
+              if (!locIncoming[to]) locIncoming[to] = {};
+              locIncoming[to][fr] = true;
+              if (!locIncoming[fr]) locIncoming[fr] = {};
+            }
+          });
+        }
+        // Compute barycenter: average y of all connected nodes that are already placed
+        var plantSet2 = {};
+        byType.plant.forEach(function (n) { plantSet2[n.id] = n.y; });
+        byType.location.sort(function (a, b) {
+          var aSum = 0, aCnt = 0, bSum = 0, bCnt = 0;
+          var aIn = locIncoming[a.id] || {};
+          var bIn = locIncoming[b.id] || {};
+          Object.keys(aIn).forEach(function (src) { if (plantSet2[src] !== undefined) { aSum += plantSet2[src]; aCnt++; } });
+          Object.keys(bIn).forEach(function (src) { if (plantSet2[src] !== undefined) { bSum += plantSet2[src]; bCnt++; } });
+          var aAvg = aCnt ? aSum / aCnt : 0;
+          var bAvg = bCnt ? bSum / bCnt : 0;
+          return aAvg - bAvg;
+        });
+      }
+      place(byType.location, xLoc0, numLocCols);
+
+      // Step 4: Sort customers by barycenter of connected locations
+      if (byType.customer.length && byType.location.length) {
+        var locYMap = {};
+        byType.location.forEach(function (n) { locYMap[n.id] = n.y; });
+        var custToLocs = {};
+        if (VIZ_DATA) {
+          (VIZ_DATA.custRows || []).forEach(function (r) {
+            var loc = str(r.LOCID), cust = str(r.CUSTID);
+            if (loc && cust) {
+              if (!custToLocs[cust]) custToLocs[cust] = {};
+              custToLocs[cust][loc] = true;
+            }
+          });
+        }
+        byType.customer.sort(function (a, b) {
+          var aLocs = custToLocs[a.id] ? Object.keys(custToLocs[a.id]) : [];
+          var bLocs = custToLocs[b.id] ? Object.keys(custToLocs[b.id]) : [];
+          var aAvg = aLocs.length ? aLocs.reduce(function (s, l) { return s + (locYMap[l] || 0); }, 0) / aLocs.length : 0;
+          var bAvg = bLocs.length ? bLocs.reduce(function (s, l) { return s + (locYMap[l] || 0); }, 0) / bLocs.length : 0;
+          return aAvg - bAvg;
+        });
+      }
+      place(byType.customer, xCust, 1);
+
+      place(byType.product, xPrd, 1);
 
       return nodes;
     }
@@ -495,14 +578,41 @@
           var nid = params.nodes[0];
           var node = nodes.find(function (n) { return n.id === nid; });
           if (node) {
-            var typeLabels = { product: 'Producto', plant: 'Planta', location: 'Ubicación', customer: 'Cliente' };
-            var badgeMap = { product: 'badge-psh', plant: 'badge-main', location: 'badge-comp', customer: 'badge-leaf' };
-            document.getElementById('vizDetailContent').innerHTML =
+            var typeLabels = { product: 'Producto', plant: 'Planta', location: 'Ubicación', customer: 'Cliente', supplier: 'Proveedor' };
+            var badgeMap = { product: 'badge-psh', plant: 'badge-main', location: 'badge-comp', customer: 'badge-leaf', supplier: 'badge-coprod' };
+            var html =
               '<span class="badge ' + (badgeMap[node._type] || 'badge-comp') + '">' +
               (typeLabels[node._type] || node._type) + '</span>' +
               ' <strong style="font-family:var(--mono);font-size:12px">' + escH(nid) + '</strong>' +
               (node._title && node._title !== nid ? ' <span style="color:var(--text2)">' + escH(node._title) + '</span>' : '');
-            detail.style.cssText = 'display:flex;padding:10px 24px;background:var(--bg2);border-top:1px solid var(--border);font-size:12px;align-items:center;gap:10px;';
+
+            // Supplier click: show component inputs
+            if (node._type === 'supplier' && VIZ_DATA && VIZ_DATA.supplierLocRows) {
+              var compsBySupp = {};
+              VIZ_DATA.supplierLocRows.forEach(function (r) {
+                if (str(r.LOCFR) === nid) {
+                  var comp = str(r.PRDID || '');
+                  if (comp) compsBySupp[comp] = true;
+                }
+              });
+              var compList = Object.keys(compsBySupp).sort();
+              if (compList.length) {
+                var prdLookup = {};
+                vizSuggestions.forEach(function (s) { prdLookup[s.prdid] = s.prddescr; });
+                html += '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">' +
+                  '<div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-weight:600;">Insumos abastecidos (' + compList.length + '):</div>' +
+                  '<div style="display:flex;flex-wrap:wrap;gap:4px;">';
+                compList.forEach(function (c) {
+                  var descr = prdLookup[c] || '';
+                  html += '<span style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-size:11px;font-family:var(--mono);">' +
+                    escH(c) + (descr ? ' <span style="color:var(--text3)">' + escH(descr) + '</span>' : '') + '</span>';
+                });
+                html += '</div></div>';
+              }
+            }
+
+            document.getElementById('vizDetailContent').innerHTML = html;
+            detail.style.cssText = 'display:flex;flex-direction:column;padding:10px 24px;background:var(--bg2);border-top:1px solid var(--border);font-size:12px;gap:4px;';
           }
         }
       });

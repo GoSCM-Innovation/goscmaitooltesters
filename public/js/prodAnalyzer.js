@@ -265,9 +265,14 @@
          'Arcos de Proveedor', 'Lead Times']);
 
       /* ── Counters ─────────────────────────────────────────────────── */
-      var counts = { A: 0, B: 0, C: 0, E: 0, F: 0, G: 0, H: 0, J: 0, K: 0, L: 0 };
+      var counts = { A: 0, B: 0, C: 0, J: 0, K: 0, L: 0, M: 0, N: 0, O: 0 };
       var findingCount = 0;
       var psiCompUsage = {};   // compId → { prds: {}, locs: {} }
+
+      // Track all products/locations/resources used in composite entities
+      var usedPrds = {};  // products seen in PSH, PSI, LocProd, LocSrc
+      var usedLocs = {};  // locations seen in PSH, LocProd, LocSrc
+      var usedRes  = {};  // resources seen in PSR
 
       /* ── Main loop: one iteration per SOURCEID ────────────────────── */
       var sourceIds = Object.keys(pshBySid).sort();
@@ -287,25 +292,19 @@
           var outLoc  = primary.LOCID;
           var plt     = primary.PLEADTIME;
 
+          // Track usage from PSH
+          if (outPrd) usedPrds[outPrd] = true;
+          if (outLoc) usedLocs[outLoc] = true;
+          recs.forEach(function (r) {
+            if (r.PRDID) usedPrds[r.PRDID] = true;
+            if (r.LOCID) usedLocs[r.LOCID] = true;
+          });
+
           /* Case C🔴 — PLEADTIME ausente o cero */
           if (!plt || plt === '0') {
             counts.C++; findingCount++;
             addRow(S1, ['C', sid, outPrd, pd(outPrd), outLoc, ld(outLoc), '', '',
               'High', 'PLEADTIME no definido o cero en la fuente de producción primaria']);
-          }
-
-          /* Case E🟡 — output PRDID no existe en maestro de productos */
-          if (outPrd && ent.prd && !PA_PRD[outPrd]) {
-            counts.E++; findingCount++;
-            addRow(S1, ['E', sid, outPrd, '', outLoc, ld(outLoc), '', '',
-              'Medium', 'Producto de salida no existe en el maestro de productos']);
-          }
-
-          /* Case G🟡 — LOCID no existe en maestro de ubicaciones */
-          if (outLoc && ent.loc && !PA_LOC[outLoc]) {
-            counts.G++; findingCount++;
-            addRow(S1, ['G', sid, outPrd, pd(outPrd), outLoc, '', '', '',
-              'Medium', 'Planta de producción no existe en el maestro de ubicaciones']);
           }
 
           /* Case K ℹ️ — co-productos sin registro primario */
@@ -318,7 +317,7 @@
               'SOURCEID tiene co-productos (SOURCETYPE=C) pero ningún registro primario (SOURCETYPE=P)']);
           }
 
-          /* Cases A🔴, B🔴, F🟡, J ℹ️ — requieren PSI */
+          /* Cases A🔴, B🔴, J ℹ️ — requieren PSI */
           if (ent.psi) {
             var psiRecs = await idbGetByIndex('pa_psi', 'by_sourceid', sid);
 
@@ -332,20 +331,15 @@
                 var compId = str(pi.PRDID  || '');
                 var coeff  = str(pi.COMPONENTCOEFFICIENT || '');
 
+                // Track usage from PSI
+                if (compId) usedPrds[compId] = true;
+
                 /* Case B🔴 — coeficiente cero o nulo */
                 if (coeff === '' || Number(coeff) === 0) {
                   counts.B++; findingCount++;
                   addRow(S1, ['B', sid, outPrd, pd(outPrd), outLoc, ld(outLoc),
                     compId, pd(compId), 'High',
                     'Componente con coeficiente de consumo = 0 o no definido']);
-                }
-
-                /* Case F🟡 — componente no existe en maestro de productos */
-                if (compId && ent.prd && !PA_PRD[compId]) {
-                  counts.F++; findingCount++;
-                  addRow(S1, ['F', sid, outPrd, pd(outPrd), outLoc, ld(outLoc),
-                    compId, '', 'Medium',
-                    'Componente no existe en el maestro de productos']);
                 }
 
                 /* Case J ℹ️ — componente también es output de otra fuente (semi-elaborado) */
@@ -366,30 +360,80 @@
             }
           }
 
-          /* Case H🟡 — recurso no existe en maestro de recursos */
-          if (ent.psr && ent.res) {
+          /* Track usage from PSR */
+          if (ent.psr) {
             var psrRecs = await idbGetByIndex('pa_psr', 'by_sourceid', sid);
             psrRecs.forEach(function (pr) {
               var resId = str(pr.RESID || '');
-              if (resId && !PA_RES[resId]) {
-                counts.H++; findingCount++;
-                addRow(S1, ['H', sid, outPrd, pd(outPrd), outLoc, ld(outLoc),
-                  resId, '', 'Medium',
-                  'Recurso (puesto de trabajo) no existe en el maestro de recursos']);
-              }
+              if (resId) usedRes[resId] = true;
             });
           }
         }
 
         await new Promise(function (r) { setTimeout(r, 0); });
         var done = Math.min(i + CHUNK, n);
-        setStatusPA('Analizando ' + done + '/' + n + ' fuentes...', 75 + Math.round((done / n) * 15));
+        setStatusPA('Analizando ' + done + '/' + n + ' fuentes...', 75 + Math.round((done / n) * 10));
         if (logEl && i > 0 && i % 1000 === 0)
           log(logEl, 'info', timer.fmt() + ' Analizados ' + done + '/' + n + ' SOURCEIDs...');
       }
 
+      /* ── Track usage from Location Product & Location Source (IDB) ── */
+      setStatusPA('Indexando uso en Location Product y Location Source...', 86);
+      if (ent.locPrd) {
+        var lpCursor = await idbGetAll('pa_loc_prod');
+        lpCursor.forEach(function (r) {
+          var p = str(r.PRDID || ''); if (p) usedPrds[p] = true;
+          var l = str(r.LOCID || ''); if (l) usedLocs[l] = true;
+        });
+      }
+      if (ent.locSrc) {
+        var lsCursor = await idbGetAll('pa_loc_src');
+        lsCursor.forEach(function (r) {
+          var p = str(r.PRDID || ''); if (p) usedPrds[p] = true;
+          var lf = str(r.LOCFR || ''); if (lf) usedLocs[lf] = true;
+          var lt = str(r.LOCID || ''); if (lt) usedLocs[lt] = true;
+        });
+      }
+
+      /* ── Cases M, N, O — Orphan master data (post-loop) ─────────── */
+      setStatusPA('Detectando datos maestros huérfanos...', 88);
+
+      /* Case M🟡 — Producto en maestro simple sin uso en ningún dato compuesto */
+      if (ent.prd) {
+        Object.keys(PA_PRD).sort().forEach(function (prdid) {
+          if (!usedPrds[prdid]) {
+            counts.M++; findingCount++;
+            addRow(S1, ['M', '', prdid, pd(prdid), '', '', '', '',
+              'Medium', 'Producto existe en maestro de productos pero no aparece en ninguna entidad compuesta (PSH, PSI, Location Product, Location Source)']);
+          }
+        });
+      }
+
+      /* Case N🟡 — Ubicación en maestro simple sin uso en ningún dato compuesto */
+      if (ent.loc) {
+        Object.keys(PA_LOC).sort().forEach(function (locid) {
+          if (!usedLocs[locid]) {
+            counts.N++; findingCount++;
+            addRow(S1, ['N', '', '', '', locid, ld(locid), '', '',
+              'Medium', 'Ubicación existe en maestro de ubicaciones pero no aparece en ninguna entidad compuesta (PSH, Location Product, Location Source)']);
+          }
+        });
+      }
+
+      /* Case O🟡 — Recurso en maestro simple sin uso en ningún dato compuesto */
+      if (ent.res) {
+        var rd = function (id) { var r = PA_RES[id] || {}; return str(r.RESDESCR || ''); };
+        Object.keys(PA_RES).sort().forEach(function (resid) {
+          if (!usedRes[resid]) {
+            counts.O++; findingCount++;
+            addRow(S1, ['O', '', '', '', '', '', resid, rd(resid),
+              'Medium', 'Recurso existe en maestro de recursos pero no aparece en ninguna fuente de producción (PSR)']);
+          }
+        });
+      }
+
       /* ── Case L ℹ️ + Production Coverage (post-loop) ─────────────── */
-      setStatusPA('Generando Production Coverage...', 90);
+      setStatusPA('Generando Production Coverage...', 91);
 
       // Build product → PSH list from pshBySid
       var prdToPsh = {};
@@ -424,7 +468,7 @@
       });
 
       /* ── Purchased Inputs (post-loop) ─────────────────────────────── */
-      setStatusPA('Generando Purchased Inputs...', 93);
+      setStatusPA('Generando Purchased Inputs...', 94);
       var purchasedComps = Object.keys(psiCompUsage)
         .filter(function (c) { return !pshPrdSet[c]; })
         .sort();
@@ -459,10 +503,9 @@
         ['A', '🔴 Alto',  'PSH con BOM vacío (sin componentes PSI)'],
         ['B', '🔴 Alto',  'PSI con coeficiente de consumo = 0 o no definido'],
         ['C', '🔴 Alto',  'PSH sin PLEADTIME o con valor cero'],
-        ['E', '🟡 Medio', 'Producto de salida no existe en maestro de productos'],
-        ['F', '🟡 Medio', 'Componente no existe en maestro de productos'],
-        ['G', '🟡 Medio', 'Planta de producción no existe en maestro de ubicaciones'],
-        ['H', '🟡 Medio', 'Recurso (puesto de trabajo) no existe en maestro de recursos'],
+        ['M', '🟡 Medio', 'Producto en maestro sin uso en ninguna entidad compuesta'],
+        ['N', '🟡 Medio', 'Ubicación en maestro sin uso en ninguna entidad compuesta'],
+        ['O', '🟡 Medio', 'Recurso en maestro sin uso en ninguna entidad compuesta (PSR)'],
         ['J', 'ℹ️ Info',  'Componente que también es output de otra fuente (semi-elaborado)'],
         ['K', 'ℹ️ Info',  'SOURCEID con co-productos pero sin registro primario (SOURCETYPE=P)'],
         ['L', 'ℹ️ Info',  'Producto en maestro sin fuente de producción configurada']
