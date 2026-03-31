@@ -355,13 +355,15 @@
           '<button class="btn btn-secondary btn-small" onclick="bomExpandAll(\'' + tab.id + '\')">⊞ Expandir</button>' +
           '<button class="btn btn-secondary btn-small" onclick="bomCollapseAll(\'' + tab.id + '\')">⊟ Colapsar</button>' +
           '<button class="btn btn-secondary btn-small bom-invert-btn" onclick="bomToggleInvert(\'' + tab.id + '\')" title="Invertir jerarquía (hoja → raíz)">⇅ Invertir</button>' +
-          '<button class="btn btn-secondary btn-small bom-quality-btn" onclick="bomToggleQuality(\'' + tab.id + '\')" title="Análisis de calidad de producción">🔬 Calidad</button>' +
           '<button class="btn btn-danger btn-small" onclick="bomClearSearch(\'' + tab.id + '\')">✕ Limpiar</button>' +
           '<div class="stats-row">' +
             '<span>Raíces: <strong class="bom-stat-roots">-</strong></span>' +
             '<span>Visibles: <strong class="bom-stat-visible">-</strong></span>' +
             '<span>Prof.máx: <strong class="bom-stat-depth">-</strong></span>' +
           '</div>' +
+        '</div>' +
+        '<div class="bom-analysis-bar" style="display:none;background:var(--bg2);border-bottom:1px solid var(--border);padding:4px 24px;align-items:center;gap:8px;">' +
+          '<button class="btn btn-secondary btn-small bom-quality-btn" onclick="bomToggleQuality(\'' + tab.id + '\')" style="padding:2px 8px;font-size:11px;">Ver análisis ▼</button>' +
         '</div>' +
         '<div class="bom-quality-panel" style="display:none"></div>' +
         '<div class="empty-state bom-prompt" style="display:block">' +
@@ -441,8 +443,14 @@
         btn.addEventListener('click', function () { bomSwitchTab(tab.id); });
         scroll.appendChild(btn);
       });
-      var addBtn = document.getElementById('bomTabAdd');
-      if (addBtn) addBtn.style.display = BOM_TABS.length >= BOM_MAX_TABS ? 'none' : '';
+      if (BOM_TABS.length < BOM_MAX_TABS) {
+        var addBtn = document.createElement('button');
+        addBtn.className = 'bom-tab-add';
+        addBtn.title = 'Nueva pestaña (máx 15)';
+        addBtn.textContent = '+';
+        addBtn.addEventListener('click', function () { bomAddTab(); });
+        scroll.appendChild(addBtn);
+      }
     }
 
     function bomSwitchTab(tabId) {
@@ -528,6 +536,9 @@
       expandedIds = {};
       bomRenderTable(tabId);
       bomRenderTabBar();
+      // Show analysis bar
+      var analysisBar = pane.querySelector('.bom-analysis-bar');
+      if (analysisBar) analysisBar.style.display = 'flex';
     }
 
     function bomExpandAll(tabId) {
@@ -564,6 +575,10 @@
       tab.inverted = false;
       tab.qualityOpen = false;
       pane.querySelector('.bom-quality-panel').style.display = 'none';
+      var analysisBar = pane.querySelector('.bom-analysis-bar');
+      if (analysisBar) analysisBar.style.display = 'none';
+      var qBtn = pane.querySelector('.bom-quality-btn');
+      if (qBtn) qBtn.textContent = 'Ver análisis ▼';
       bomRenderTable(tabId);
       bomRenderTabBar();
     }
@@ -607,7 +622,7 @@
     }
 
     function bomInvertTree(roots) {
-      // Collect all leaf nodes with their path, then build inverted tree (leaf→root)
+      // Collect all leaf-to-root paths
       var leafPaths = [];
       function collectPaths(node, path) {
         var currentPath = path.concat([node]);
@@ -619,34 +634,41 @@
       }
       roots.forEach(function (r) { collectPaths(r, []); });
 
-      // Build inverted: group by leaf prdid
+      // Build inverted tree: each leaf becomes a root, parents become children (bottom→up)
       var invRoots = {};
       leafPaths.forEach(function (path) {
         var leaf = path[path.length - 1];
-        var key = leaf.prdid + '|' + leaf.locid;
+        // Use a more specific key to avoid collapsing different leaf contexts
+        var parentSid = path.length > 1 ? path[path.length - 2].sourceid : '';
+        var key = leaf.prdid + '|' + leaf.locid + '|' + parentSid;
         if (!invRoots[key]) {
+          // For the inverted root (was a leaf), show the parent's sourceid
+          // since the leaf itself has no production source
           invRoots[key] = {
-            id: 'inv_' + key, locid: leaf.locid, sourceid: leaf.sourceid,
+            id: 'inv_' + key, locid: leaf.locid,
+            sourceid: parentSid || leaf.sourceid,
             prdid: leaf.prdid, prddescr: leaf.prddescr, mattypeid: leaf.mattypeid,
             uomid: leaf.uomid, coefficient: leaf.inputCoeff || leaf.coefficient,
-            inputCoeff: '', type: 'MAIN', sourcetype: leaf.sourcetype,
+            inputCoeff: '', type: 'MAIN', sourcetype: leaf.sourcetype || '',
             level: 1, resids: leaf.resids || [], coprods: [],
             children: []
           };
         }
-        // Build chain from leaf-1 up to root
+        // Build chain from leaf-1 up to root, preserving all fields
         var parent = invRoots[key];
         for (var i = path.length - 2; i >= 0; i--) {
           var orig = path[i];
           var childKey = orig.prdid + '|' + orig.locid + '|' + orig.sourceid;
-          var existing = parent.children.find(function (c) { return (c.prdid + '|' + c.locid + '|' + c.sourceid) === childKey; });
+          var existing = parent.children.find(function (c) {
+            return (c.prdid + '|' + c.locid + '|' + c.sourceid) === childKey;
+          });
           if (!existing) {
             existing = {
               id: 'inv_' + childKey + '_L' + (parent.level + 1),
               locid: orig.locid, sourceid: orig.sourceid,
               prdid: orig.prdid, prddescr: orig.prddescr, mattypeid: orig.mattypeid,
               uomid: orig.uomid, coefficient: orig.coefficient,
-              inputCoeff: orig.inputCoeff, type: 'COMPONENT', sourcetype: orig.sourcetype,
+              inputCoeff: orig.inputCoeff, type: 'COMPONENT', sourcetype: orig.sourcetype || '',
               level: parent.level + 1, resids: orig.resids || [], coprods: orig.coprods || [],
               children: []
             };
@@ -665,8 +687,14 @@
       if (!tab || !pane || !tab.prdid) return;
       tab.qualityOpen = !tab.qualityOpen;
       var panel = pane.querySelector('.bom-quality-panel');
-      if (!tab.qualityOpen) { panel.style.display = 'none'; return; }
+      var btn = pane.querySelector('.bom-quality-btn');
+      if (!tab.qualityOpen) {
+        panel.style.display = 'none';
+        if (btn) btn.textContent = 'Ver análisis ▼';
+        return;
+      }
       panel.style.display = 'block';
+      if (btn) btn.textContent = 'Ocultar análisis ▲';
       bomRunQuality(tab, panel);
     }
 

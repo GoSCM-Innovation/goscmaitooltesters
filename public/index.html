@@ -353,7 +353,6 @@
     <div class="tab-info-banner" id="infoBannerBom">
       <span class="tab-info-icon">📦</span>
       <div class="tab-info-content">
-        <div class="tab-info-title">Production Hierarchy Visualizer</div>
         <div class="tab-info-desc">Explora la estructura de producción BOM de cualquier material desde SAP IBP. Navega
           cada nivel de la jerarquía, identifica co-productos y componentes, y visualiza las plantas de producción
           asociadas.</div>
@@ -470,7 +469,6 @@
     <!-- ═══ MULTI-PRODUCT TAB BAR ═══ -->
     <div class="bom-tabs-bar hidden" id="bomTabsBar">
       <div class="bom-tabs-scroll" id="bomTabsScroll"></div>
-      <button class="bom-tab-add" id="bomTabAdd" onclick="bomAddTab()" title="Nueva pestaña (máx 15)">+</button>
     </div>
 
     <!-- ═══ TAB CONTENT CONTAINER ═══ -->
@@ -484,7 +482,6 @@
     <div class="tab-info-banner" id="infoBannerNetwork">
       <span class="tab-info-icon">🌐</span>
       <div class="tab-info-content">
-        <div class="tab-info-title">Supply Network Analyzer</div>
         <div class="tab-info-desc">Descarga y analiza la red logística completa de todos los materiales. Genera un
           informe Excel con métricas de resiliencia, nodos críticos, ghost nodes y calidad general de la red de
           suministro.</div>
@@ -641,7 +638,6 @@
     <div class="tab-info-banner" id="infoBannerVisualizer">
       <span class="tab-info-icon">🔭</span>
       <div class="tab-info-content">
-        <div class="tab-info-title">Supply Network Visualizer</div>
         <div class="tab-info-desc">Visualiza interactivamente la red logística de un material específico. Confirma el
           mapeo para cargar el catálogo de materiales, selecciona uno y haz click en "Cargar red logística" para ver su
           diagrama.</div>
@@ -846,6 +842,16 @@
       </div>
     </div>
 
+    <!-- Detail panel (selected element info) -->
+    <div id="vizDetail"
+      style="display:none;padding:10px 24px;background:var(--bg2);border-bottom:1px solid var(--border);font-size:12px;align-items:center;gap:10px;">
+      <span
+        style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.06em;flex-shrink:0;">Seleccionado</span>
+      <span id="vizDetailContent" style="flex:1;color:var(--text)"></span>
+      <button class="btn btn-secondary btn-small"
+        onclick="document.getElementById('vizDetail').style.display='none'">✕</button>
+    </div>
+
     <!-- Legend + Canvas -->
     <div style="position:relative;">
       <div id="vizLegend"
@@ -897,15 +903,6 @@
       <div id="vizCanvas" style="width:100%;height:0;background:var(--bg);"></div>
     </div>
 
-    <!-- Detail panel -->
-    <div id="vizDetail"
-      style="display:none;padding:10px 24px;background:var(--bg2);border-top:1px solid var(--border);font-size:12px;align-items:center;gap:10px;">
-      <span
-        style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.06em;flex-shrink:0;">Seleccionado</span>
-      <span id="vizDetailContent" style="flex:1;color:var(--text)"></span>
-      <button class="btn btn-secondary btn-small"
-        onclick="document.getElementById('vizDetail').style.display='none'">✕</button>
-    </div>
 
     <!-- Fullscreen dialog -->
     <dialog id="vizFullscreenDlg"
@@ -1026,7 +1023,6 @@
     <div class="tab-info-banner" id="infoBannerPA">
       <span class="tab-info-icon">🔬</span>
       <div class="tab-info-content">
-        <div class="tab-info-title">Production Hierarchy Analyzer</div>
         <div class="tab-info-desc">Analiza la consistencia y calidad de la configuración de producción en SAP IBP.
           Detecta insumos sin red de compras, productos no habilitados en plantas, componentes sin Lead Time y más.
           Descarga un Excel con todos los hallazgos clasificados por severidad.</div>
@@ -1160,7 +1156,6 @@
     <div class="tab-info-banner" id="infoBannerDocs">
       <span class="tab-info-icon">📄</span>
       <div class="tab-info-content">
-        <div class="tab-info-title">Mapping Dataflow Generator</div>
         <div class="tab-info-desc">Generador de Mapping Dataflow para tareas de integración de SAP CI-DS</div>
       </div>
     </div>
