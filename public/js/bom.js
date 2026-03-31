@@ -354,7 +354,6 @@
           '</div>' +
           '<button class="btn btn-secondary btn-small" onclick="bomExpandAll(\'' + tab.id + '\')">⊞ Expandir</button>' +
           '<button class="btn btn-secondary btn-small" onclick="bomCollapseAll(\'' + tab.id + '\')">⊟ Colapsar</button>' +
-          '<button class="btn btn-secondary btn-small bom-invert-btn" onclick="bomToggleInvert(\'' + tab.id + '\')" title="Invertir jerarquía (hoja → raíz)">⇅ Invertir</button>' +
           '<button class="btn btn-danger btn-small" onclick="bomClearSearch(\'' + tab.id + '\')">✕ Limpiar</button>' +
           '<div class="stats-row">' +
             '<span>Raíces: <strong class="bom-stat-roots">-</strong></span>' +
@@ -726,141 +725,310 @@
       var roots = bomGetRoots(tab);
       if (!roots.length) { panel.innerHTML = '<p style="color:var(--text3)">Sin raíces de producción</p>'; return; }
 
-      // Collect analysis data from BOM tree — aligned with prodAnalyzer Cases A-O
-      var findings = [];
+      var thS = 'padding:6px 10px;text-align:left;color:var(--text3);font-size:11px;font-weight:600;border-bottom:1px solid var(--border);background:var(--bg);';
+      var tdS = 'padding:6px 10px;border-bottom:1px solid var(--border);font-size:11px;';
+
       var totalSources = 0, leafCount = 0, maxDepth = 0;
       var plantSet = {};
-      // Track products/locations/resources used in composite entities for orphan detection
-      var usedPrds = {}; // products seen in PSH or PSI
-      var usedLocs = {}; // locations seen in PSH
-      var usedRes = {};  // resources seen in PSR
-      // Per-entity tracking for detailed breakdown
-      var inPSH = {}; var inPSI = {};
+      var caseA = [], caseB = [], caseC = [], caseJ = [], caseK = [];
+      var coverageRows = [];
+      var inputRows = [], inputSeen = {};
 
       function analyzeNode(node) {
-        totalSources++;
-        if (node.locid) { plantSet[node.locid] = true; usedLocs[node.locid] = true; }
         if (node.level > maxDepth) maxDepth = node.level;
-        if (node.prdid) usedPrds[node.prdid] = true;
-        if (node.sourceid) {
-          // Track PSH usage
-          if (node.prdid) inPSH[node.prdid] = true;
-        }
 
-        // Case C — No PLEADTIME
         if (node.sourceid) {
+          totalSources++;
           var hdr = HDR_BY_SID[node.sourceid];
-          if (hdr && (!hdr.PLEADTIME || str(hdr.PLEADTIME) === '0')) {
-            findings.push({ sev: 'High', type: 'C — PLEADTIME', desc: 'PLEADTIME ausente o cero en fuente ' + node.sourceid, node: node.prdid });
+          var locid = node.locid || (hdr ? str(hdr.LOCID || '') : '');
+          var locRec = LOC_BY_ID[locid] || {};
+          var locdescr = str(locRec.LOCDESCR || '');
+          var plt = hdr ? str(hdr.PLEADTIME || '') : '';
+          var compCount = node.children ? node.children.length : 0;
+          if (locid) plantSet[locid] = true;
+
+          coverageRows.push({ sourceid: node.sourceid, locid: locid, locdescr: locdescr, pleadtime: plt, compCount: compCount });
+
+          // Case C — PLEADTIME ausente o cero
+          if (!plt || plt === '0') {
+            caseC.push({ sourceid: node.sourceid, prdid: node.prdid, locid: locid, locdescr: locdescr, pleadtime: plt });
+          }
+          // Case A — BOM vacío
+          if (node.type !== 'LEAF' && (!node.children || !node.children.length)) {
+            caseA.push({ sourceid: node.sourceid, prdid: node.prdid, locid: locid, locdescr: locdescr });
+          }
+          // Case K — co-productos sin registro primario
+          if (node.coprods && node.coprods.length > 0 && !node.sourcetype) {
+            caseK.push({ sourceid: node.sourceid, prdid: node.prdid, locid: locid, locdescr: locdescr });
           }
         }
-        // Case A — Empty BOM
-        if (node.sourceid && (!node.children || !node.children.length) && node.type !== 'LEAF') {
-          findings.push({ sev: 'High', type: 'A — BOM vacío', desc: 'Sin componentes PSI en fuente ' + node.sourceid, node: node.prdid });
-        }
-        // Case B — Zero coefficient
+
+        // Case B — coeficiente = 0
         if (node.inputCoeff !== '' && node.inputCoeff != null && Number(node.inputCoeff) === 0) {
-          findings.push({ sev: 'High', type: 'B — Coeficiente = 0', desc: 'Componente con coeficiente de consumo = 0', node: node.prdid });
+          caseB.push({ sourceid: node.sourceid || '', prdid: node.prdid, coeff: node.inputCoeff });
         }
-        // Leaf (purchased input) — track as PSI component
+
         if (node.type === 'LEAF') {
           leafCount++;
-          if (node.prdid) inPSI[node.prdid] = true;
+          if (node.prdid) {
+            // Case J — también es output de otra fuente
+            if (HDR_BY_PRD[node.prdid]) {
+              caseJ.push({ prdid: node.prdid, prddescr: node.prddescr || '', parentSid: node.sourceid || '' });
+            } else {
+              var ikey = node.prdid + '||' + (node.sourceid || '');
+              if (!inputSeen[ikey]) {
+                inputSeen[ikey] = true;
+                inputRows.push({ prdid: node.prdid, prddescr: node.prddescr || '', mattypeid: node.mattypeid || '', coeff: node.inputCoeff || '', parentSid: node.sourceid || '' });
+              }
+            }
+          }
         }
-        // Track PSI components (non-root nodes with inputCoeff)
-        if (node.type === 'COMPONENT' && node.prdid) {
-          inPSI[node.prdid] = true;
+        if (node.type === 'COMPONENT' && node.prdid && HDR_BY_PRD[node.prdid]) {
+          caseJ.push({ prdid: node.prdid, prddescr: node.prddescr || '', parentSid: node.sourceid || '' });
         }
-
-        // Case K — Co-products without primary
-        if (node.coprods && node.coprods.length > 0 && !node.sourcetype) {
-          findings.push({ sev: 'Info', type: 'K — Co-producto sin P', desc: 'Fuente con co-productos pero sin registro primario', node: node.prdid });
-        }
-
-        // Case J — Semi-elaborated product (component that is also output of another PSH)
-        if ((node.type === 'COMPONENT' || node.type === 'LEAF') && node.prdid && HDR_BY_PRD[node.prdid]) {
-          findings.push({ sev: 'Info', type: 'J — Semi-elaborado', desc: 'Componente también es salida de otra fuente de producción', node: node.prdid });
-        }
-
-        // Track resources
-        if (node.resids) node.resids.forEach(function (r) { usedRes[r] = true; });
 
         if (node.children) node.children.forEach(analyzeNode);
       }
       roots.forEach(analyzeNode);
 
-      // Case L — Product in master without PSH
-      Object.keys(prdIndex).forEach(function (pid) {
-        if (!HDR_BY_PRD[pid]) {
-          findings.push({ sev: 'Info', type: 'L — Sin PSH', desc: 'Producto en maestro sin fuente de producción configurada', node: pid });
-        }
-      });
+      var totalFindings = caseA.length + caseB.length + caseC.length + caseJ.length + caseK.length;
 
-      // Case M — Product in master not used in any composite entity (with per-entity breakdown)
-      Object.keys(prdIndex).forEach(function (pid) {
-        if (!usedPrds[pid]) {
-          findings.push({ sev: 'Medium', type: 'M — Producto huérfano', desc: 'No aparece en ninguna entidad compuesta (PSH, PSI)', node: pid });
-        } else {
-          // Per-entity breakdown
-          var missing = [];
-          if (!inPSH[pid]) missing.push('PSH');
-          if (!inPSI[pid]) missing.push('PSI');
-          if (missing.length > 0 && missing.length < 2) {
-            findings.push({ sev: 'Medium', type: 'M — Producto parcial', desc: 'No aparece en: ' + missing.join(', '), node: pid });
-          }
-        }
-      });
-
-      // Case N — Location in master not used in any composite entity
-      Object.keys(LOC_BY_ID).forEach(function (locid) {
-        if (!usedLocs[locid]) {
-          findings.push({ sev: 'Medium', type: 'N — Ubicación huérfana', desc: 'Ubicación en maestro sin uso en ninguna entidad compuesta (PSH)', node: locid });
-        }
-      });
-
-      // Case O — Resource in master not used
-      if (typeof RES_DESCR !== 'undefined') {
-        Object.keys(RES_DESCR).forEach(function (resid) {
-          if (!usedRes[resid]) {
-            findings.push({ sev: 'Medium', type: 'O — Recurso huérfano', desc: 'Recurso en maestro sin uso en ninguna fuente de producción (PSR)', node: resid });
-          }
-        });
+      function pill(label, col) {
+        return '<span style="background:' + col + '22;color:' + col + ';border:1px solid ' + col + '44;border-radius:4px;padding:2px 8px;font-size:10px;font-weight:600;">' + escH(label) + '</span>';
       }
-
-      // Build HTML
-      var thS = 'padding:6px 10px;text-align:left;color:var(--text3);font-size:11px;font-weight:600;border-bottom:1px solid var(--border);background:var(--bg);';
-      var tdS = 'padding:6px 10px;border-bottom:1px solid var(--border);font-size:11px;';
-
-      var html = '<h4>🔬 Análisis de calidad — ' + escH(tab.prdid) + '</h4>';
-      html += '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px;">';
       function mCard(label, val, col) {
         return '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;min-width:80px;text-align:center;">' +
           '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:4px;">' + label + '</div>' +
           '<div style="font-size:20px;font-weight:700;color:' + (col || 'var(--text)') + ';">' + val + '</div></div>';
       }
-      html += mCard('Fuentes', totalSources);
-      html += mCard('Plantas', Object.keys(plantSet).length);
-      html += mCard('Insumos', leafCount);
-      html += mCard('Prof.máx', maxDepth);
-      html += mCard('Hallazgos', findings.length, findings.length > 0 ? '#F59E0B' : '#10B981');
-      html += '</div>';
 
-      if (findings.length) {
-        html += '<table style="width:100%;border-collapse:collapse;"><thead><tr>' +
-          '<th style="' + thS + '">Tipo</th><th style="' + thS + '">Severidad</th><th style="' + thS + '">Descripción</th><th style="' + thS + '">Material</th>' +
-          '</tr></thead><tbody>';
-        findings.forEach(function (f) {
-          var col = f.sev === 'High' ? '#F59E0B' : f.sev === 'Medium' ? '#94a3b8' : '#6C63FF';
-          html += '<tr><td style="' + tdS + '">' + escH(f.type) + '</td>' +
-            '<td style="' + tdS + '"><span style="background:' + col + '22;color:' + col + ';border:1px solid ' + col + '44;border-radius:4px;padding:2px 8px;font-size:10px;font-weight:600;">' + escH(f.sev) + '</span></td>' +
-            '<td style="' + tdS + 'color:var(--text2);">' + escH(f.desc) + '</td>' +
-            '<td style="' + tdS + 'font-family:var(--mono);">' + escH(f.node) + '</td></tr>';
-        });
-        html += '</tbody></table>';
-      } else {
-        html += '<p style="color:#10B981;text-align:center;padding:10px;">✓ Sin hallazgos — estructura de producción correcta</p>';
+      var kpiHtml = '<div style="display:flex;flex-wrap:wrap;gap:10px;padding:12px 16px 8px;">' +
+        mCard('Fuentes', totalSources) +
+        mCard('Plantas', Object.keys(plantSet).length) +
+        mCard('Insumos', leafCount) +
+        mCard('Prof.máx', maxDepth) +
+        mCard('Hallazgos', totalFindings, totalFindings > 0 ? '#F59E0B' : '#10B981') +
+        '</div>';
+
+      var panelId = 'bqp_' + tab.id;
+      var caseInfo = [
+        { key: 'A', label: 'Caso A', sev: 'High',   sevColor: '#F59E0B', desc: 'Fuentes de producción sin componentes PSI (BOM vacío)',                              count: caseA.length },
+        { key: 'B', label: 'Caso B', sev: 'High',   sevColor: '#F59E0B', desc: 'Componentes con coeficiente de consumo = 0 o no definido',                          count: caseB.length },
+        { key: 'C', label: 'Caso C', sev: 'High',   sevColor: '#F59E0B', desc: 'Fuentes sin PLEADTIME o con valor cero',                                             count: caseC.length },
+        { key: 'J', label: 'Caso J', sev: 'Info',   sevColor: '#6C63FF', desc: 'Componente que también es output de otra fuente de producción (semi-elaborado)',     count: caseJ.length },
+        { key: 'K', label: 'Caso K', sev: 'Info',   sevColor: '#6C63FF', desc: 'SOURCEID con co-productos pero sin registro primario (SOURCETYPE=P)',                count: caseK.length }
+      ];
+
+      function tabBtn(key, label, count) {
+        var badge = count > 0
+          ? ' <span style="background:#F59E0B22;color:#F59E0B;border:1px solid #F59E0B44;border-radius:10px;padding:0 5px;font-size:10px;font-weight:700;">' + count + '</span>'
+          : '';
+        return '<button onclick="bomSwitchQualityTab(\'' + panelId + '\',\'' + key + '\')" ' +
+          'id="bqtab_' + panelId + '_' + key + '" ' +
+          'style="padding:7px 14px;font-size:11px;cursor:pointer;background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);font-weight:400;white-space:nowrap;">' +
+          escH(label) + badge + '</button>';
       }
-      panel.innerHTML = html;
+
+      var tabBarHtml = '<div style="display:flex;gap:0;border-bottom:1px solid var(--border);padding:0 16px;background:var(--bg);overflow-x:auto;">' +
+        tabBtn('summary', 'Summary', 0) +
+        tabBtn('A', 'Caso A', caseA.length) +
+        tabBtn('B', 'Caso B', caseB.length) +
+        tabBtn('C', 'Caso C', caseC.length) +
+        tabBtn('J', 'Caso J', caseJ.length) +
+        tabBtn('K', 'Caso K', caseK.length) +
+        tabBtn('cob', 'Cobertura de Producción', 0) +
+        tabBtn('ins', 'Insumos Comprados', 0) +
+        '</div>';
+
+      /* ── Summary ── */
+      var summaryHtml = '<div style="padding:12px 16px;">';
+      summaryHtml += '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
+        '<th style="' + thS + '">Caso</th>' +
+        '<th style="' + thS + '">Severidad</th>' +
+        '<th style="' + thS + '">Descripción</th>' +
+        '<th style="' + thS + ';text-align:right;">Hallazgos</th>' +
+        '</tr></thead><tbody>';
+      caseInfo.forEach(function (c) {
+        var countColor = c.count > 0 ? c.sevColor : '#10B981';
+        summaryHtml += '<tr>' +
+          '<td style="' + tdS + 'font-weight:600;">' + escH(c.label) + '</td>' +
+          '<td style="' + tdS + '">' + pill(c.sev, c.sevColor) + '</td>' +
+          '<td style="' + tdS + 'color:var(--text2);">' + escH(c.desc) + '</td>' +
+          '<td style="' + tdS + 'text-align:right;font-weight:700;color:' + countColor + ';">' + c.count + '</td>' +
+          '</tr>';
+      });
+      summaryHtml += '</tbody></table></div>';
+
+      /* ── Caso A ── */
+      var caseAHtml = '<div style="padding:12px 16px;">';
+      if (!caseA.length) {
+        caseAHtml += '<p style="color:#10B981;text-align:center;padding:10px;">✓ Sin hallazgos — todas las fuentes tienen componentes PSI</p>';
+      } else {
+        caseAHtml += '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
+          '<th style="' + thS + '">SOURCEID</th><th style="' + thS + '">Producto (Output)</th>' +
+          '<th style="' + thS + '">Planta</th><th style="' + thS + '">Descripción Planta</th>' +
+          '</tr></thead><tbody>';
+        caseA.forEach(function (r) {
+          caseAHtml += '<tr>' +
+            '<td style="' + tdS + 'font-family:var(--mono);">' + escH(r.sourceid) + '</td>' +
+            '<td style="' + tdS + 'font-family:var(--mono);">' + escH(r.prdid) + '</td>' +
+            '<td style="' + tdS + 'font-family:var(--mono);">' + escH(r.locid) + '</td>' +
+            '<td style="' + tdS + 'color:var(--text2);">' + escH(r.locdescr) + '</td></tr>';
+        });
+        caseAHtml += '</tbody></table>';
+      }
+      caseAHtml += '</div>';
+
+      /* ── Caso B ── */
+      var caseBHtml = '<div style="padding:12px 16px;">';
+      if (!caseB.length) {
+        caseBHtml += '<p style="color:#10B981;text-align:center;padding:10px;">✓ Sin hallazgos — todos los coeficientes están definidos</p>';
+      } else {
+        caseBHtml += '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
+          '<th style="' + thS + '">SOURCEID</th><th style="' + thS + '">Componente</th><th style="' + thS + '">Coeficiente</th>' +
+          '</tr></thead><tbody>';
+        caseB.forEach(function (r) {
+          caseBHtml += '<tr>' +
+            '<td style="' + tdS + 'font-family:var(--mono);">' + escH(r.sourceid) + '</td>' +
+            '<td style="' + tdS + 'font-family:var(--mono);">' + escH(r.prdid) + '</td>' +
+            '<td style="' + tdS + 'font-family:var(--mono);color:#F59E0B;">' + escH(String(r.coeff)) + '</td></tr>';
+        });
+        caseBHtml += '</tbody></table>';
+      }
+      caseBHtml += '</div>';
+
+      /* ── Caso C ── */
+      var caseCHtml = '<div style="padding:12px 16px;">';
+      if (!caseC.length) {
+        caseCHtml += '<p style="color:#10B981;text-align:center;padding:10px;">✓ Sin hallazgos — todas las fuentes tienen PLEADTIME definido</p>';
+      } else {
+        caseCHtml += '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
+          '<th style="' + thS + '">SOURCEID</th><th style="' + thS + '">Producto (Output)</th>' +
+          '<th style="' + thS + '">Planta</th><th style="' + thS + '">Descripción Planta</th>' +
+          '<th style="' + thS + '">PLEADTIME</th>' +
+          '</tr></thead><tbody>';
+        caseC.forEach(function (r) {
+          caseCHtml += '<tr>' +
+            '<td style="' + tdS + 'font-family:var(--mono);">' + escH(r.sourceid) + '</td>' +
+            '<td style="' + tdS + 'font-family:var(--mono);">' + escH(r.prdid) + '</td>' +
+            '<td style="' + tdS + 'font-family:var(--mono);">' + escH(r.locid) + '</td>' +
+            '<td style="' + tdS + 'color:var(--text2);">' + escH(r.locdescr) + '</td>' +
+            '<td style="' + tdS + 'font-family:var(--mono);color:#F59E0B;">' + (r.pleadtime || '—') + '</td></tr>';
+        });
+        caseCHtml += '</tbody></table>';
+      }
+      caseCHtml += '</div>';
+
+      /* ── Caso J ── */
+      var caseJHtml = '<div style="padding:12px 16px;">';
+      if (!caseJ.length) {
+        caseJHtml += '<p style="color:#10B981;text-align:center;padding:10px;">✓ Sin semi-elaborados detectados</p>';
+      } else {
+        caseJHtml += '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
+          '<th style="' + thS + '">Componente</th><th style="' + thS + '">Descripción</th><th style="' + thS + '">Usado en SOURCEID</th>' +
+          '</tr></thead><tbody>';
+        caseJ.forEach(function (r) {
+          caseJHtml += '<tr>' +
+            '<td style="' + tdS + 'font-family:var(--mono);">' + escH(r.prdid) + '</td>' +
+            '<td style="' + tdS + 'color:var(--text2);">' + escH(r.prddescr) + '</td>' +
+            '<td style="' + tdS + 'font-family:var(--mono);">' + escH(r.parentSid) + '</td></tr>';
+        });
+        caseJHtml += '</tbody></table>';
+      }
+      caseJHtml += '</div>';
+
+      /* ── Caso K ── */
+      var caseKHtml = '<div style="padding:12px 16px;">';
+      if (!caseK.length) {
+        caseKHtml += '<p style="color:#10B981;text-align:center;padding:10px;">✓ Sin co-productos sin registro primario</p>';
+      } else {
+        caseKHtml += '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
+          '<th style="' + thS + '">SOURCEID</th><th style="' + thS + '">Producto</th>' +
+          '<th style="' + thS + '">Planta</th><th style="' + thS + '">Descripción Planta</th>' +
+          '</tr></thead><tbody>';
+        caseK.forEach(function (r) {
+          caseKHtml += '<tr>' +
+            '<td style="' + tdS + 'font-family:var(--mono);">' + escH(r.sourceid) + '</td>' +
+            '<td style="' + tdS + 'font-family:var(--mono);">' + escH(r.prdid) + '</td>' +
+            '<td style="' + tdS + 'font-family:var(--mono);">' + escH(r.locid) + '</td>' +
+            '<td style="' + tdS + 'color:var(--text2);">' + escH(r.locdescr) + '</td></tr>';
+        });
+        caseKHtml += '</tbody></table>';
+      }
+      caseKHtml += '</div>';
+
+      /* ── Cobertura de Producción ── */
+      var cobHtml = '<div style="padding:12px 16px;">';
+      if (!coverageRows.length) {
+        cobHtml += '<p style="color:var(--text3);text-align:center;padding:10px;">Sin fuentes de producción encontradas</p>';
+      } else {
+        cobHtml += '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
+          '<th style="' + thS + '">SOURCEID</th><th style="' + thS + '">Planta</th>' +
+          '<th style="' + thS + '">Descripción Planta</th><th style="' + thS + '">PLEADTIME</th>' +
+          '<th style="' + thS + ';text-align:right;"># Componentes</th>' +
+          '</tr></thead><tbody>';
+        coverageRows.forEach(function (r) {
+          var pltCol = (!r.pleadtime || r.pleadtime === '0') ? '#F59E0B' : 'var(--text)';
+          cobHtml += '<tr>' +
+            '<td style="' + tdS + 'font-family:var(--mono);">' + escH(r.sourceid) + '</td>' +
+            '<td style="' + tdS + 'font-family:var(--mono);">' + escH(r.locid) + '</td>' +
+            '<td style="' + tdS + 'color:var(--text2);">' + escH(r.locdescr) + '</td>' +
+            '<td style="' + tdS + 'font-family:var(--mono);color:' + pltCol + ';">' + (r.pleadtime || '—') + '</td>' +
+            '<td style="' + tdS + 'text-align:right;font-family:var(--mono);">' + r.compCount + '</td></tr>';
+        });
+        cobHtml += '</tbody></table>';
+      }
+      cobHtml += '</div>';
+
+      /* ── Insumos Comprados ── */
+      var insHtml = '<div style="padding:12px 16px;">';
+      if (!inputRows.length) {
+        insHtml += '<p style="color:#10B981;text-align:center;padding:10px;">✓ Sin insumos comprados — todos los componentes tienen fuente de producción propia</p>';
+      } else {
+        insHtml += '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
+          '<th style="' + thS + '">Componente</th><th style="' + thS + '">Descripción</th>' +
+          '<th style="' + thS + '">Tipo Material</th><th style="' + thS + '">Coeficiente</th>' +
+          '<th style="' + thS + '">SOURCEID (padre)</th>' +
+          '</tr></thead><tbody>';
+        inputRows.forEach(function (r) {
+          insHtml += '<tr>' +
+            '<td style="' + tdS + 'font-family:var(--mono);">' + escH(r.prdid) + '</td>' +
+            '<td style="' + tdS + 'color:var(--text2);">' + escH(r.prddescr) + '</td>' +
+            '<td style="' + tdS + 'font-family:var(--mono);">' + escH(r.mattypeid) + '</td>' +
+            '<td style="' + tdS + 'font-family:var(--mono);text-align:right;">' + escH(String(r.coeff)) + '</td>' +
+            '<td style="' + tdS + 'font-family:var(--mono);">' + escH(r.parentSid) + '</td></tr>';
+        });
+        insHtml += '</tbody></table>';
+      }
+      insHtml += '</div>';
+
+      panel.innerHTML = kpiHtml + tabBarHtml +
+        '<div style="overflow-y:auto;max-height:280px;">' +
+        '<div id="bqc_' + panelId + '_summary">' + summaryHtml + '</div>' +
+        '<div id="bqc_' + panelId + '_A" style="display:none;">' + caseAHtml + '</div>' +
+        '<div id="bqc_' + panelId + '_B" style="display:none;">' + caseBHtml + '</div>' +
+        '<div id="bqc_' + panelId + '_C" style="display:none;">' + caseCHtml + '</div>' +
+        '<div id="bqc_' + panelId + '_J" style="display:none;">' + caseJHtml + '</div>' +
+        '<div id="bqc_' + panelId + '_K" style="display:none;">' + caseKHtml + '</div>' +
+        '<div id="bqc_' + panelId + '_cob" style="display:none;">' + cobHtml + '</div>' +
+        '<div id="bqc_' + panelId + '_ins" style="display:none;">' + insHtml + '</div>' +
+        '</div>';
+
+      bomSwitchQualityTab(panelId, 'summary');
+    }
+
+    function bomSwitchQualityTab(panelId, key) {
+      var keys = ['summary', 'A', 'B', 'C', 'J', 'K', 'cob', 'ins'];
+      keys.forEach(function (k) {
+        var content = document.getElementById('bqc_' + panelId + '_' + k);
+        if (content) content.style.display = k === key ? 'block' : 'none';
+        var btn = document.getElementById('bqtab_' + panelId + '_' + k);
+        if (btn) {
+          btn.style.color = k === key ? 'var(--text)' : 'var(--text2)';
+          btn.style.borderBottom = k === key ? '2px solid #6C63FF' : '2px solid transparent';
+          btn.style.fontWeight = k === key ? '600' : '400';
+        }
+      });
     }
 
     /* ── Render table for a specific tab ── */
