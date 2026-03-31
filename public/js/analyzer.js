@@ -35,7 +35,6 @@
 
     /* Single-button handler: index → analyse → export — no raw arrays in memory */
     async function doAnalyzeAndExport() {
-      if (typeof toggleMappingBody === 'function') toggleMappingBody('bodySNMDT', 'arrSNMDT', false);
       var logEl = document.getElementById('logSN');
       logEl.innerHTML = '';
       logEl.classList.add('hidden');

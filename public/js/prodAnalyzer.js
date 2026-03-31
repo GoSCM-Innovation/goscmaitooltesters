@@ -6,7 +6,6 @@
        ═══════════════════════════════════════════════════════════════ */
 
     async function doProductionAnalysis() {
-      if (typeof toggleMappingBody === 'function') toggleMappingBody('bodyPAMDT', 'arrPAMDT', false);
       var logEl   = document.getElementById('logPA');
       var progEl  = document.getElementById('progFillPA');
       logEl.innerHTML = '';

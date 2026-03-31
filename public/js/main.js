@@ -580,7 +580,6 @@
        STEP 2: FETCH ALL DATA
        ═══════════════════════════════════════════════════════════════ */
     async function doFetchAll() {
-      if (typeof toggleMappingBody === 'function') toggleMappingBody('bodyMDT', 'arrMDT', false);
       var logEl = document.getElementById('logFetch');
       logEl.innerHTML = '';
       logEl.classList.add('hidden');
