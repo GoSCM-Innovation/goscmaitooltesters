@@ -612,7 +612,7 @@
             }
 
             document.getElementById('vizDetailContent').innerHTML = html;
-            detail.style.cssText = 'display:flex;flex-direction:column;padding:10px 24px;background:var(--bg2);border-top:1px solid var(--border);font-size:12px;gap:4px;';
+            detail.style.cssText = 'display:block;padding:10px 24px;background:var(--bg2);border-bottom:1px solid var(--border);font-size:12px;';
           }
         }
       });
@@ -966,6 +966,65 @@
             findings.push({ type: 'Missing Customer Product', sev: 'High',
               desc: 'Cliente ' + cust + ' sin Customer Product record para este material',
               node: cust + (cd(cust) ? ' — ' + cd(cust) : '') });
+          }
+        });
+      }
+
+      // V3 — Location orphan breakdown (per routing entity)
+      if ((VIZ_DATA.locMasters || []).length > 0) {
+        var v3LocInLocSrc = {}, v3LocInPSH = {}, v3LocInLocProd = {}, v3LocInCustSrc = {};
+        (VIZ_DATA.locRows || []).forEach(function (r) {
+          var fr = str(r.LOCFR); if (fr) v3LocInLocSrc[fr] = true;
+          var to = str(r.LOCID); if (to) v3LocInLocSrc[to] = true;
+        });
+        (VIZ_DATA.plantRows || []).forEach(function (r) {
+          var l = str(r.LOCID); if (l) v3LocInPSH[l] = true;
+        });
+        (VIZ_DATA.locProdRows || []).forEach(function (r) {
+          var l = str(r.LOCID); if (l) v3LocInLocProd[l] = true;
+        });
+        (VIZ_DATA.custRows || []).forEach(function (r) {
+          var l = str(r.LOCID); if (l) v3LocInCustSrc[l] = true;
+        });
+        var v3Reported = {};
+        VIZ_DATA.locMasters.forEach(function (r) {
+          var locid = str(r.LOCID); if (!locid || v3Reported[locid]) return;
+          var inLS = !!v3LocInLocSrc[locid];
+          var inPS = !!v3LocInPSH[locid];
+          var inLP = !!v3LocInLocProd[locid];
+          var inCS = !!v3LocInCustSrc[locid];
+          var checkLP = VIZ_DATA.locProdRows && VIZ_DATA.locProdRows.length > 0;
+          var missing = [!inLS && 'Location Source', !inPS && 'PSH', checkLP && !inLP && 'Location Product', !inCS && 'Customer Source'].filter(Boolean).join(', ');
+          var present = [inLS && 'Location Source', inPS && 'PSH', checkLP && inLP && 'Location Product', inCS && 'Customer Source'].filter(Boolean).join(', ');
+          if (missing) {
+            v3Reported[locid] = true;
+            findings.push({ type: 'Ubicación — desglose entidades', sev: 'Info',
+              desc: 'Aparece en: ' + (present || 'ninguna') + ' — NO en: ' + missing,
+              node: locid + (ld(locid) ? ' — ' + ld(locid) : '') });
+          }
+        });
+      }
+
+      // V4 — Customer orphan breakdown (per routing entity)
+      if ((VIZ_DATA.custMasters || []).length > 0) {
+        var v4CustInCustSrc = {}, v4CustInCustProd = {};
+        (VIZ_DATA.custRows || []).forEach(function (r) {
+          var c = str(r.CUSTID); if (c) v4CustInCustSrc[c] = true;
+        });
+        (VIZ_DATA.custProdRows || []).forEach(function (r) {
+          var c = str(r.CUSTID); if (c) v4CustInCustProd[c] = true;
+        });
+        var checkCP = VIZ_DATA.custProdRows && VIZ_DATA.custProdRows.length > 0;
+        VIZ_DATA.custMasters.forEach(function (r) {
+          var custid = str(r.CUSTID); if (!custid) return;
+          var inCS = !!v4CustInCustSrc[custid];
+          var inCP = checkCP ? !!v4CustInCustProd[custid] : true;
+          if (!inCS || !inCP) {
+            var missing = [!inCS && 'Customer Source', checkCP && !inCP && 'Customer Product'].filter(Boolean).join(', ');
+            var present = [inCS && 'Customer Source', checkCP && inCP && 'Customer Product'].filter(Boolean).join(', ');
+            findings.push({ type: 'Cliente — desglose entidades', sev: 'Info',
+              desc: 'Aparece en: ' + (present || 'ninguna') + ' — NO en: ' + missing,
+              node: custid + (cd(custid) ? ' — ' + cd(custid) : '') });
           }
         });
       }

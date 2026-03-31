@@ -445,22 +445,22 @@
             <div class="mdt-fields" id="fieldsBomResMaster"></div>
           </div>
         </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btnFetch" onclick="doFetchAll()">Descargar datos y construir
+            jerarquía</button>
+          <button class="btn btn-secondary btn-small" onclick="doConnect()">Reconectar</button>
+        </div>
+        <div class="progress-bar hidden" id="progBar">
+          <div class="fill" id="progFill" style="width:0%"></div>
+        </div>
+        <div id="progStatus"
+          style="display:none;font-size:12px;color:var(--text2);margin-top:4px;align-items:center;gap:8px;">
+          <span id="progStatusText"></span>
+          <button id="btnToggleLogs" class="btn btn-secondary btn-small" style="padding:2px 8px;font-size:11px;"
+            onclick="toggleFetchLogs()">Ver logs técnicos</button>
+        </div>
+        <div class="log-area hidden" id="logFetch"></div>
       </div>
-      <div class="btn-row">
-        <button class="btn btn-primary" id="btnFetch" onclick="doFetchAll()">Descargar datos y construir
-          jerarquía</button>
-        <button class="btn btn-secondary btn-small" onclick="doConnect()">Reconectar</button>
-      </div>
-      <div class="progress-bar hidden" id="progBar">
-        <div class="fill" id="progFill" style="width:0%"></div>
-      </div>
-      <div id="progStatus"
-        style="display:none;font-size:12px;color:var(--text2);margin-top:4px;align-items:center;gap:8px;">
-        <span id="progStatusText"></span>
-        <button id="btnToggleLogs" class="btn btn-secondary btn-small" style="padding:2px 8px;font-size:11px;"
-          onclick="toggleFetchLogs()">Ver logs técnicos</button>
-      </div>
-      <div class="log-area hidden" id="logFetch"></div>
     </div>
 
     <!-- ═══ CYCLE BANNER ═══ -->
@@ -605,22 +605,22 @@
             <div class="mdt-fields" id="fieldsSNCustProd"></div>
           </div>
         </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btnFetchSN" onclick="doAnalyzeAndExport()">Analizar red y Exportar
+            Excel</button>
+          <button class="btn btn-secondary btn-small" onclick="doConnect()">Reconectar</button>
+        </div>
+        <div class="progress-bar hidden" id="progBarSN">
+          <div class="fill" id="progFillSN" style="width:0%"></div>
+        </div>
+        <div id="progStatusSN"
+          style="display:none;font-size:12px;color:var(--text2);margin-top:4px;align-items:center;gap:8px;">
+          <span id="progStatusTextSN"></span>
+          <button id="btnToggleSNLogs" class="btn btn-secondary btn-small" style="padding:2px 8px;font-size:11px;"
+            onclick="toggleSNLogs()">Ver logs técnicos</button>
+        </div>
+        <div class="log-area hidden" id="logSN"></div>
       </div>
-      <div class="btn-row">
-        <button class="btn btn-primary" id="btnFetchSN" onclick="doAnalyzeAndExport()">Analizar red y Exportar
-          Excel</button>
-        <button class="btn btn-secondary btn-small" onclick="doConnect()">Reconectar</button>
-      </div>
-      <div class="progress-bar hidden" id="progBarSN">
-        <div class="fill" id="progFillSN" style="width:0%"></div>
-      </div>
-      <div id="progStatusSN"
-        style="display:none;font-size:12px;color:var(--text2);margin-top:4px;align-items:center;gap:8px;">
-        <span id="progStatusTextSN"></span>
-        <button id="btnToggleSNLogs" class="btn btn-secondary btn-small" style="padding:2px 8px;font-size:11px;"
-          onclick="toggleSNLogs()">Ver logs técnicos</button>
-      </div>
-      <div class="log-area hidden" id="logSN"></div>
     </div>
 
     <div class="empty-state hidden" id="snSuccessBanner" style="margin-top:40px;">
@@ -761,22 +761,22 @@
             <div class="mdt-fields" id="fieldsVizCustProd"></div>
           </div>
         </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btnVizConfirm" onclick="vizConfirmMapping()">Confirmar mapeo y cargar
+            productos</button>
+          <button class="btn btn-secondary btn-small" onclick="doConnect()">Reconectar</button>
+        </div>
+        <div class="progress-bar hidden" id="progBarViz">
+          <div class="fill" id="progFillViz" style="width:0%"></div>
+        </div>
+        <div id="progStatusViz"
+          style="display:none;font-size:12px;color:var(--text2);margin-top:4px;align-items:center;gap:8px;">
+          <span id="progStatusTextViz"></span>
+          <button id="btnToggleVizLogs" class="btn btn-secondary btn-small" style="padding:2px 8px;font-size:11px;"
+            onclick="toggleVizLogs()">Ver logs técnicos</button>
+        </div>
+        <div class="log-area hidden" id="logViz"></div>
       </div>
-      <div class="btn-row">
-        <button class="btn btn-primary" id="btnVizConfirm" onclick="vizConfirmMapping()">Confirmar mapeo y cargar
-          productos</button>
-        <button class="btn btn-secondary btn-small" onclick="doConnect()">Reconectar</button>
-      </div>
-      <div class="progress-bar hidden" id="progBarViz">
-        <div class="fill" id="progFillViz" style="width:0%"></div>
-      </div>
-      <div id="progStatusViz"
-        style="display:none;font-size:12px;color:var(--text2);margin-top:4px;align-items:center;gap:8px;">
-        <span id="progStatusTextViz"></span>
-        <button id="btnToggleVizLogs" class="btn btn-secondary btn-small" style="padding:2px 8px;font-size:11px;"
-          onclick="toggleVizLogs()">Ver logs técnicos</button>
-      </div>
-      <div class="log-area hidden" id="logViz"></div>
     </div>
 
     <!-- Controls bar (hidden until products are loaded) -->
@@ -844,12 +844,16 @@
 
     <!-- Detail panel (selected element info) -->
     <div id="vizDetail"
-      style="display:none;padding:10px 24px;background:var(--bg2);border-bottom:1px solid var(--border);font-size:12px;align-items:center;gap:10px;">
-      <span
-        style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.06em;flex-shrink:0;">Seleccionado</span>
-      <span id="vizDetailContent" style="flex:1;color:var(--text)"></span>
-      <button class="btn btn-secondary btn-small"
-        onclick="document.getElementById('vizDetail').style.display='none'">✕</button>
+      style="display:none;padding:10px 24px;background:var(--bg2);border-bottom:1px solid var(--border);font-size:12px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span
+          style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.06em;flex-shrink:0;">Seleccionado</span>
+        <span style="flex:1;"></span>
+        <button class="btn btn-secondary btn-small"
+          onclick="document.getElementById('vizDetail').style.display='none'"
+          style="flex-shrink:0;padding:2px 8px;font-size:11px;">✕</button>
+      </div>
+      <div id="vizDetailContent" style="color:var(--text);margin-top:6px;"></div>
     </div>
 
     <!-- Legend + Canvas -->
@@ -1126,21 +1130,21 @@
             <div class="mdt-fields" id="fieldsPALocSrc"></div>
           </div>
         </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btnFetchPA" onclick="doProductionAnalysis()">Analizar producción y Exportar Excel</button>
+          <button class="btn btn-secondary btn-small" onclick="doConnect()">Reconectar</button>
+        </div>
+        <div class="progress-bar hidden" id="progBarPA">
+          <div class="fill" id="progFillPA" style="width:0%"></div>
+        </div>
+        <div id="progStatusPA"
+          style="display:none;font-size:12px;color:var(--text2);margin-top:4px;align-items:center;gap:8px;">
+          <span id="progStatusTextPA"></span>
+          <button id="btnTogglePALogs" class="btn btn-secondary btn-small" style="padding:2px 8px;font-size:11px;"
+            onclick="togglePALogs()">Ver logs técnicos</button>
+        </div>
+        <div class="log-area hidden" id="logPA"></div>
       </div>
-      <div class="btn-row">
-        <button class="btn btn-primary" id="btnFetchPA" onclick="doProductionAnalysis()">Analizar producción y Exportar Excel</button>
-        <button class="btn btn-secondary btn-small" onclick="doConnect()">Reconectar</button>
-      </div>
-      <div class="progress-bar hidden" id="progBarPA">
-        <div class="fill" id="progFillPA" style="width:0%"></div>
-      </div>
-      <div id="progStatusPA"
-        style="display:none;font-size:12px;color:var(--text2);margin-top:4px;align-items:center;gap:8px;">
-        <span id="progStatusTextPA"></span>
-        <button id="btnTogglePALogs" class="btn btn-secondary btn-small" style="padding:2px 8px;font-size:11px;"
-          onclick="togglePALogs()">Ver logs técnicos</button>
-      </div>
-      <div class="log-area hidden" id="logPA"></div>
     </div>
 
     <div class="empty-state hidden" id="paSuccessBanner" style="margin-top:40px;">

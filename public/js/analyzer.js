@@ -513,56 +513,74 @@
       }
 
       // ── Master data orphan detection ─────────────────────────────
-      // Products in master not used in any composite entity (Location Source, Customer Source, PSH)
+      if (onStatus) onStatus('Detectando datos maestros huérfanos...');
+
+      // Build per-entity sets for all three master types in one IDB pass
+      var prdInLocSrc = {}, prdInCustSrc = {}, prdInPSH = {};
+      var locInLocSrc = {}, locInCustSrc = {}, locInPSH = {};
+      var usedLocs = {}, usedCusts = {};
+
+      var _snLocRows = await idbGetAll('sn_loc');
+      _snLocRows.forEach(function (r) {
+        var p = str(r.PRDID); if (p) prdInLocSrc[p] = true;
+        var fr = str(r.LOCFR); if (fr) { usedLocs[fr] = true; locInLocSrc[fr] = true; }
+        var to = str(r.LOCID); if (to) { usedLocs[to] = true; locInLocSrc[to] = true; }
+      });
+      _snLocRows = null;
+
+      var _snCustRows = await idbGetAll('sn_cust');
+      _snCustRows.forEach(function (r) {
+        var p = str(r.PRDID); if (p) prdInCustSrc[p] = true;
+        var loc = str(r.LOCID); if (loc) { usedLocs[loc] = true; locInCustSrc[loc] = true; }
+        var c = str(r.CUSTID); if (c) usedCusts[c] = true;
+      });
+      _snCustRows = null;
+
+      var _snPlantRows = await idbGetAll('sn_plant');
+      _snPlantRows.forEach(function (r) {
+        var p = str(r.PRDID); if (p) prdInPSH[p] = true;
+        var loc = str(r.LOCID); if (loc) { usedLocs[loc] = true; locInPSH[loc] = true; }
+      });
+      _snPlantRows = null;
+
+      // Products in master not used in any composite entity
       if (Object.keys(SN_IDX.prdLookup).length > 0) {
-        if (onStatus) onStatus('Detectando datos maestros huérfanos...');
-        var usedPrdsInComposite = SN_IDX.allPrds; // products seen in LocSrc, CustSrc, PSH
         Object.keys(SN_IDX.prdLookup).forEach(function (prdid) {
-          if (!usedPrdsInComposite[prdid]) {
+          var inLS = !!prdInLocSrc[prdid];
+          var inCS = !!prdInCustSrc[prdid];
+          var inPS = !!prdInPSH[prdid];
+          if (!inLS && !inCS && !inPS) {
             addRow(1, ['Orphan Product Master', prdid, pd(prdid), '', '', '', '',
               'Product exists in product master but does not appear in any composite entity (Location Source, Customer Source, Production Source Header)', 'Medium']);
+          } else if (!inLS || !inCS || !inPS) {
+            var present = [inLS && 'Location Source', inCS && 'Customer Source', inPS && 'PSH'].filter(Boolean).join(', ');
+            var missing = [!inLS && 'Location Source', !inCS && 'Customer Source', !inPS && 'PSH'].filter(Boolean).join(', ');
+            addRow(1, ['Orphan Product Master', prdid, pd(prdid), '', '', '', '',
+              'Product appears in: ' + present + ' — NOT in: ' + missing, 'Info']);
           }
         });
       }
 
       // Locations in master not used in any composite entity
       if (Object.keys(SN_IDX.locLookup).length > 0) {
-        // Build set of all locations used across all products (from IDB edge tables)
-        var usedLocs = {};
-        var allLocRows = await idbGetAll('sn_loc');
-        allLocRows.forEach(function (r) {
-          var fr = str(r.LOCFR); if (fr) usedLocs[fr] = true;
-          var to = str(r.LOCID); if (to) usedLocs[to] = true;
-        });
-        allLocRows = null;
-        var allCustRows = await idbGetAll('sn_cust');
-        allCustRows.forEach(function (r) {
-          var loc = str(r.LOCID); if (loc) usedLocs[loc] = true;
-        });
-        allCustRows = null;
-        var allPlantRows = await idbGetAll('sn_plant');
-        allPlantRows.forEach(function (r) {
-          var loc = str(r.LOCID); if (loc) usedLocs[loc] = true;
-        });
-        allPlantRows = null;
-
         Object.keys(SN_IDX.locLookup).forEach(function (locid) {
+          var inLS = !!locInLocSrc[locid];
+          var inCS = !!locInCustSrc[locid];
+          var inPS = !!locInPSH[locid];
           if (!usedLocs[locid]) {
             addRow(1, ['Orphan Location Master', '', '', locid, ld(locid), '', '',
               'Location exists in location master but does not appear in any composite entity (Location Source, Customer Source, Production Source Header)', 'Medium']);
+          } else if (!inLS || !inCS || !inPS) {
+            var present = [inLS && 'Location Source', inCS && 'Customer Source', inPS && 'PSH'].filter(Boolean).join(', ');
+            var missing = [!inLS && 'Location Source', !inCS && 'Customer Source', !inPS && 'PSH'].filter(Boolean).join(', ');
+            addRow(1, ['Orphan Location Master', '', '', locid, ld(locid), '', '',
+              'Location appears in: ' + present + ' — NOT in: ' + missing, 'Info']);
           }
         });
       }
 
       // Customers in master not used in Customer Source
       if (Object.keys(SN_IDX.custLookup).length > 0) {
-        var usedCusts = {};
-        var allCustSrcRows = await idbGetAll('sn_cust');
-        allCustSrcRows.forEach(function (r) {
-          var c = str(r.CUSTID); if (c) usedCusts[c] = true;
-        });
-        allCustSrcRows = null;
-
         Object.keys(SN_IDX.custLookup).forEach(function (custid) {
           if (!usedCusts[custid]) {
             addRow(1, ['Orphan Customer Master', '', '', '', '', custid, cd(custid),

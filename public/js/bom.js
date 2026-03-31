@@ -622,53 +622,73 @@
     }
 
     function bomInvertTree(roots) {
-      // Collect all leaf-to-root paths
+      // Invert hierarchy: keep same roots, but reverse the internal tree.
+      // Each root stays as-is visually, but its deepest leaves become the first
+      // expandable children, and the original root info appears at the bottom.
+      return roots.map(function (root) {
+        return invertNode(root, 1);
+      });
+    }
+
+    function invertNode(node, level) {
+      // Deep-clone the node preserving all fields
+      var inv = {
+        id: 'inv_' + node.id, locid: node.locid, sourceid: node.sourceid,
+        prdid: node.prdid, prddescr: node.prddescr, mattypeid: node.mattypeid,
+        uomid: node.uomid, coefficient: node.coefficient,
+        inputCoeff: node.inputCoeff, type: node.type, sourcetype: node.sourcetype || '',
+        level: level, resids: node.resids || [], coprods: node.coprods || [],
+        children: []
+      };
+
+      if (!node.children || !node.children.length) {
+        return inv; // leaf stays as leaf
+      }
+
+      // Collect all leaf-to-root paths within this subtree
       var leafPaths = [];
-      function collectPaths(node, path) {
-        var currentPath = path.concat([node]);
-        if (!node.children || !node.children.length) {
-          leafPaths.push(currentPath);
+      function collectPaths(n, path) {
+        var cur = path.concat([n]);
+        if (!n.children || !n.children.length) {
+          leafPaths.push(cur);
         } else {
-          node.children.forEach(function (c) { collectPaths(c, currentPath); });
+          n.children.forEach(function (c) { collectPaths(c, cur); });
         }
       }
-      roots.forEach(function (r) { collectPaths(r, []); });
+      node.children.forEach(function (c) { collectPaths(c, []); });
 
-      // Build inverted tree: each leaf becomes a root, parents become children (bottom→up)
-      var invRoots = {};
+      // Build reversed children: leaves become direct children, parents below them
+      var childMap = {};
       leafPaths.forEach(function (path) {
         var leaf = path[path.length - 1];
-        // Use a more specific key to avoid collapsing different leaf contexts
-        var parentSid = path.length > 1 ? path[path.length - 2].sourceid : '';
-        var key = leaf.prdid + '|' + leaf.locid + '|' + parentSid;
-        if (!invRoots[key]) {
-          // For the inverted root (was a leaf), show the parent's sourceid
-          // since the leaf itself has no production source
-          invRoots[key] = {
-            id: 'inv_' + key, locid: leaf.locid,
-            sourceid: parentSid || leaf.sourceid,
+        var leafKey = leaf.prdid + '|' + leaf.locid + '|' + (leaf.sourceid || leaf.id);
+        if (!childMap[leafKey]) {
+          childMap[leafKey] = {
+            id: 'inv_' + leaf.id + '_L' + (level + 1),
+            locid: leaf.locid, sourceid: leaf.sourceid,
             prdid: leaf.prdid, prddescr: leaf.prddescr, mattypeid: leaf.mattypeid,
-            uomid: leaf.uomid, coefficient: leaf.inputCoeff || leaf.coefficient,
-            inputCoeff: '', type: 'MAIN', sourcetype: leaf.sourcetype || '',
-            level: 1, resids: leaf.resids || [], coprods: [],
+            uomid: leaf.uomid, coefficient: leaf.coefficient,
+            inputCoeff: leaf.inputCoeff, type: leaf.type, sourcetype: leaf.sourcetype || '',
+            level: level + 1, resids: leaf.resids || [], coprods: leaf.coprods || [],
             children: []
           };
         }
-        // Build chain from leaf-1 up to root, preserving all fields
-        var parent = invRoots[key];
+        // Build chain from leaf-1 up (reversed path towards root's direct child)
+        var parent = childMap[leafKey];
         for (var i = path.length - 2; i >= 0; i--) {
           var orig = path[i];
-          var childKey = orig.prdid + '|' + orig.locid + '|' + orig.sourceid;
+          var childKey2 = orig.prdid + '|' + orig.locid + '|' + (orig.sourceid || orig.id);
           var existing = parent.children.find(function (c) {
-            return (c.prdid + '|' + c.locid + '|' + c.sourceid) === childKey;
+            return (c.prdid + '|' + c.locid + '|' + (c.sourceid || '')) ===
+                   (orig.prdid + '|' + orig.locid + '|' + (orig.sourceid || ''));
           });
           if (!existing) {
             existing = {
-              id: 'inv_' + childKey + '_L' + (parent.level + 1),
+              id: 'inv_' + orig.id + '_L' + (parent.level + 1),
               locid: orig.locid, sourceid: orig.sourceid,
               prdid: orig.prdid, prddescr: orig.prddescr, mattypeid: orig.mattypeid,
               uomid: orig.uomid, coefficient: orig.coefficient,
-              inputCoeff: orig.inputCoeff, type: 'COMPONENT', sourcetype: orig.sourcetype || '',
+              inputCoeff: orig.inputCoeff, type: orig.type, sourcetype: orig.sourcetype || '',
               level: parent.level + 1, resids: orig.resids || [], coprods: orig.coprods || [],
               children: []
             };
@@ -677,7 +697,9 @@
           parent = existing;
         }
       });
-      return Object.values(invRoots);
+
+      inv.children = Object.values(childMap);
+      return inv;
     }
 
     /* ── Quality analysis for BOM tab ── */
@@ -704,42 +726,106 @@
       var roots = bomGetRoots(tab);
       if (!roots.length) { panel.innerHTML = '<p style="color:var(--text3)">Sin raíces de producción</p>'; return; }
 
-      // Collect analysis data from BOM tree
+      // Collect analysis data from BOM tree — aligned with prodAnalyzer Cases A-O
       var findings = [];
       var totalSources = 0, leafCount = 0, maxDepth = 0;
       var plantSet = {};
+      // Track products/locations/resources used in composite entities for orphan detection
+      var usedPrds = {}; // products seen in PSH or PSI
+      var usedLocs = {}; // locations seen in PSH
+      var usedRes = {};  // resources seen in PSR
+      // Per-entity tracking for detailed breakdown
+      var inPSH = {}; var inPSI = {};
 
       function analyzeNode(node) {
         totalSources++;
-        if (node.locid) plantSet[node.locid] = true;
+        if (node.locid) { plantSet[node.locid] = true; usedLocs[node.locid] = true; }
         if (node.level > maxDepth) maxDepth = node.level;
+        if (node.prdid) usedPrds[node.prdid] = true;
+        if (node.sourceid) {
+          // Track PSH usage
+          if (node.prdid) inPSH[node.prdid] = true;
+        }
 
-        // No PLEADTIME
-        if (node.level === 1 && node.sourceid) {
+        // Case C — No PLEADTIME
+        if (node.sourceid) {
           var hdr = HDR_BY_SID[node.sourceid];
           if (hdr && (!hdr.PLEADTIME || str(hdr.PLEADTIME) === '0')) {
-            findings.push({ sev: 'High', type: 'PLEADTIME', desc: 'PLEADTIME ausente o cero en fuente ' + node.sourceid, node: node.prdid });
+            findings.push({ sev: 'High', type: 'C — PLEADTIME', desc: 'PLEADTIME ausente o cero en fuente ' + node.sourceid, node: node.prdid });
           }
         }
-        // Empty BOM
+        // Case A — Empty BOM
         if (node.sourceid && (!node.children || !node.children.length) && node.type !== 'LEAF') {
-          findings.push({ sev: 'High', type: 'BOM vacío', desc: 'Sin componentes PSI en fuente ' + node.sourceid, node: node.prdid });
+          findings.push({ sev: 'High', type: 'A — BOM vacío', desc: 'Sin componentes PSI en fuente ' + node.sourceid, node: node.prdid });
         }
-        // Zero coefficient
+        // Case B — Zero coefficient
         if (node.inputCoeff !== '' && node.inputCoeff != null && Number(node.inputCoeff) === 0) {
-          findings.push({ sev: 'High', type: 'Coeficiente = 0', desc: 'Componente con coeficiente de consumo = 0', node: node.prdid });
+          findings.push({ sev: 'High', type: 'B — Coeficiente = 0', desc: 'Componente con coeficiente de consumo = 0', node: node.prdid });
         }
-        // Leaf (purchased input)
-        if (node.type === 'LEAF') leafCount++;
+        // Leaf (purchased input) — track as PSI component
+        if (node.type === 'LEAF') {
+          leafCount++;
+          if (node.prdid) inPSI[node.prdid] = true;
+        }
+        // Track PSI components (non-root nodes with inputCoeff)
+        if (node.type === 'COMPONENT' && node.prdid) {
+          inPSI[node.prdid] = true;
+        }
 
-        // Co-products without primary
+        // Case K — Co-products without primary
         if (node.coprods && node.coprods.length > 0 && !node.sourcetype) {
-          findings.push({ sev: 'Info', type: 'Co-producto sin P', desc: 'Fuente con co-productos pero sin registro primario', node: node.prdid });
+          findings.push({ sev: 'Info', type: 'K — Co-producto sin P', desc: 'Fuente con co-productos pero sin registro primario', node: node.prdid });
         }
+
+        // Case J — Semi-elaborated product (component that is also output of another PSH)
+        if ((node.type === 'COMPONENT' || node.type === 'LEAF') && node.prdid && HDR_BY_PRD[node.prdid]) {
+          findings.push({ sev: 'Info', type: 'J — Semi-elaborado', desc: 'Componente también es salida de otra fuente de producción', node: node.prdid });
+        }
+
+        // Track resources
+        if (node.resids) node.resids.forEach(function (r) { usedRes[r] = true; });
 
         if (node.children) node.children.forEach(analyzeNode);
       }
       roots.forEach(analyzeNode);
+
+      // Case L — Product in master without PSH
+      Object.keys(prdIndex).forEach(function (pid) {
+        if (!HDR_BY_PRD[pid]) {
+          findings.push({ sev: 'Info', type: 'L — Sin PSH', desc: 'Producto en maestro sin fuente de producción configurada', node: pid });
+        }
+      });
+
+      // Case M — Product in master not used in any composite entity (with per-entity breakdown)
+      Object.keys(prdIndex).forEach(function (pid) {
+        if (!usedPrds[pid]) {
+          findings.push({ sev: 'Medium', type: 'M — Producto huérfano', desc: 'No aparece en ninguna entidad compuesta (PSH, PSI)', node: pid });
+        } else {
+          // Per-entity breakdown
+          var missing = [];
+          if (!inPSH[pid]) missing.push('PSH');
+          if (!inPSI[pid]) missing.push('PSI');
+          if (missing.length > 0 && missing.length < 2) {
+            findings.push({ sev: 'Medium', type: 'M — Producto parcial', desc: 'No aparece en: ' + missing.join(', '), node: pid });
+          }
+        }
+      });
+
+      // Case N — Location in master not used in any composite entity
+      Object.keys(LOC_BY_ID).forEach(function (locid) {
+        if (!usedLocs[locid]) {
+          findings.push({ sev: 'Medium', type: 'N — Ubicación huérfana', desc: 'Ubicación en maestro sin uso en ninguna entidad compuesta (PSH)', node: locid });
+        }
+      });
+
+      // Case O — Resource in master not used
+      if (typeof RES_DESCR !== 'undefined') {
+        Object.keys(RES_DESCR).forEach(function (resid) {
+          if (!usedRes[resid]) {
+            findings.push({ sev: 'Medium', type: 'O — Recurso huérfano', desc: 'Recurso en maestro sin uso en ninguna fuente de producción (PSR)', node: resid });
+          }
+        });
+      }
 
       // Build HTML
       var thS = 'padding:6px 10px;text-align:left;color:var(--text3);font-size:11px;font-weight:600;border-bottom:1px solid var(--border);background:var(--bg);';

@@ -273,6 +273,10 @@
       var usedPrds = {};  // products seen in PSH, PSI, LocProd, LocSrc
       var usedLocs = {};  // locations seen in PSH, LocProd, LocSrc
       var usedRes  = {};  // resources seen in PSR
+      // Per-entity tracking for orphan breakdown
+      var inPSH = {}, inPSI = {}, inLocProd = {}, inLocSrc = {};
+      var inLocPSH = {}, inLocLocProd = {}, inLocLocSrc = {};
+      var inResPSR = {};
 
       /* ── Main loop: one iteration per SOURCEID ────────────────────── */
       var sourceIds = Object.keys(pshBySid).sort();
@@ -293,11 +297,11 @@
           var plt     = primary.PLEADTIME;
 
           // Track usage from PSH
-          if (outPrd) usedPrds[outPrd] = true;
-          if (outLoc) usedLocs[outLoc] = true;
+          if (outPrd) { usedPrds[outPrd] = true; inPSH[outPrd] = true; }
+          if (outLoc) { usedLocs[outLoc] = true; inLocPSH[outLoc] = true; }
           recs.forEach(function (r) {
-            if (r.PRDID) usedPrds[r.PRDID] = true;
-            if (r.LOCID) usedLocs[r.LOCID] = true;
+            if (r.PRDID) { usedPrds[r.PRDID] = true; inPSH[r.PRDID] = true; }
+            if (r.LOCID) { usedLocs[r.LOCID] = true; inLocPSH[r.LOCID] = true; }
           });
 
           /* Case C🔴 — PLEADTIME ausente o cero */
@@ -332,7 +336,7 @@
                 var coeff  = str(pi.COMPONENTCOEFFICIENT || '');
 
                 // Track usage from PSI
-                if (compId) usedPrds[compId] = true;
+                if (compId) { usedPrds[compId] = true; inPSI[compId] = true; }
 
                 /* Case B🔴 — coeficiente cero o nulo */
                 if (coeff === '' || Number(coeff) === 0) {
@@ -365,7 +369,7 @@
             var psrRecs = await idbGetByIndex('pa_psr', 'by_sourceid', sid);
             psrRecs.forEach(function (pr) {
               var resId = str(pr.RESID || '');
-              if (resId) usedRes[resId] = true;
+              if (resId) { usedRes[resId] = true; inResPSR[resId] = true; }
             });
           }
         }
@@ -382,16 +386,16 @@
       if (ent.locPrd) {
         var lpCursor = await idbGetAll('pa_loc_prod');
         lpCursor.forEach(function (r) {
-          var p = str(r.PRDID || ''); if (p) usedPrds[p] = true;
-          var l = str(r.LOCID || ''); if (l) usedLocs[l] = true;
+          var p = str(r.PRDID || ''); if (p) { usedPrds[p] = true; inLocProd[p] = true; }
+          var l = str(r.LOCID || ''); if (l) { usedLocs[l] = true; inLocLocProd[l] = true; }
         });
       }
       if (ent.locSrc) {
         var lsCursor = await idbGetAll('pa_loc_src');
         lsCursor.forEach(function (r) {
-          var p = str(r.PRDID || ''); if (p) usedPrds[p] = true;
-          var lf = str(r.LOCFR || ''); if (lf) usedLocs[lf] = true;
-          var lt = str(r.LOCID || ''); if (lt) usedLocs[lt] = true;
+          var p = str(r.PRDID || ''); if (p) { usedPrds[p] = true; inLocSrc[p] = true; }
+          var lf = str(r.LOCFR || ''); if (lf) { usedLocs[lf] = true; inLocLocSrc[lf] = true; }
+          var lt = str(r.LOCID || ''); if (lt) { usedLocs[lt] = true; inLocLocSrc[lt] = true; }
         });
       }
 
@@ -405,6 +409,23 @@
             counts.M++; findingCount++;
             addRow(S1, ['M', '', prdid, pd(prdid), '', '', '', '',
               'Medium', 'Producto existe en maestro de productos pero no aparece en ninguna entidad compuesta (PSH, PSI, Location Product, Location Source)']);
+          } else {
+            // Per-entity breakdown: report if missing from any specific entity
+            var missing = [];
+            if (ent.psh  && !inPSH[prdid])     missing.push('PSH');
+            if (ent.psi  && !inPSI[prdid])     missing.push('PSI');
+            if (ent.locPrd && !inLocProd[prdid]) missing.push('Location Product');
+            if (ent.locSrc && !inLocSrc[prdid]) missing.push('Location Source');
+            if (missing.length > 0 && missing.length < 4) {
+              var present = [];
+              if (ent.psh  && inPSH[prdid])      present.push('PSH');
+              if (ent.psi  && inPSI[prdid])      present.push('PSI');
+              if (ent.locPrd && inLocProd[prdid]) present.push('Location Product');
+              if (ent.locSrc && inLocSrc[prdid]) present.push('Location Source');
+              findingCount++;
+              addRow(S1, ['M', '', prdid, pd(prdid), '', '', '', '',
+                'Info', 'Producto aparece en: ' + (present.join(', ') || 'ninguna') + ' — NO aparece en: ' + missing.join(', ')]);
+            }
           }
         });
       }
@@ -416,6 +437,20 @@
             counts.N++; findingCount++;
             addRow(S1, ['N', '', '', '', locid, ld(locid), '', '',
               'Medium', 'Ubicación existe en maestro de ubicaciones pero no aparece en ninguna entidad compuesta (PSH, Location Product, Location Source)']);
+          } else {
+            var missing = [];
+            if (ent.psh    && !inLocPSH[locid])    missing.push('PSH');
+            if (ent.locPrd && !inLocLocProd[locid]) missing.push('Location Product');
+            if (ent.locSrc && !inLocLocSrc[locid]) missing.push('Location Source');
+            if (missing.length > 0 && missing.length < 3) {
+              var present = [];
+              if (ent.psh    && inLocPSH[locid])    present.push('PSH');
+              if (ent.locPrd && inLocLocProd[locid]) present.push('Location Product');
+              if (ent.locSrc && inLocLocSrc[locid]) present.push('Location Source');
+              findingCount++;
+              addRow(S1, ['N', '', '', '', locid, ld(locid), '', '',
+                'Info', 'Ubicación aparece en: ' + (present.join(', ') || 'ninguna') + ' — NO aparece en: ' + missing.join(', ')]);
+            }
           }
         });
       }
@@ -428,6 +463,11 @@
             counts.O++; findingCount++;
             addRow(S1, ['O', '', '', '', '', '', resid, rd(resid),
               'Medium', 'Recurso existe en maestro de recursos pero no aparece en ninguna fuente de producción (PSR)']);
+          } else if (ent.psr && !inResPSR[resid]) {
+            // Resource used somewhere but not tracked via PSR directly (edge case info)
+            findingCount++;
+            addRow(S1, ['O', '', '', '', '', '', resid, rd(resid),
+              'Info', 'Recurso aparece en maestro pero no está asignado a ningún SOURCEID en PSR']);
           }
         });
       }
