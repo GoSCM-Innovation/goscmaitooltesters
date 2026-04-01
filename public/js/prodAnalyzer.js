@@ -125,7 +125,7 @@
           setStatusPA('Indexando Location (lookup en memoria)...', 44);
           log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + ent.loc);
           var nLoc = await fetchAndIndex(baseOData + ent.loc, logEl, paFilter,
-            'LOCID,LOCDESCR',
+            'LOCID,LOCDESCR,LOCTYPE',
             function (rows) {
               rows.forEach(function (r) { var k = str(r.LOCID); if (k) PA_LOC[k] = r; });
               return Promise.resolve();
@@ -221,7 +221,7 @@
     }
 
     /* ═══════════════════════════════════════════════════════════════
-       PA — ANÁLISIS + EXPORTACIÓN STREAMING A EXCEL
+       PA — ANÁLISIS + EXPORTACIÓN: 9 HOJAS POR ENTIDAD
        ═══════════════════════════════════════════════════════════════ */
     async function paAnalyzeAndExport(
       ent, PA_PRD, PA_LOC, PA_RES, PA_RES_LOC,
@@ -230,12 +230,101 @@
     ) {
       function pd(id) { var p = PA_PRD[id] || {}; return str(p.PRDDESCR  || ''); }
       function pm(id) { var p = PA_PRD[id] || {}; return str(p.MATTYPEID || ''); }
-      function ld(id) { var l = PA_LOC[id] || {}; return str(l.LOCDESCR  || ''); }
+      function lct(id){ var l = PA_LOC[id]  || {}; return str(l.LOCTYPE   || ''); }
+      function yn(b)  { return b ? 'Sí' : 'No'; }
 
-      /* ── Workbook setup ─────────────────────────────────────────── */
+      /* ── PHASE A: leer todas las tablas IDB a memoria ───────────────── */
+      setStatusPA('Cargando datos desde IndexedDB...', 75);
+      var allLocProd = ent.locPrd ? (await idbGetAll('pa_loc_prod')) : [];
+      var allLocSrc  = ent.locSrc ? (await idbGetAll('pa_loc_src'))  : [];
+      var allPsi     = ent.psi    ? (await idbGetAll('pa_psi'))      : [];
+      var allPsr     = ent.psr    ? (await idbGetAll('pa_psr'))      : [];
+      log(logEl, 'ok', timer.fmt() + ' IDB cargado — LocProd:' + allLocProd.length +
+        ' LocSrc:' + allLocSrc.length + ' PSI:' + allPsi.length + ' PSR:' + allPsr.length);
+
+      /* ── PHASE B: construir índices cruzados ────────────────────────── */
+      setStatusPA('Construyendo índices cruzados...', 77);
+
+      // PSH → índices desde pshBySid (ya en memoria)
+      var pshByPrdLoc  = {};   // "PRDID|LOCID" → [SOURCEID]  solo SOURCETYPE=P
+      var pshSidLocid  = {};   // SOURCEID → { LOCID, PRDID } del registro P principal
+      var pshSidHasP   = {};   // SOURCEID → bool
+      var pshPrdSetP   = {};   // PRDID → true  (solo outputs SOURCETYPE=P)
+      Object.keys(pshBySid).forEach(function(sid) {
+        var recs = pshBySid[sid];
+        var primary = recs.find(function(r){ return r.SOURCETYPE === 'P'; }) || recs[0];
+        pshSidLocid[sid] = { LOCID: primary.LOCID, PRDID: primary.PRDID };
+        pshSidHasP[sid]  = recs.some(function(r){ return r.SOURCETYPE === 'P'; });
+        recs.forEach(function(r) {
+          if (r.SOURCETYPE !== 'P' || !r.PRDID || !r.LOCID) return;
+          var k = r.PRDID + '|' + r.LOCID;
+          if (!pshByPrdLoc[k]) pshByPrdLoc[k] = [];
+          pshByPrdLoc[k].push(sid);
+          pshPrdSetP[r.PRDID] = true;
+        });
+      });
+
+      // Location Product
+      var locPrdSet    = new Set();   // "LOCID|PRDID"
+      var locPrdPrdSet = new Set();   // todos los PRDID en LocProd
+      allLocProd.forEach(function(r) {
+        var loc = str(r.LOCID), prd = str(r.PRDID);
+        if (loc && prd) { locPrdSet.add(loc + '|' + prd); locPrdPrdSet.add(prd); }
+      });
+
+      // Location Source
+      var locSrcByPrdLoc   = {};         // "PRDID|LOCID(dest)" → [{LOCFR,TLEADTIME}]
+      var locSrcByPrdLocfr = new Set();  // "PRDID|LOCFR(orig)"
+      var locSrcPrdSet     = new Set();  // todos los PRDID en LocSrc
+      allLocSrc.forEach(function(r) {
+        var prd = str(r.PRDID), locfr = str(r.LOCFR || ''), locid = str(r.LOCID || ''), tlt = str(r.TLEADTIME || '');
+        if (prd) locSrcPrdSet.add(prd);
+        if (prd && locid) {
+          var k = prd + '|' + locid;
+          if (!locSrcByPrdLoc[k]) locSrcByPrdLoc[k] = [];
+          locSrcByPrdLoc[k].push({ LOCFR: locfr, TLEADTIME: tlt });
+        }
+        if (prd && locfr) locSrcByPrdLocfr.add(prd + '|' + locfr);
+      });
+
+      // PSI
+      var psiPrdSet     = new Set();  // todos los componentes PRDID en PSI
+      var psiBySourceid = {};         // SOURCEID → [rows]
+      allPsi.forEach(function(r) {
+        var sid = str(r.SOURCEID), prd = str(r.PRDID || '');
+        if (prd) psiPrdSet.add(prd);
+        if (sid) { if (!psiBySourceid[sid]) psiBySourceid[sid] = []; psiBySourceid[sid].push(r); }
+      });
+
+      // PSR
+      var psrResidSet   = new Set();   // todos los RESID en PSR
+      var psrByResidLoc = new Set();   // "RESID|LOCID"
+      var psrBySourceid = {};          // SOURCEID → [rows]
+      allPsr.forEach(function(r) {
+        var sid = str(r.SOURCEID), resid = str(r.RESID || '');
+        if (resid) psrResidSet.add(resid);
+        if (sid) {
+          if (!psrBySourceid[sid]) psrBySourceid[sid] = [];
+          psrBySourceid[sid].push(r);
+          if (pshSidLocid[sid] && pshSidLocid[sid].LOCID && resid)
+            psrByResidLoc.add(resid + '|' + pshSidLocid[sid].LOCID);
+        }
+      });
+
+      // Resource Location
+      var resLocSet      = new Set();   // "RESID|LOCID"
+      var resLocResidSet = new Set();   // todos los RESID en ResLoc
+      Object.keys(PA_RES_LOC).forEach(function(resid) {
+        resLocResidSet.add(resid);
+        PA_RES_LOC[resid].forEach(function(e) { if (e.LOCID) resLocSet.add(resid + '|' + e.LOCID); });
+      });
+
+      /* ── Workbook setup ─────────────────────────────────────────────── */
+      setStatusPA('Inicializando workbook...', 79);
       var wb    = new ExcelJS.Workbook();
       var today = new Date().toISOString().slice(0, 10);
       var GOLD  = 'FFF7A800', ORANGE = 'FFE8622A', NAVY = 'FF0B1120';
+      var C_RED = 'FFFFCCCC', C_YEL  = 'FFFFFFCC';
 
       function makeSheet(name, tabArgb, headers) {
         var ws = wb.addWorksheet(name, {
@@ -243,347 +332,338 @@
           properties: { tabColor: { argb: tabArgb } }
         });
         ws.addRow(headers);
-        ws.getRow(1).eachCell(function (cell) {
+        ws.getRow(1).eachCell(function(cell) {
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GOLD } };
           cell.font = { bold: true, name: 'DM Sans', size: 10, color: { argb: NAVY } };
-          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
           cell.border = { bottom: { style: 'medium', color: { argb: ORANGE } } };
         });
-        ws.getRow(1).height = 20;
-        return { ws: ws, colW: headers.map(function (h) { return h.length; }) };
+        ws.getRow(1).height = 22;
+        return { ws: ws, colW: headers.map(function(h) { return h.length; }) };
       }
 
-      function addRow(s, rowData) {
-        s.ws.addRow(rowData);
-        rowData.forEach(function (v, ci) {
+      function addRow(s, data, fillArgb) {
+        var row = s.ws.addRow(data);
+        if (fillArgb) {
+          row.eachCell({ includeEmpty: true }, function(cell) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillArgb } };
+          });
+        }
+        data.forEach(function(v, ci) {
           var len = v != null ? String(v).length : 0;
-          if (len > s.colW[ci]) s.colW[ci] = len;
+          if (len > (s.colW[ci] || 0)) s.colW[ci] = len;
         });
       }
 
       function finalizeSheet(s) {
-        s.ws.columns.forEach(function (col, ci) {
+        s.ws.columns.forEach(function(col, ci) {
           col.width = Math.min(Math.max((s.colW[ci] || 10) + 2, 10), 60);
         });
       }
 
-      var S0 = makeSheet('Summary',             'FFF7A800',
-        ['Indicador', 'Valor', 'Descripción']);
-      var S1 = makeSheet('Findings',            'FFFF6B6B',
-        ['Caso', 'SOURCEID', 'Producto (Output)', 'Descripción Producto',
-         'Planta', 'Descripción Planta',
-         'Componente / Recurso', 'Descripción Comp/Res',
-         'Severidad', 'Detalle']);
-      var S2 = makeSheet('Production Coverage', 'FF29ABE2',
-        ['Producto', 'Descripción', 'Tipo Material',
-         'Tiene PSH', 'Cantidad PSH', 'Plantas', 'SOURCEIDs']);
-      var S3 = makeSheet('Purchased Inputs',    'FFE8622A',
-        ['Componente', 'Descripción', 'Tipo Material',
-         'Usado en Productos', 'Usado en Plantas',
-         'Arcos de Proveedor', 'Lead Times']);
-
-      /* ── Counters ─────────────────────────────────────────────────── */
-      var counts = { A: 0, B: 0, C: 0, J: 0, K: 0, L: 0, M: 0, N: 0, O: 0 };
-      var findingCount = 0;
-      var psiCompUsage = {};   // compId → { prds: {}, locs: {} }
-
-      // Track all products/locations/resources used in composite entities
-      var usedPrds = {};  // products seen in PSH, PSI, LocProd, LocSrc
-      var usedLocs = {};  // locations seen in PSH, LocProd, LocSrc
-      var usedRes  = {};  // resources seen in PSR
-      // Per-entity tracking for orphan breakdown
-      var inPSH = {}, inPSI = {}, inLocProd = {}, inLocSrc = {};
-      var inLocPSH = {}, inLocLocProd = {}, inLocLocSrc = {};
-      var inResPSR = {};
-
-      /* ── Main loop: one iteration per SOURCEID ────────────────────── */
-      var sourceIds = Object.keys(pshBySid).sort();
-      var n = sourceIds.length;
-      var CHUNK = 100;
-
-      for (var i = 0; i < n; i += CHUNK) {
-        var batch = sourceIds.slice(i, Math.min(i + CHUNK, n));
-
-        for (var bi = 0; bi < batch.length; bi++) {
-          var sid   = batch[bi];
-          var recs  = pshBySid[sid];
-
-          // Primary record (SOURCETYPE='P') or fallback to first
-          var primary = recs.find(function (r) { return r.SOURCETYPE === 'P'; }) || recs[0];
-          var outPrd  = primary.PRDID;
-          var outLoc  = primary.LOCID;
-          var plt     = primary.PLEADTIME;
-
-          // Track usage from PSH
-          if (outPrd) { usedPrds[outPrd] = true; inPSH[outPrd] = true; }
-          if (outLoc) { usedLocs[outLoc] = true; inLocPSH[outLoc] = true; }
-          recs.forEach(function (r) {
-            if (r.PRDID) { usedPrds[r.PRDID] = true; inPSH[r.PRDID] = true; }
-            if (r.LOCID) { usedLocs[r.LOCID] = true; inLocPSH[r.LOCID] = true; }
-          });
-
-          /* Case C🔴 — PLEADTIME ausente o cero */
-          if (!plt || plt === '0') {
-            counts.C++; findingCount++;
-            addRow(S1, ['C', sid, outPrd, pd(outPrd), outLoc, ld(outLoc), '', '',
-              'High', 'PLEADTIME no definido o cero en la fuente de producción primaria']);
-          }
-
-          /* Case K ℹ️ — co-productos sin registro primario */
-          var hasPrimary = recs.some(function (r) { return r.SOURCETYPE === 'P'; });
-          var hasCoProd  = recs.some(function (r) { return r.SOURCETYPE === 'C'; });
-          if (hasCoProd && !hasPrimary) {
-            counts.K++; findingCount++;
-            addRow(S1, ['K', sid, outPrd, pd(outPrd), outLoc, ld(outLoc), '', '',
-              'Info',
-              'SOURCEID tiene co-productos (SOURCETYPE=C) pero ningún registro primario (SOURCETYPE=P)']);
-          }
-
-          /* Cases A🔴, B🔴, J ℹ️ — requieren PSI */
-          if (ent.psi) {
-            var psiRecs = await idbGetByIndex('pa_psi', 'by_sourceid', sid);
-
-            if (!psiRecs.length) {
-              /* Case A🔴 — BOM vacío */
-              counts.A++; findingCount++;
-              addRow(S1, ['A', sid, outPrd, pd(outPrd), outLoc, ld(outLoc), '', '',
-                'High', 'Fuente de producción sin ningún componente PSI (BOM vacío)']);
-            } else {
-              psiRecs.forEach(function (pi) {
-                var compId = str(pi.PRDID  || '');
-                var coeff  = str(pi.COMPONENTCOEFFICIENT || '');
-
-                // Track usage from PSI
-                if (compId) { usedPrds[compId] = true; inPSI[compId] = true; }
-
-                /* Case B🔴 — coeficiente cero o nulo */
-                if (coeff === '' || Number(coeff) === 0) {
-                  counts.B++; findingCount++;
-                  addRow(S1, ['B', sid, outPrd, pd(outPrd), outLoc, ld(outLoc),
-                    compId, pd(compId), 'High',
-                    'Componente con coeficiente de consumo = 0 o no definido']);
-                }
-
-                /* Case J ℹ️ — componente también es output de otra fuente (semi-elaborado) */
-                if (compId && pshPrdSet[compId]) {
-                  counts.J++;
-                  addRow(S1, ['J', sid, outPrd, pd(outPrd), outLoc, ld(outLoc),
-                    compId, pd(compId), 'Info',
-                    'Componente también aparece como salida de otra fuente de producción (semi-elaborado)']);
-                }
-
-                /* Acumular uso para hoja Purchased Inputs */
-                if (compId) {
-                  if (!psiCompUsage[compId]) psiCompUsage[compId] = { prds: {}, locs: {} };
-                  psiCompUsage[compId].prds[outPrd] = true;
-                  psiCompUsage[compId].locs[outLoc] = true;
-                }
-              });
-            }
-          }
-
-          /* Track usage from PSR */
-          if (ent.psr) {
-            var psrRecs = await idbGetByIndex('pa_psr', 'by_sourceid', sid);
-            psrRecs.forEach(function (pr) {
-              var resId = str(pr.RESID || '');
-              if (resId) { usedRes[resId] = true; inResPSR[resId] = true; }
-            });
-          }
-        }
-
-        await new Promise(function (r) { setTimeout(r, 0); });
-        var done = Math.min(i + CHUNK, n);
-        setStatusPA('Analizando ' + done + '/' + n + ' fuentes...', 75 + Math.round((done / n) * 10));
-        if (logEl && i > 0 && i % 1000 === 0)
-          log(logEl, 'info', timer.fmt() + ' Analizados ' + done + '/' + n + ' SOURCEIDs...');
+      // Stats por hoja para el Resumen
+      var STATS = {};
+      function initStat(name) { STATS[name] = { total: 0, red: 0, yel: 0, ok: 0 }; }
+      function track(name, fill) {
+        if (!STATS[name]) return;
+        STATS[name].total++;
+        if      (fill === C_RED) STATS[name].red++;
+        else if (fill === C_YEL) STATS[name].yel++;
+        else                     STATS[name].ok++;
       }
 
-      /* ── Track usage from Location Product & Location Source (IDB) ── */
-      setStatusPA('Indexando uso en Location Product y Location Source...', 86);
-      if (ent.locPrd) {
-        var lpCursor = await idbGetAll('pa_loc_prod');
-        lpCursor.forEach(function (r) {
-          var p = str(r.PRDID || ''); if (p) { usedPrds[p] = true; inLocProd[p] = true; }
-          var l = str(r.LOCID || ''); if (l) { usedLocs[l] = true; inLocLocProd[l] = true; }
-        });
-      }
-      if (ent.locSrc) {
-        var lsCursor = await idbGetAll('pa_loc_src');
-        lsCursor.forEach(function (r) {
-          var p = str(r.PRDID || ''); if (p) { usedPrds[p] = true; inLocSrc[p] = true; }
-          var lf = str(r.LOCFR || ''); if (lf) { usedLocs[lf] = true; inLocLocSrc[lf] = true; }
-          var lt = str(r.LOCID || ''); if (lt) { usedLocs[lt] = true; inLocLocSrc[lt] = true; }
-        });
-      }
+      // Hoja Resumen — se llena al final
+      var S0 = makeSheet('Resumen', 'FF34D399',
+        ['#', 'Hoja', 'Total registros', 'Alertas 🔴', 'Advertencias 🟡', 'OK ✅', '% Consistencia']);
 
-      /* ── Cases M, N, O — Orphan master data (post-loop) ─────────── */
-      setStatusPA('Detectando datos maestros huérfanos...', 88);
-
-      /* Case M🟡 — Producto en maestro simple sin uso en ningún dato compuesto */
+      /* ── HOJA 1: PRODUCT ────────────────────────────────────────────── */
       if (ent.prd) {
-        Object.keys(PA_PRD).sort().forEach(function (prdid) {
-          if (!usedPrds[prdid]) {
-            counts.M++; findingCount++;
-            addRow(S1, ['M', '', prdid, pd(prdid), '', '', '', '',
-              'Medium', 'Producto existe en maestro de productos pero no aparece en ninguna entidad compuesta (PSH, PSI, Location Product, Location Source)']);
-          } else {
-            // Per-entity breakdown: report if missing from any specific entity
-            var missing = [];
-            if (ent.psh  && !inPSH[prdid])     missing.push('PSH');
-            if (ent.psi  && !inPSI[prdid])     missing.push('PSI');
-            if (ent.locPrd && !inLocProd[prdid]) missing.push('Location Product');
-            if (ent.locSrc && !inLocSrc[prdid]) missing.push('Location Source');
-            if (missing.length > 0 && missing.length < 4) {
-              var present = [];
-              if (ent.psh  && inPSH[prdid])      present.push('PSH');
-              if (ent.psi  && inPSI[prdid])      present.push('PSI');
-              if (ent.locPrd && inLocProd[prdid]) present.push('Location Product');
-              if (ent.locSrc && inLocSrc[prdid]) present.push('Location Source');
-              findingCount++;
-              addRow(S1, ['M', '', prdid, pd(prdid), '', '', '', '',
-                'Info', 'Producto aparece en: ' + (present.join(', ') || 'ninguna') + ' — NO aparece en: ' + missing.join(', ')]);
-            }
-          }
+        initStat('Product');
+        var S1 = makeSheet('Product', 'FF29ABE2',
+          ['PRDID', 'PRDDESCR', 'MATTYPEID',
+           'En PSH (output)', 'En PSI (componente)',
+           'En Location Product', 'En Location Source',
+           'Observación']);
+        Object.keys(PA_PRD).sort().forEach(function(prdid) {
+          var inPSH = !!pshPrdSetP[prdid];
+          var inPSI = psiPrdSet.has(prdid);
+          var inLP  = locPrdPrdSet.has(prdid);
+          var inLS  = locSrcPrdSet.has(prdid);
+          var obs = [];
+          if (!inLP)           obs.push('Sin cobertura logística (no está en Location Product)');
+          if (!inPSH && !inLS) obs.push('Sin fuente de producción ni arco de abastecimiento');
+          else if (!inPSH)     obs.push('Sin fuente de producción propia (no está en PSH)');
+          if (!inPSH && inPSI) obs.push('Solo actúa como componente (PSI)');
+          if (!obs.length)     obs.push('OK');
+          var fill = (!inLP || (!inPSH && !inLS)) ? C_RED : (!inPSH || !inLS) ? C_YEL : null;
+          addRow(S1, [prdid, pd(prdid), pm(prdid), yn(inPSH), yn(inPSI), yn(inLP), yn(inLS), obs.join(' | ')], fill);
+          track('Product', fill);
         });
+        finalizeSheet(S1);
+        setStatusPA('Hoja Product lista...', 82);
+        await new Promise(function(r){ setTimeout(r, 0); });
       }
 
-      /* Case N🟡 — Ubicación en maestro simple sin uso en ningún dato compuesto */
-      if (ent.loc) {
-        Object.keys(PA_LOC).sort().forEach(function (locid) {
-          if (!usedLocs[locid]) {
-            counts.N++; findingCount++;
-            addRow(S1, ['N', '', '', '', locid, ld(locid), '', '',
-              'Medium', 'Ubicación existe en maestro de ubicaciones pero no aparece en ninguna entidad compuesta (PSH, Location Product, Location Source)']);
-          } else {
-            var missing = [];
-            if (ent.psh    && !inLocPSH[locid])    missing.push('PSH');
-            if (ent.locPrd && !inLocLocProd[locid]) missing.push('Location Product');
-            if (ent.locSrc && !inLocLocSrc[locid]) missing.push('Location Source');
-            if (missing.length > 0 && missing.length < 3) {
-              var present = [];
-              if (ent.psh    && inLocPSH[locid])    present.push('PSH');
-              if (ent.locPrd && inLocLocProd[locid]) present.push('Location Product');
-              if (ent.locSrc && inLocLocSrc[locid]) present.push('Location Source');
-              findingCount++;
-              addRow(S1, ['N', '', '', '', locid, ld(locid), '', '',
-                'Info', 'Ubicación aparece en: ' + (present.join(', ') || 'ninguna') + ' — NO aparece en: ' + missing.join(', ')]);
-            }
-          }
-        });
-      }
-
-      /* Case O🟡 — Recurso en maestro simple sin uso en ningún dato compuesto */
+      /* ── HOJA 2: RESOURCE ───────────────────────────────────────────── */
       if (ent.res) {
-        var rd = function (id) { var r = PA_RES[id] || {}; return str(r.RESDESCR || ''); };
-        Object.keys(PA_RES).sort().forEach(function (resid) {
-          if (!usedRes[resid]) {
-            counts.O++; findingCount++;
-            addRow(S1, ['O', '', '', '', '', '', resid, rd(resid),
-              'Medium', 'Recurso existe en maestro de recursos pero no aparece en ninguna fuente de producción (PSR)']);
-          } else if (ent.psr && !inResPSR[resid]) {
-            // Resource used somewhere but not tracked via PSR directly (edge case info)
-            findingCount++;
-            addRow(S1, ['O', '', '', '', '', '', resid, rd(resid),
-              'Info', 'Recurso aparece en maestro pero no está asignado a ningún SOURCEID en PSR']);
-          }
+        initStat('Resource');
+        var S2 = makeSheet('Resource', 'FFa78bfa',
+          ['RESID', 'RESDESCR',
+           'En PSR', 'En Resource Location',
+           'Observación']);
+        Object.keys(PA_RES).sort().forEach(function(resid) {
+          var inPSR = psrResidSet.has(resid);
+          var inRL  = resLocResidSet.has(resid);
+          var obs = [];
+          if (!inPSR && !inRL) obs.push('Recurso huérfano: sin uso en producción ni planta asignada');
+          else if (!inPSR)     obs.push('Sin uso en producción (no aparece en PSR)');
+          else if (!inRL)      obs.push('Sin planta asignada en Resource Location');
+          if (!obs.length)     obs.push('OK');
+          var fill = (!inPSR && !inRL) ? C_RED : (!inPSR || !inRL) ? C_YEL : null;
+          addRow(S2, [resid, str((PA_RES[resid] || {}).RESDESCR || ''), yn(inPSR), yn(inRL), obs.join(' | ')], fill);
+          track('Resource', fill);
         });
+        finalizeSheet(S2);
+        setStatusPA('Hoja Resource lista...', 84);
+        await new Promise(function(r){ setTimeout(r, 0); });
       }
 
-      /* ── Case L ℹ️ + Production Coverage (post-loop) ─────────────── */
-      setStatusPA('Generando Production Coverage...', 91);
-
-      // Build product → PSH list from pshBySid
-      var prdToPsh = {};
-      Object.keys(pshBySid).forEach(function (sid) {
-        pshBySid[sid].forEach(function (r) {
-          if (r.SOURCETYPE !== 'P' || !r.PRDID) return;
-          if (!prdToPsh[r.PRDID]) prdToPsh[r.PRDID] = [];
-          prdToPsh[r.PRDID].push({ sid: sid, loc: r.LOCID });
-        });
-      });
-
-      // All products: from master (if loaded) or from PSH outputs
-      var allPrdIds = Object.keys(PA_PRD).length > 0
-        ? Object.keys(PA_PRD).sort()
-        : Object.keys(pshPrdSet).sort();
-
-      allPrdIds.forEach(function (prdid) {
-        var recs   = prdToPsh[prdid] || [];
-        var hasRec = recs.length > 0;
-        var plants = recs.map(function (r) { return r.loc; }).filter(Boolean).join(', ');
-        var sids   = recs.map(function (r) { return r.sid; }).filter(Boolean).join(', ');
-
-        /* Case L ℹ️ — producto en maestro sin PSH */
-        if (!hasRec && ent.prd) {
-          counts.L++;
-          addRow(S1, ['L', '', prdid, pd(prdid), '', '', '', '', 'Info',
-            'Producto en maestro de productos sin ninguna fuente de producción (PSH) configurada']);
-        }
-
-        addRow(S2, [prdid, pd(prdid), pm(prdid),
-          hasRec ? 'Sí' : 'No', recs.length, plants, sids]);
-      });
-
-      /* ── Purchased Inputs (post-loop) ─────────────────────────────── */
-      setStatusPA('Generando Purchased Inputs...', 94);
-      var purchasedComps = Object.keys(psiCompUsage)
-        .filter(function (c) { return !pshPrdSet[c]; })
-        .sort();
-
-      for (var pi = 0; pi < purchasedComps.length; pi++) {
-        var compId  = purchasedComps[pi];
-        var usage   = psiCompUsage[compId];
-        var prdsStr = Object.keys(usage.prds).sort().join(', ');
-        var locsStr = Object.keys(usage.locs).sort().join(', ');
-
-        var suppArcs = [], ltList = [];
-        if (ent.locSrc) {
-          var srcRows = await idbGetByIndex('pa_loc_src', 'by_prdid', compId);
-          srcRows.forEach(function (r) {
-            var supp = str(r.LOCFR); if (!supp) return;
-            suppArcs.push(supp + ' → ' + str(r.LOCID || ''));
-            var lt = str(r.TLEADTIME || '');
-            if (lt) ltList.push(supp + ':' + lt);
+      /* ── HOJA 3: RESOURCE LOCATION ──────────────────────────────────── */
+      if (ent.resLoc) {
+        initStat('Resource Location');
+        var S3 = makeSheet('Resource Location', 'FFFF9F43',
+          ['RESID', 'LOCID',
+           'RESID+LOCID usado en PSR',
+           'Observación']);
+        Object.keys(PA_RES_LOC).sort().forEach(function(resid) {
+          PA_RES_LOC[resid].forEach(function(e) {
+            var locid = e.LOCID;
+            var used  = psrByResidLoc.has(resid + '|' + locid);
+            var obs   = used ? 'OK' : 'Recurso asignado a planta pero no utilizado en PSR para esta planta';
+            var fill  = used ? null : C_YEL;
+            addRow(S3, [resid, locid, yn(used), obs], fill);
+            track('Resource Location', fill);
           });
-        }
-
-        addRow(S3, [
-          compId, pd(compId), pm(compId),
-          prdsStr, locsStr,
-          suppArcs.join(' | ') || 'Sin arco de proveedor',
-          ltList.join(' | ')   || ''
-        ]);
+        });
+        finalizeSheet(S3);
+        setStatusPA('Hoja Resource Location lista...', 85);
+        await new Promise(function(r){ setTimeout(r, 0); });
       }
 
-      /* ── Summary sheet ────────────────────────────────────────────── */
-      var caseInfo = [
-        ['A', '🔴 Alto',  'PSH con BOM vacío (sin componentes PSI)'],
-        ['B', '🔴 Alto',  'PSI con coeficiente de consumo = 0 o no definido'],
-        ['C', '🔴 Alto',  'PSH sin PLEADTIME o con valor cero'],
-        ['M', '🟡 Medio', 'Producto en maestro sin uso en ninguna entidad compuesta'],
-        ['N', '🟡 Medio', 'Ubicación en maestro sin uso en ninguna entidad compuesta'],
-        ['O', '🟡 Medio', 'Recurso en maestro sin uso en ninguna entidad compuesta (PSR)'],
-        ['J', 'ℹ️ Info',  'Componente que también es output de otra fuente (semi-elaborado)'],
-        ['K', 'ℹ️ Info',  'SOURCEID con co-productos pero sin registro primario (SOURCETYPE=P)'],
-        ['L', 'ℹ️ Info',  'Producto en maestro sin fuente de producción configurada']
+      /* ── HOJA 4: LOCATION PRODUCT ───────────────────────────────────── */
+      if (ent.locPrd) {
+        initStat('Location Product');
+        var S4 = makeSheet('Location Product', 'FF10B981',
+          ['LOCID', 'PRDID',
+           'PRDID+LOCID en PSH',
+           'PRDID+LOCID en Location Source (destino / origen / ambos / ninguno)',
+           'Observación']);
+        allLocProd.forEach(function(r) {
+          var locid = str(r.LOCID), prdid = str(r.PRDID);
+          if (!locid || !prdid) return;
+          var inPSH    = !!pshByPrdLoc[prdid + '|' + locid];
+          var inLSdest = locSrcByPrdLoc.hasOwnProperty(prdid + '|' + locid);
+          var inLSorig = locSrcByPrdLocfr.has(prdid + '|' + locid);
+          var lsVal = (inLSdest && inLSorig) ? 'Destino y Origen'
+                    : inLSdest               ? 'Destino'
+                    : inLSorig               ? 'Origen'
+                    :                          'Ninguno';
+          var obs = [];
+          if (!inPSH && lsVal === 'Ninguno') obs.push('Sin fuente de producción ni arco de abastecimiento');
+          else if (!inPSH)                   obs.push('Sin fuente de producción en esta planta');
+          if (!obs.length)                   obs.push('OK');
+          var fill = (!inPSH && lsVal === 'Ninguno') ? C_RED : !inPSH ? C_YEL : null;
+          addRow(S4, [locid, prdid, yn(inPSH), lsVal, obs.join(' | ')], fill);
+          track('Location Product', fill);
+        });
+        finalizeSheet(S4);
+        setStatusPA('Hoja Location Product lista...', 87);
+        await new Promise(function(r){ setTimeout(r, 0); });
+      }
+
+      /* ── HOJA 5: LOCATION SOURCE ────────────────────────────────────── */
+      if (ent.locSrc) {
+        initStat('Location Source');
+        var S5 = makeSheet('Location Source', 'FFE8622A',
+          ['PRDID', 'LOCFR', 'LOCID', 'TLEADTIME',
+           'LOCID+PRDID en Location Product',
+           'LOCFR+PRDID en Location Product',
+           'Observación']);
+        allLocSrc.forEach(function(r) {
+          var prd = str(r.PRDID), locfr = str(r.LOCFR || ''), locid = str(r.LOCID || ''), tlt = str(r.TLEADTIME || '');
+          var destInLP  = locPrdSet.has(locid + '|' + prd);
+          var origInLP  = locPrdSet.has(locfr + '|' + prd);
+          var locfrType = lct(locfr);
+          var noLt      = !tlt || tlt === '0';
+          var obs = [];
+          if (!destInLP)                              obs.push('Destino no habilitado en Location Product');
+          if (!origInLP)                              obs.push('Origen no habilitado en Location Product');
+          if (locfrType.toUpperCase() === 'V')        obs.push('Proveedor externo (LOCTYPE=V)');
+          else if (locfrType)                         obs.push('Origen interno (LOCTYPE=' + locfrType + ')');
+          if (noLt)                                   obs.push('Lead time no configurado');
+          if (!obs.length)                            obs.push('OK');
+          var fill = !destInLP ? C_RED : (noLt || !origInLP) ? C_YEL : null;
+          addRow(S5, [prd, locfr, locid, tlt, yn(destInLP), yn(origInLP), obs.join(' | ')], fill);
+          track('Location Source', fill);
+        });
+        finalizeSheet(S5);
+        setStatusPA('Hoja Location Source lista...', 89);
+        await new Promise(function(r){ setTimeout(r, 0); });
+      }
+
+      /* ── HOJA 6: PRODUCTION SOURCE HEADER ──────────────────────────── */
+      if (ent.psh) {
+        initStat('Prod Source Header');
+        var S6 = makeSheet('Prod Source Header', 'FFF7A800',
+          ['SOURCEID', 'PRDID output', 'LOCID planta', 'SOURCETYPE(s)', 'PLEADTIME', 'OUTPUTCOEFFICIENT',
+           'PRDID+LOCID en Location Product',
+           'Tiene ítems PSI (BOM)',
+           'Tiene recursos PSR',
+           'Observación']);
+        Object.keys(pshBySid).sort().forEach(function(sid) {
+          var recs    = pshBySid[sid];
+          var primary = recs.find(function(r){ return r.SOURCETYPE === 'P'; }) || recs[0];
+          var outPrd  = primary.PRDID, outLoc = primary.LOCID;
+          var plt     = primary.PLEADTIME || '', coeff = primary.OUTPUTCOEFFICIENT || '';
+          var stypes  = recs.map(function(r){ return r.SOURCETYPE; })
+                            .filter(function(v,i,a){ return a.indexOf(v) === i; }).join('/');
+          var inLP    = locPrdSet.has(outLoc + '|' + outPrd);
+          var hasPSI  = !!psiBySourceid[sid];
+          var hasPSR  = !!psrBySourceid[sid];
+          var noLt    = !plt || plt === '0';
+          var hasP    = pshSidHasP[sid];
+          var multi   = (pshByPrdLoc[outPrd + '|' + outLoc] || []).length > 1;
+          var obs = [];
+          if (!hasPSI) obs.push('BOM vacío: sin componentes en PSI');
+          if (noLt)    obs.push('PLEADTIME = 0 o no definido');
+          if (!inLP)   obs.push('PRDID+LOCID sin cobertura en Location Product');
+          if (!hasP)   obs.push('Sin registro SOURCETYPE=P');
+          if (multi)   obs.push('Múltiples fuentes (>1 SOURCEID) para mismo PRDID+LOCID — verificar cuotas');
+          if (!obs.length) obs.push('OK');
+          var fill = (!hasPSI || noLt || !inLP) ? C_RED : (!hasP || multi) ? C_YEL : null;
+          addRow(S6, [sid, outPrd, outLoc, stypes, plt, coeff,
+            yn(inLP), yn(hasPSI), yn(hasPSR), obs.join(' | ')], fill);
+          track('Prod Source Header', fill);
+        });
+        finalizeSheet(S6);
+        setStatusPA('Hoja Prod Source Header lista...', 91);
+        await new Promise(function(r){ setTimeout(r, 0); });
+      }
+
+      /* ── HOJA 7: PRODUCTION SOURCE ITEM ────────────────────────────── */
+      if (ent.psi) {
+        initStat('Prod Source Item');
+        var S7 = makeSheet('Prod Source Item', 'FF06B6D4',
+          ['SOURCEID', 'PRDID output', 'LOCID planta', 'PRDID componente', 'COMPONENTCOEFFICIENT',
+           'Tipo componente',
+           'PRDID comp+LOCID en Location Product',
+           'En Location Source (insumo)',
+           'LOCFR origen', 'LOCTYPE origen',
+           'LOCFR+PRDID en Location Product',
+           'Observación']);
+        var PSI_CHUNK = 300;
+        for (var pii = 0; pii < allPsi.length; pii += PSI_CHUNK) {
+          allPsi.slice(pii, pii + PSI_CHUNK).forEach(function(r) {
+            var sid    = str(r.SOURCEID);
+            var comp   = str(r.PRDID || '');
+            var coeff  = str(r.COMPONENTCOEFFICIENT || '');
+            var info   = pshSidLocid[sid] || {};
+            var locid  = info.LOCID || '';
+            var outPrd = info.PRDID || '';
+            var noSrc  = !locid;
+            var isSemi = !!(locid && pshByPrdLoc[comp + '|' + locid]);
+            var tipo   = noSrc ? 'No determinado' : isSemi ? 'Semielaborado' : 'Insumo';
+            var compInLP = locid ? locPrdSet.has(locid + '|' + comp) : false;
+            var noCoeff  = !coeff || Number(coeff) === 0;
+            var lsRows   = (!isSemi && locid) ? (locSrcByPrdLoc[comp + '|' + locid] || []) : [];
+            var inLS     = lsRows.length > 0;
+            var locfrVal  = inLS ? lsRows.map(function(x){ return x.LOCFR; }).join(', ')
+                          : isSemi ? 'N/A' : '';
+            var locfrType = inLS ? lsRows.map(function(x){ return lct(x.LOCFR) || '?'; }).join(', ')
+                          : isSemi ? 'N/A' : '';
+            var locfrInLP = inLS ? yn(lsRows.some(function(x){ return locPrdSet.has(x.LOCFR + '|' + comp); }))
+                          : isSemi ? 'N/A' : '';
+            var obs = [];
+            if (noSrc)    obs.push('SOURCEID no encontrado en PSH — planta no determinada');
+            if (noCoeff)  obs.push('Coeficiente = 0 o no definido');
+            if (isSemi)   obs.push('Semielaborado: trazabilidad disponible en PSH');
+            if (!isSemi && !noSrc) {
+              if (!inLS)  obs.push('Insumo sin arco de abastecimiento en Location Source');
+              else {
+                var allV     = lsRows.every(function(x){ return (lct(x.LOCFR)||'').toUpperCase() === 'V'; });
+                var someNotV = lsRows.some(function(x){ return (lct(x.LOCFR)||'').toUpperCase() !== 'V'; });
+                if (allV)     obs.push('Insumo con proveedor externo (LOCTYPE=V)');
+                if (someNotV) obs.push('Insumo con origen de tipo no-V — revisar LOCTYPE');
+              }
+            }
+            if (!compInLP && locid) obs.push('Componente no habilitado en Location Product para esta planta');
+            if (!obs.length) obs.push('OK');
+            var fill = (noCoeff || (!isSemi && !inLS && !noSrc) || (!compInLP && locid)) ? C_RED
+                     : (noSrc || (!isSemi && inLS && lsRows.some(function(x){ return (lct(x.LOCFR)||'').toUpperCase() !== 'V'; }))) ? C_YEL
+                     : null;
+            addRow(S7, [sid, outPrd, locid, comp, coeff, tipo, yn(compInLP),
+              !isSemi && !noSrc ? yn(inLS) : 'N/A',
+              locfrVal, locfrType, locfrInLP, obs.join(' | ')], fill);
+            track('Prod Source Item', fill);
+          });
+          await new Promise(function(r){ setTimeout(r, 0); });
+          setStatusPA('Hoja Prod Source Item: ' + Math.min(pii + PSI_CHUNK, allPsi.length) + '/' + allPsi.length + '...',
+            91 + Math.round((Math.min(pii + PSI_CHUNK, allPsi.length) / Math.max(allPsi.length, 1)) * 4));
+        }
+        finalizeSheet(S7);
+        setStatusPA('Hoja Prod Source Item lista...', 95);
+        await new Promise(function(r){ setTimeout(r, 0); });
+      }
+
+      /* ── HOJA 8: PRODUCTION SOURCE RESOURCE ────────────────────────── */
+      if (ent.psr) {
+        initStat('Prod Source Resource');
+        var S8 = makeSheet('Prod Source Resource', 'FF6C63FF',
+          ['SOURCEID', 'PRDID output', 'LOCID planta', 'RESID',
+           'RESID+LOCID en Resource Location',
+           'Observación']);
+        allPsr.forEach(function(r) {
+          var sid    = str(r.SOURCEID);
+          var resid  = str(r.RESID || '');
+          var info   = pshSidLocid[sid] || {};
+          var locid  = info.LOCID || '';
+          var outPrd = info.PRDID || '';
+          var inRL   = !!(locid && resid && resLocSet.has(resid + '|' + locid));
+          var noSrc  = !locid;
+          var obs    = noSrc ? 'SOURCEID no encontrado en PSH — planta no determinada'
+                     : inRL  ? 'OK'
+                     :         'Recurso utilizado en producción sin asignación en Resource Location para planta ' + locid;
+          var fill   = noSrc ? C_YEL : inRL ? null : C_YEL;
+          addRow(S8, [sid, outPrd, locid, resid, yn(inRL), obs], fill);
+          track('Prod Source Resource', fill);
+        });
+        finalizeSheet(S8);
+        setStatusPA('Hoja Prod Source Resource lista...', 97);
+        await new Promise(function(r){ setTimeout(r, 0); });
+      }
+
+      /* ── HOJA 0: RESUMEN (llenar ahora que tenemos todos los stats) ─── */
+      setStatusPA('Generando Resumen...', 98);
+      var sheetDefs = [
+        { key: 'Product',              num: 1 },
+        { key: 'Resource',             num: 2 },
+        { key: 'Resource Location',    num: 3 },
+        { key: 'Location Product',     num: 4 },
+        { key: 'Location Source',      num: 5 },
+        { key: 'Prod Source Header',   num: 6 },
+        { key: 'Prod Source Item',     num: 7 },
+        { key: 'Prod Source Resource', num: 8 }
       ];
-
-      addRow(S0, ['Fecha análisis',               today,                 '']);
-      addRow(S0, ['Total SOURCEIDs analizados',    n,                    'Fuentes de producción únicas (PSH)']);
-      addRow(S0, ['Productos en cobertura',        allPrdIds.length,     'Productos evaluados en Production Coverage']);
-      addRow(S0, ['Insumos comprados detectados',  purchasedComps.length,'Componentes PSI sin fuente de producción propia']);
-      addRow(S0, ['Total hallazgos',               findingCount,         'Suma de todos los hallazgos encontrados']);
-      addRow(S0, ['', '', '']);
-      caseInfo.forEach(function (c) {
-        addRow(S0, ['Caso ' + c[0] + ' — ' + c[1], counts[c[0]], c[2]]);
+      sheetDefs.forEach(function(d) {
+        var s = STATS[d.key]; if (!s) return;
+        var pct  = s.total > 0 ? Math.round((s.ok / s.total) * 100) : 100;
+        var fill = s.red > 0 ? C_RED : s.yel > 0 ? C_YEL : null;
+        addRow(S0, [d.num, d.key, s.total, s.red, s.yel, s.ok, pct + '%'], fill);
       });
+      finalizeSheet(S0);
 
-      // Finalizar anchos de columna
-      [S0, S1, S2, S3].forEach(finalizeSheet);
-
-      // Generar y descargar
-      setStatusPA('Generando archivo Excel...', 97);
+      /* ── EXPORT ─────────────────────────────────────────────────────── */
+      setStatusPA('Generando archivo Excel...', 99);
       var buf  = await wb.xlsx.writeBuffer();
       var blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       var url  = URL.createObjectURL(blob);
