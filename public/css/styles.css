@@ -858,20 +858,6 @@
     .bom-tab-pane { display: none; }
     .bom-tab-pane.active { display: block; }
 
-    /* BOM quality analysis panel */
-    .bom-quality-panel {
-      margin: 12px 24px;
-      padding: 16px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-    }
-    .bom-quality-panel h4 {
-      font-size: 13px;
-      color: var(--text);
-      margin-bottom: 12px;
-    }
-
     /* ── Tab Info Banner ── */
     .tab-info-banner {
       background: linear-gradient(135deg, rgba(41, 171, 226, .07) 0%, rgba(247, 168, 0, .05) 100%);

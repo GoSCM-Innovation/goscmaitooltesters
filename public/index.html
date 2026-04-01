@@ -811,31 +811,6 @@
         onclick="toggleNetLogs()">Ver logs técnicos</button>
     </div>
     <div class="log-area hidden" id="logNet"></div>
-    <!-- Analysis panel -->
-    <div id="vizAnalysisPanel" style="display:none;background:var(--bg2);border-bottom:1px solid var(--border);">
-      <div id="vizAnalysisTabs"
-        style="display:flex;gap:0;border-bottom:1px solid var(--border);padding:0 16px;background:var(--bg);overflow-x:auto;">
-        <button id="vizAtab-calidad" onclick="vizSwitchAnalysisTab('calidad')"
-          style="padding:8px 16px;font-size:12px;cursor:pointer;background:none;border:none;border-bottom:2px solid #6C63FF;color:var(--text);font-weight:600;white-space:nowrap;">Calidad</button>
-        <button id="vizAtab-hallazgos" onclick="vizSwitchAnalysisTab('hallazgos')"
-          style="padding:8px 16px;font-size:12px;cursor:pointer;background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);font-weight:400;white-space:nowrap;">Hallazgos</button>
-        <button id="vizAtab-metricas" onclick="vizSwitchAnalysisTab('metricas')"
-          style="padding:8px 16px;font-size:12px;cursor:pointer;background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);font-weight:400;white-space:nowrap;">Métricas</button>
-        <button id="vizAtab-resiliencia" onclick="vizSwitchAnalysisTab('resiliencia')"
-          style="padding:8px 16px;font-size:12px;cursor:pointer;background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);font-weight:400;white-space:nowrap;">Resiliencia</button>
-        <button id="vizAtab-health" onclick="vizSwitchAnalysisTab('health')"
-          style="padding:8px 16px;font-size:12px;cursor:pointer;background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);font-weight:400;white-space:nowrap;">Health
-          Score</button>
-      </div>
-      <div style="overflow-y:auto;max-height:300px;">
-        <div id="vizTabCalidad" style="padding:12px 16px;"></div>
-        <div id="vizTabHallazgos" style="display:none;padding:12px 16px;"></div>
-        <div id="vizTabMetricas" style="display:none;padding:12px 16px;"></div>
-        <div id="vizTabResiliencia" style="display:none;padding:12px 16px;"></div>
-        <div id="vizTabHealth" style="display:none;padding:12px 16px;"></div>
-      </div>
-    </div>
-
     <!-- Detail panel (selected element info) -->
     <div id="vizDetail"
       style="display:none;padding:10px 24px;background:var(--bg2);border-bottom:1px solid var(--border);font-size:12px;">
