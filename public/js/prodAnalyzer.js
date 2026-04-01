@@ -363,6 +363,10 @@
         });
       }
 
+      function statusLabel(fill) {
+        return fill === C_RED ? '🔴 Alerta' : fill === C_YEL ? '🟡 Advertencia' : '✅ OK';
+      }
+
       // Stats por hoja para el Resumen
       var STATS = {};
       function initStat(name) { STATS[name] = { total: 0, red: 0, yel: 0, ok: 0 }; }
@@ -382,7 +386,7 @@
       if (ent.prd) {
         initStat('Product');
         var S1 = makeSheet('Product', 'FF29ABE2',
-          ['PRDID', 'PRDDESCR', 'MATTYPEID',
+          ['Estado', 'PRDID', 'PRDDESCR', 'MATTYPEID',
            'En PSH (output)', 'En PSI (componente)',
            'En Location Product', 'En Location Source',
            'Observación']);
@@ -398,7 +402,7 @@
           if (!inPSH && inPSI) obs.push('Solo actúa como componente (PSI)');
           if (!obs.length)     obs.push('OK');
           var fill = (!inLP || (!inPSH && !inLS)) ? C_RED : (!inPSH || !inLS) ? C_YEL : null;
-          addRow(S1, [prdid, pd(prdid), pm(prdid), yn(inPSH), yn(inPSI), yn(inLP), yn(inLS), obs.join(' | ')], fill);
+          addRow(S1, [statusLabel(fill), prdid, pd(prdid), pm(prdid), yn(inPSH), yn(inPSI), yn(inLP), yn(inLS), obs.join(' | ')], fill);
           track('Product', fill);
         });
         finalizeSheet(S1);
@@ -410,7 +414,7 @@
       if (ent.res) {
         initStat('Resource');
         var S2 = makeSheet('Resource', 'FFa78bfa',
-          ['RESID', 'RESDESCR',
+          ['Estado', 'RESID', 'RESDESCR',
            'En PSR', 'En Resource Location',
            'Observación']);
         Object.keys(PA_RES).sort().forEach(function(resid) {
@@ -422,7 +426,7 @@
           else if (!inRL)      obs.push('Sin planta asignada en Resource Location');
           if (!obs.length)     obs.push('OK');
           var fill = (!inPSR && !inRL) ? C_RED : (!inPSR || !inRL) ? C_YEL : null;
-          addRow(S2, [resid, str((PA_RES[resid] || {}).RESDESCR || ''), yn(inPSR), yn(inRL), obs.join(' | ')], fill);
+          addRow(S2, [statusLabel(fill), resid, str((PA_RES[resid] || {}).RESDESCR || ''), yn(inPSR), yn(inRL), obs.join(' | ')], fill);
           track('Resource', fill);
         });
         finalizeSheet(S2);
@@ -434,7 +438,7 @@
       if (ent.resLoc) {
         initStat('Resource Location');
         var S3 = makeSheet('Resource Location', 'FFFF9F43',
-          ['RESID', 'LOCID',
+          ['Estado', 'RESID', 'LOCID',
            'RESID+LOCID usado en PSR',
            'Observación']);
         Object.keys(PA_RES_LOC).sort().forEach(function(resid) {
@@ -443,7 +447,7 @@
             var used  = psrByResidLoc.has(resid + '|' + locid);
             var obs   = used ? 'OK' : 'Recurso asignado a planta pero no utilizado en PSR para esta planta';
             var fill  = used ? null : C_YEL;
-            addRow(S3, [resid, locid, yn(used), obs], fill);
+            addRow(S3, [statusLabel(fill), resid, locid, yn(used), obs], fill);
             track('Resource Location', fill);
           });
         });
@@ -456,7 +460,7 @@
       if (ent.psh) {
         initStat('Prod Source Header');
         var S6 = makeSheet('Prod Source Header', 'FFF7A800',
-          ['SOURCEID', 'PRDID output', 'LOCID planta', 'SOURCETYPE(s)', 'PLEADTIME', 'OUTPUTCOEFFICIENT',
+          ['Estado', 'SOURCEID', 'PRDID output', 'LOCID planta', 'SOURCETYPE(s)', 'PLEADTIME', 'OUTPUTCOEFFICIENT',
            'PRDID+LOCID en Location Product',
            'Tiene ítems PSI (BOM)',
            'Tiene recursos PSR',
@@ -482,7 +486,7 @@
           if (multi)   obs.push('Múltiples fuentes (>1 SOURCEID) para mismo PRDID+LOCID — verificar cuotas');
           if (!obs.length) obs.push('OK');
           var fill = (!hasPSI || noLt || !inLP) ? C_RED : (!hasP || multi) ? C_YEL : null;
-          addRow(S6, [sid, outPrd, outLoc, stypes, plt, coeff,
+          addRow(S6, [statusLabel(fill), sid, outPrd, outLoc, stypes, plt, coeff,
             yn(inLP), yn(hasPSI), yn(hasPSR), obs.join(' | ')], fill);
           track('Prod Source Header', fill);
         });
@@ -495,7 +499,7 @@
       if (ent.psi) {
         initStat('Prod Source Item');
         var S7 = makeSheet('Prod Source Item', 'FF06B6D4',
-          ['SOURCEID', 'PRDID output', 'LOCID planta', 'PRDID componente', 'COMPONENTCOEFFICIENT',
+          ['Estado', 'SOURCEID', 'PRDID output', 'LOCID planta', 'PRDID componente', 'COMPONENTCOEFFICIENT',
            'Tipo componente',
            'PRDID comp+LOCID en Location Product',
            'En Location Source (insumo)',
@@ -542,7 +546,7 @@
             var fill = (noCoeff || (!isSemi && !inLS && !noSrc) || (!compInLP && locid)) ? C_RED
                      : (noSrc || (!isSemi && inLS && lsRows.some(function(x){ return (lct(x.LOCFR)||'').toUpperCase() !== 'V'; }))) ? C_YEL
                      : null;
-            addRow(S7, [sid, outPrd, locid, comp, coeff, tipo, yn(compInLP),
+            addRow(S7, [statusLabel(fill), sid, outPrd, locid, comp, coeff, tipo, yn(compInLP),
               !isSemi && !noSrc ? yn(inLS) : 'N/A',
               locfrVal, locfrType, locfrInLP, obs.join(' | ')], fill);
             track('Prod Source Item', fill);
@@ -560,7 +564,7 @@
       if (ent.psr) {
         initStat('Prod Source Resource');
         var S8 = makeSheet('Prod Source Resource', 'FF6C63FF',
-          ['SOURCEID', 'PRDID output', 'LOCID planta', 'RESID',
+          ['Estado', 'SOURCEID', 'PRDID output', 'LOCID planta', 'RESID',
            'RESID+LOCID en Resource Location',
            'Observación']);
         allPsr.forEach(function(r) {
@@ -575,7 +579,7 @@
                      : inRL  ? 'OK'
                      :         'Recurso utilizado en producción sin asignación en Resource Location para planta ' + locid;
           var fill   = noSrc ? C_YEL : inRL ? null : C_YEL;
-          addRow(S8, [sid, outPrd, locid, resid, yn(inRL), obs], fill);
+          addRow(S8, [statusLabel(fill), sid, outPrd, locid, resid, yn(inRL), obs], fill);
           track('Prod Source Resource', fill);
         });
         finalizeSheet(S8);
