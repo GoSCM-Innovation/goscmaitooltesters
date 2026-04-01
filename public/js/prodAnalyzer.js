@@ -74,7 +74,9 @@
               if (!pshBySid[sid]) pshBySid[sid] = [];
               pshBySid[sid].push({
                 PRDID: str(r.PRDID), LOCID: str(r.LOCID),
-                SOURCETYPE: str(r.SOURCETYPE), PLEADTIME: str(r.PLEADTIME || '')
+                SOURCETYPE: str(r.SOURCETYPE),
+                PLEADTIME: r.PLEADTIME != null ? str(r.PLEADTIME) : '',
+                OUTPUTCOEFFICIENT: r.OUTPUTCOEFFICIENT != null ? str(r.OUTPUTCOEFFICIENT) : ''
               });
               var p = str(r.PRDID); if (p) pshPrdSet[p] = true;
             });
@@ -450,68 +452,7 @@
         await new Promise(function(r){ setTimeout(r, 0); });
       }
 
-      /* ── HOJA 4: LOCATION PRODUCT ───────────────────────────────────── */
-      if (ent.locPrd) {
-        initStat('Location Product');
-        var S4 = makeSheet('Location Product', 'FF10B981',
-          ['LOCID', 'PRDID',
-           'PRDID+LOCID en PSH',
-           'PRDID+LOCID en Location Source (destino / origen / ambos / ninguno)',
-           'Observación']);
-        allLocProd.forEach(function(r) {
-          var locid = str(r.LOCID), prdid = str(r.PRDID);
-          if (!locid || !prdid) return;
-          var inPSH    = !!pshByPrdLoc[prdid + '|' + locid];
-          var inLSdest = locSrcByPrdLoc.hasOwnProperty(prdid + '|' + locid);
-          var inLSorig = locSrcByPrdLocfr.has(prdid + '|' + locid);
-          var lsVal = (inLSdest && inLSorig) ? 'Destino y Origen'
-                    : inLSdest               ? 'Destino'
-                    : inLSorig               ? 'Origen'
-                    :                          'Ninguno';
-          var obs = [];
-          if (!inPSH && lsVal === 'Ninguno') obs.push('Sin fuente de producción ni arco de abastecimiento');
-          else if (!inPSH)                   obs.push('Sin fuente de producción en esta planta');
-          if (!obs.length)                   obs.push('OK');
-          var fill = (!inPSH && lsVal === 'Ninguno') ? C_RED : !inPSH ? C_YEL : null;
-          addRow(S4, [locid, prdid, yn(inPSH), lsVal, obs.join(' | ')], fill);
-          track('Location Product', fill);
-        });
-        finalizeSheet(S4);
-        setStatusPA('Hoja Location Product lista...', 87);
-        await new Promise(function(r){ setTimeout(r, 0); });
-      }
-
-      /* ── HOJA 5: LOCATION SOURCE ────────────────────────────────────── */
-      if (ent.locSrc) {
-        initStat('Location Source');
-        var S5 = makeSheet('Location Source', 'FFE8622A',
-          ['PRDID', 'LOCFR', 'LOCID', 'TLEADTIME',
-           'LOCID+PRDID en Location Product',
-           'LOCFR+PRDID en Location Product',
-           'Observación']);
-        allLocSrc.forEach(function(r) {
-          var prd = str(r.PRDID), locfr = str(r.LOCFR || ''), locid = str(r.LOCID || ''), tlt = str(r.TLEADTIME || '');
-          var destInLP  = locPrdSet.has(locid + '|' + prd);
-          var origInLP  = locPrdSet.has(locfr + '|' + prd);
-          var locfrType = lct(locfr);
-          var noLt      = !tlt || tlt === '0';
-          var obs = [];
-          if (!destInLP)                              obs.push('Destino no habilitado en Location Product');
-          if (!origInLP)                              obs.push('Origen no habilitado en Location Product');
-          if (locfrType.toUpperCase() === 'V')        obs.push('Proveedor externo (LOCTYPE=V)');
-          else if (locfrType)                         obs.push('Origen interno (LOCTYPE=' + locfrType + ')');
-          if (noLt)                                   obs.push('Lead time no configurado');
-          if (!obs.length)                            obs.push('OK');
-          var fill = !destInLP ? C_RED : (noLt || !origInLP) ? C_YEL : null;
-          addRow(S5, [prd, locfr, locid, tlt, yn(destInLP), yn(origInLP), obs.join(' | ')], fill);
-          track('Location Source', fill);
-        });
-        finalizeSheet(S5);
-        setStatusPA('Hoja Location Source lista...', 89);
-        await new Promise(function(r){ setTimeout(r, 0); });
-      }
-
-      /* ── HOJA 6: PRODUCTION SOURCE HEADER ──────────────────────────── */
+      /* ── HOJA 4: PRODUCTION SOURCE HEADER ──────────────────────────── */
       if (ent.psh) {
         initStat('Prod Source Header');
         var S6 = makeSheet('Prod Source Header', 'FFF7A800',
@@ -648,11 +589,9 @@
         { key: 'Product',              num: 1 },
         { key: 'Resource',             num: 2 },
         { key: 'Resource Location',    num: 3 },
-        { key: 'Location Product',     num: 4 },
-        { key: 'Location Source',      num: 5 },
-        { key: 'Prod Source Header',   num: 6 },
-        { key: 'Prod Source Item',     num: 7 },
-        { key: 'Prod Source Resource', num: 8 }
+        { key: 'Prod Source Header',   num: 4 },
+        { key: 'Prod Source Item',     num: 5 },
+        { key: 'Prod Source Resource', num: 6 }
       ];
       sheetDefs.forEach(function(d) {
         var s = STATS[d.key]; if (!s) return;
