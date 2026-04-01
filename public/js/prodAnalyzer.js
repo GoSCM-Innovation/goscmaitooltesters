@@ -32,7 +32,8 @@
         loc:    document.getElementById('selPALocMaster').value,
         res:    document.getElementById('selPAResMaster').value,
         locPrd: document.getElementById('selPALocProd').value,
-        locSrc: document.getElementById('selPALocSrc').value
+        locSrc: document.getElementById('selPALocSrc').value,
+        resLoc: document.getElementById('selPAResLoc').value
       };
 
       if (!ent.psh) {
@@ -49,7 +50,7 @@
         : '';
 
       // In-memory lookup tables (small masters)
-      var PA_PRD = {}, PA_LOC = {}, PA_RES = {};
+      var PA_PRD = {}, PA_LOC = {}, PA_RES = {}, PA_RES_LOC = {}; // PA_RES_LOC: RESID → [{ LOCID }]
 
       // PSH compact summary built during download (avoid re-reading IDB later)
       var pshBySid  = {};   // SOURCEID → [{ PRDID, LOCID, SOURCETYPE, PLEADTIME }]
@@ -147,6 +148,24 @@
         }
         progEl.style.width = '60%';
 
+        // Resource Location master (JS memory) — clave: RESID + LOCID
+        if (ent.resLoc) {
+          setStatusPA('Indexando Resource Location (lookup en memoria)...', 60);
+          log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + ent.resLoc);
+          var nResLoc = await fetchAndIndex(baseOData + ent.resLoc, logEl, paFilter,
+            'RESID,LOCID',
+            function (rows) {
+              rows.forEach(function (r) {
+                var k = str(r.RESID); if (!k) return;
+                if (!PA_RES_LOC[k]) PA_RES_LOC[k] = [];
+                PA_RES_LOC[k].push({ LOCID: str(r.LOCID || '') });
+              });
+              return Promise.resolve();
+            });
+          log(logEl, 'ok', timer.fmt() + ' Resource Location: ' + nResLoc + ' reg');
+        }
+        progEl.style.width = '64%';
+
         // Location Product (IDB — tabla grande)
         if (ent.locPrd) {
           setStatusPA('Descargando Location Product → IDB...', 60);
@@ -176,7 +195,7 @@
 
         /* ── PHASE 2: Analyze + Export (75 → 100%) ───────────────────── */
         await paAnalyzeAndExport(
-          ent, PA_PRD, PA_LOC, PA_RES,
+          ent, PA_PRD, PA_LOC, PA_RES, PA_RES_LOC,
           pshBySid, pshPrdSet,
           timer, logEl, setStatusPA, progEl
         );
@@ -205,7 +224,7 @@
        PA — ANÁLISIS + EXPORTACIÓN STREAMING A EXCEL
        ═══════════════════════════════════════════════════════════════ */
     async function paAnalyzeAndExport(
-      ent, PA_PRD, PA_LOC, PA_RES,
+      ent, PA_PRD, PA_LOC, PA_RES, PA_RES_LOC,
       pshBySid, pshPrdSet,
       timer, logEl, setStatusPA, progEl
     ) {

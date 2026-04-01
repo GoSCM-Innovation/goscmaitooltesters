@@ -311,7 +311,8 @@
         resource: best(['RESID', 'SOURCEID'], [], ['sourceres', 'prodres', 'sourceresource', 'productionresource']),
         product: best(['PRDID'], ['PRDDESCR', 'MATTYPEID'], ['product', 'material']),
         locMaster: best(['LOCID'], ['LOCDESCR', 'LOCTYPE'], ['location', 'loc'], ['LOCFR', 'PRDID', 'SOURCEID']),
-        resMaster: best(['RESID'], ['RESDESCR'], ['resource', 'res'], ['SOURCEID'])
+        resMaster: best(['RESID'], ['RESDESCR'], ['resource', 'res'], ['SOURCEID']),
+        resLoc:    best(['RESID', 'LOCID'], [], ['resourcelocation', 'reslocation', 'resloc', 'locationresource'])
       };
     }
 
@@ -454,6 +455,7 @@
         { id: 'selPAProduct', fields: 'fieldsPAProduct', val: detectedBom.product },
         { id: 'selPALocMaster', fields: 'fieldsPALocMaster', val: detectedBom.locMaster },
         { id: 'selPAResMaster', fields: 'fieldsPAResMaster', val: detectedBom.resMaster },
+        { id: 'selPAResLoc',    fields: 'fieldsPAResLoc',    val: detectedBom.resLoc },
         { id: 'selPALocProd', fields: 'fieldsPALocProd', val: detectedSN.locProd },
         { id: 'selPALocSrc', fields: 'fieldsPALocSrc', val: detectedSN.location }
       ];
