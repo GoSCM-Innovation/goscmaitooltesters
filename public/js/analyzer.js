@@ -245,87 +245,208 @@
 
     /* ═══════════════════════════════════════════════════════════════
        SUPPLY NETWORK — ANÁLISIS + EXPORTACIÓN STREAMING
-       Las filas se escriben directamente a ExcelJS sin acumular
-       arrays intermedios s1-s7. Elimina la doble copia en RAM.
+       7 grupos de hojas orientados a entidad (con auto-split >900k).
+       Las filas se escriben directo a ExcelJS — sin arrays intermedios.
        ═══════════════════════════════════════════════════════════════ */
     async function analyzeAndStreamExcel(onProgress, onStatus, timer, logEl) {
-      var products = Object.keys(SN_IDX.allPrds).sort();
-      var n = products.length;
+      /* ── micro-helpers ── */
+      function pd(id)      { var p = SN_IDX.prdLookup[id]  || {}; return str(p.PRDDESCR  || ''); }
+      function pm(id)      { var p = SN_IDX.prdLookup[id]  || {}; return str(p.MATTYPEID || ''); }
+      function ld(id)      { var l = SN_IDX.locLookup[id]  || {}; return str(l.LOCDESCR  || ''); }
+      function locType(id) { var l = SN_IDX.locLookup[id]  || {}; return str(l.LOCTYPE   || ''); }
+      function cd(id)      { var c = SN_IDX.custLookup[id] || {}; return str(c.CUSTDESCR || ''); }
+      function yn(b)       { return b ? 'Sí' : 'No'; }
+      function stLabel(f)  { return f === C_RED ? '🔴 Alerta' : f === C_YEL ? '🟡 Advertencia' : '✅ OK'; }
 
-      function pd(id) { var p = SN_IDX.prdLookup[id] || {}; return str(p.PRDDESCR || ''); }
-      function pm(id) { var p = SN_IDX.prdLookup[id] || {}; return str(p.MATTYPEID || ''); }
-      function ld(id) { var l = SN_IDX.locLookup[id] || {}; return str(l.LOCDESCR || ''); }
-      function cd(id) { var c = SN_IDX.custLookup[id] || {}; return str(c.CUSTDESCR || ''); }
-
-      // ── Crear workbook + worksheets ANTES del loop ─────────────────────────
-      var wb = new ExcelJS.Workbook();
+      /* ── Workbook ── */
+      var wb    = new ExcelJS.Workbook();
       var today = new Date().toISOString().slice(0, 10);
+      var GOLD  = 'FFF7A800', ORANGE = 'FFE8622A', NAVY = 'FF0B1120';
+      var C_RED = 'FFFFCCCC', C_YEL  = 'FFFFFFCC';
+      var ROW_LIMIT    = 900000;   // máx filas por hoja (Excel soporta 1 048 576)
+      var PATHS_SAFETY = 50001;    // margen mínimo libre antes de iniciar un PRDID en Paths
 
-      var GOLD = 'FFF7A800', ORANGE = 'FFE8622A', NAVY = 'FF0B1120';
-      var TAB_COLS = ['FFF7A800', 'FFE8622A', 'FFFF6B6B', 'FF29ABE2', 'FFa78bfa', 'FFf472b6', 'FF34d399'];
+      /* ── STATS (para Resumen) ── */
+      var STATS = {};
+      function initStat(name) { STATS[name] = { total: 0, red: 0, yel: 0, ok: 0 }; }
 
-      // Definición de los 7 sheets (sin campo rows — se escribe directo)
-      var DEFS = [
-        {
-          name: 'Product Network Quality', tab: TAB_COLS[0],
-          hdr: ['Product ID', 'Product Description', 'Material Type', 'Production Plant', 'Plant Description', 'Network Status', 'Quality Category', 'Description']
-        },
-        {
-          name: 'Findings', tab: TAB_COLS[2],
-          hdr: ['Finding Type', 'Product ID', 'Product Description', 'Location', 'Location Description', 'Customer', 'Customer Description', 'Description', 'Severity']
-        },
-        {
-          name: 'Network Metrics', tab: TAB_COLS[3],
-          hdr: ['Product ID', 'Product Description', 'Plants', 'Distribution Centers', 'Customers Reached', 'Paths', 'Longest Path', 'Ghost Nodes', 'Network Status']
-        },
-        {
-          name: 'Network Resilience', tab: TAB_COLS[4],
-          hdr: ['Product ID', 'Product Description', 'Customer ID', 'Customer Description', 'Paths', 'Critical Nodes', 'Resilience Category', 'Description']
-        },
-        {
-          name: 'Critical Nodes', tab: TAB_COLS[5],
-          hdr: ['Location ID', 'Location Description', 'Products Impacted', 'Customers Impacted', 'Node Type', 'Risk Level', 'Description']
-        },
-        {
-          name: 'Network Health Score', tab: TAB_COLS[6],
-          hdr: ['Product ID', 'Product Description', 'Health Score', 'Health Category', 'Plants', 'Customers', 'Paths', 'Ghost Nodes', 'Critical Nodes', 'Single Source Risk', 'Comments']
+      /* ── Factory: grupo de hojas con auto-split ── */
+      function makeGroup(baseName, tabArgb, headers) {
+        initStat(baseName);
+        var sheetIdx = 0, allSheets = [], cur = null;
+
+        function newSheet() {
+          sheetIdx++;
+          var name = sheetIdx === 1 ? baseName : baseName + ' (' + sheetIdx + ')';
+          var ws = wb.addWorksheet(name, {
+            views: [{ state: 'frozen', ySplit: 1 }],
+            properties: { tabColor: { argb: tabArgb } }
+          });
+          var colW = headers.map(function (h) { return h.length; });
+          cur = { ws: ws, rowCount: 0, colW: colW };
+          allSheets.push(cur);
+          ws.addRow(headers);
+          ws.getRow(1).eachCell(function (cell) {
+            cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: GOLD } };
+            cell.font  = { bold: true, name: 'DM Sans', size: 10, color: { argb: NAVY } };
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+            cell.border = { bottom: { style: 'medium', color: { argb: ORANGE } } };
+          });
+          ws.getRow(1).height = 20;
         }
-      ];
+        newSheet();
 
-      // Crear worksheets y escribir encabezados
-      DEFS.forEach(function (def) {
-        def.ws = wb.addWorksheet(def.name, { views: [{ state: 'frozen', ySplit: 1 }], properties: { tabColor: { argb: def.tab } } });
-        def.ri = 0;
-        def.colW = def.hdr.map(function (h) { return h.length; });
-        def.ws.addRow(def.hdr);
-        def.ws.getRow(1).eachCell(function (cell) {
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GOLD } };
-          cell.font = { bold: true, name: 'DM Sans', size: 10, color: { argb: NAVY } };
-          cell.alignment = { vertical: 'middle', horizontal: 'center' };
-          cell.border = { bottom: { style: 'medium', color: { argb: ORANGE } } };
-        });
-        def.ws.getRow(1).height = 20;
-      });
-
-      // Escribe una fila sin estilos por celda (reduce memoria ~50x vs styled rows)
-      function addRow(di, rowData) {
-        var def = DEFS[di];
-        def.ri++;
-        def.ws.addRow(rowData);
-        // Actualizar ancho de columnas al vuelo
-        rowData.forEach(function (v, ci) { var len = v != null ? String(v).length : 0; if (len > def.colW[ci]) def.colW[ci] = len; });
+        return {
+          addRow: function (data, fill) {
+            if (cur.rowCount >= ROW_LIMIT) newSheet();
+            cur.rowCount++;
+            var row = cur.ws.addRow(data);
+            if (fill) {
+              row.eachCell(function (cell) {
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
+              });
+            }
+            data.forEach(function (v, ci) {
+              var len = v != null ? String(v).length : 0;
+              if (len > cur.colW[ci]) cur.colW[ci] = len;
+            });
+            var s = STATS[baseName];
+            if (s) { s.total++; if (fill === C_RED) s.red++; else if (fill === C_YEL) s.yel++; else s.ok++; }
+          },
+          /* Llamar antes de la primera fila de un nuevo PRDID en Paths */
+          checkSplit: function (margin) { if (cur.rowCount >= ROW_LIMIT - (margin || 0)) newSheet(); },
+          finalize: function () {
+            allSheets.forEach(function (sh) {
+              sh.ws.columns.forEach(function (col, ci) {
+                col.width = Math.min(Math.max((sh.colW[ci] || 10) + 2, 10), 60);
+              });
+            });
+          }
+        };
       }
 
-      // Contadores de resumen (sin arrays)
-      var selLocProd    = (document.getElementById('selSNLocProd')    || {}).value || '';
-      var selCustProd   = (document.getElementById('selSNCustProd')   || {}).value || '';
-      var selSourceItem = (document.getElementById('selSNSourceItem') || {}).value || '';
+      /* ── Hoja Resumen (se llena al final) ── */
+      var s0ws  = wb.addWorksheet('Resumen', { views: [{ state: 'frozen', ySplit: 1 }], properties: { tabColor: { argb: 'FF34D399' } } });
+      var s0hdr = ['#', 'Hoja', 'Total registros', 'Alertas 🔴', 'Advertencias 🟡', 'OK ✅', '% Consistencia'];
+      s0ws.addRow(s0hdr);
+      s0ws.getRow(1).eachCell(function (cell) {
+        cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: GOLD } };
+        cell.font  = { bold: true, name: 'DM Sans', size: 10, color: { argb: NAVY } };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        cell.border = { bottom: { style: 'medium', color: { argb: ORANGE } } };
+      });
+      s0ws.getRow(1).height = 20;
+      var s0colW = s0hdr.map(function (h) { return h.length; });
 
+      /* ── Crear grupos de hojas ── */
+      var gPrd = makeGroup('Product', 'FF29ABE2', [
+        'Estado','PRDID','PRDDESCR','MATTYPEID',
+        'En PSH?','En PSI?','En Location Source?','En Customer Source?','En Location Product?','En Customer Product?','Solo en maestro?',
+        'Estado de la Red','Plants','DCs','Customers','Paths','Longest Path','Ghost Nodes','Dead Ends',
+        'Health Score','Health Category','Observaciones'
+      ]);
+      var gLoc = makeGroup('Location', 'FF06B6D4', [
+        'Estado','LOCID','LOCDESCR','LOCTYPE',
+        'En PSH?','En Location Source?','En Customer Source?','En Location Product?','Solo en maestro?',
+        '# Productos manejados','# Como origen (LOCFR)','# Como destino (LOCID)','# Clientes servidos',
+        'Es nodo crítico?','# Productos impactados','# Clientes impactados','Nivel de riesgo','Observaciones'
+      ]);
+      var gCust = makeGroup('Customer', 'FF10B981', [
+        'Estado','CUSTID','CUSTDESCR',
+        'En Customer Source?','En Customer Product?','Solo en maestro?',
+        '# Productos recibidos','# Ubicaciones proveedoras','# Paths que llegan','Resiliencia predominante','Observaciones'
+      ]);
+      var gLS = makeGroup('Location Source', 'FFF7A800', [
+        'Estado','PRDID','PRDDESCR','LOCFR','LOCFR Descripción','LOCID','LOCID Descripción','TLEADTIME',
+        'LOCFR+PRDID en Location Product?','LOCID+PRDID en Location Product?','PRDID en PSH?',
+        'Arco en ruta completa?','Arco duplicado?','Arco inverso?','Lead Time Status','Observaciones'
+      ]);
+      var gCS = makeGroup('Customer Source', 'FFE8622A', [
+        'Estado','PRDID','PRDDESCR','LOCID','LOCID Descripción','CUSTID','CUSTID Descripción','CLEADTIME',
+        'LOCID+PRDID en Location Product?','CUSTID+PRDID en Customer Product?','PRDID en PSH?',
+        'Entrega alcanzable desde producción?','Lead Time Status','Observaciones'
+      ]);
+      var gPaths = makeGroup('Paths', 'FFa78bfa', [
+        'PRDID','PRDDESCR','Tipo Producto','Ruta','# Nodos','Planta origen','Cliente destino',
+        'Ruta completa?','Tipo de Ruta','Lead Time Total'
+      ]);
+
+      /* ════════════════════════════════════════════════════════════════
+         FASE 2 — Pre-índices globales (cursor IDB, sin acumular arrays)
+         ════════════════════════════════════════════════════════════════ */
+      if (onStatus) onStatus('Construyendo índices globales...');
+      if (logEl) log(logEl, 'info', timer.fmt() + ' Fase 2: pre-índices...');
+
+      var locProdSet  = new Set();   // "LOCID|PRDID"
+      var custProdSet = new Set();   // "CUSTID|PRDID"
+      var lsArcSet    = new Set();   // "PRDID|LOCFR|LOCID" — para detección de arco inverso
+      var prdInLocSrc = {}, prdInCustSrc = {};
+      var locInLocSrc = {}, locInCustSrc = {}, locInPSH = {}, locInLocProd = {};
+      var custInCustSrc = {}, custInCustProd = {};
+      var prdInLocProd = {}, prdInCustProd = {};
+
+      /* Contadores de arcos por ubicación (para hoja Location) */
+      var locStatsSrc = {};
+      function ensureLS(l) {
+        if (!locStatsSrc[l]) locStatsSrc[l] = { asOriginPrds: {}, asDestPrds: {}, custServed: {} };
+      }
+      /* Contadores por cliente (para hoja Customer) */
+      var custStatsSrc = {};
+
+      await idbCursorEach('sn_loc', function (r) {
+        var p = str(r.PRDID), fr = str(r.LOCFR), to = str(r.LOCID);
+        if (p)  prdInLocSrc[p] = true;
+        if (fr) { locInLocSrc[fr] = true; ensureLS(fr); if (p) locStatsSrc[fr].asOriginPrds[p] = true; }
+        if (to) { locInLocSrc[to] = true; ensureLS(to); if (p) locStatsSrc[to].asDestPrds[p]   = true; }
+        if (p && fr && to) lsArcSet.add(p + '|' + fr + '|' + to);
+      });
+
+      await idbCursorEach('sn_cust', function (r) {
+        var p = str(r.PRDID), loc = str(r.LOCID), c = str(r.CUSTID);
+        if (p)   prdInCustSrc[p] = true;
+        if (loc) { locInCustSrc[loc] = true; ensureLS(loc); if (c) locStatsSrc[loc].custServed[c] = true; }
+        if (c)   {
+          custInCustSrc[c] = true;
+          if (!custStatsSrc[c]) custStatsSrc[c] = { prds: {}, locs: {} };
+          if (p)   custStatsSrc[c].prds[p]   = true;
+          if (loc) custStatsSrc[c].locs[loc] = true;
+        }
+      });
+
+      await idbCursorEach('sn_plant', function (r) {
+        var loc = str(r.LOCID); if (loc) locInPSH[loc] = true;
+      });
+
+      await idbCursorEach('sn_loc_prod', function (r) {
+        var loc = str(r.LOCID), p = str(r.PRDID);
+        if (loc && p) { locProdSet.add(loc + '|' + p); prdInLocProd[p] = true; locInLocProd[loc] = true; }
+      });
+
+      await idbCursorEach('sn_cust_prod', function (r) {
+        var c = str(r.CUSTID), p = str(r.PRDID);
+        if (c && p) { custProdSet.add(c + '|' + p); prdInCustProd[p] = true; custInCustProd[c] = true; }
+      });
+
+      if (onProgress) onProgress(57);
+      if (logEl) log(logEl, 'ok', timer.fmt() + ' Pre-índices: LocProd=' + locProdSet.size + ' CustProd=' + custProdSet.size);
+
+      /* ════════════════════════════════════════════════════════════════
+         FASE 3 — Loop de productos (CHUNK=50, yield entre batches)
+         ════════════════════════════════════════════════════════════════ */
+      /* Universo: allPrds (LocSrc/CustSrc/PSH) + psiCompPrds + prdLookup */
+      var allPrdObj = Object.assign({}, SN_IDX.allPrds, SN_IDX.psiCompPrds);
+      Object.keys(SN_IDX.prdLookup).forEach(function (p) { allPrdObj[p] = true; });
+      var products = Object.keys(allPrdObj).sort();
+      var n = products.length;
+
+      /* Acumuladores del loop */
+      var locStats   = {};    // locid → { isGhost, isDeadEnd, isIsolated, inCycle, cycleDescs, isCritical, ... }
+      var custStats  = {};    // custid → { pathCount, prdCount, single, dep, resilient }
       var critNodeMap = {};
-      var completeCount = 0;
-      var totalPaths = 0;
-      var ghostCount = 0;
-      var healthSum = 0;
+      var cycleLocSet = {};
+      var arcInCompletePath = {};  // "LS|FR|TO|PRD" o "CS|LOC|CUST|PRD"
+
+      var completeCount = 0, totalPaths = 0, ghostCount = 0, healthSum = 0;
       var CHUNK = 50;
 
       for (var i = 0; i < n; i += CHUNK) {
@@ -333,299 +454,413 @@
 
         for (var bi = 0; bi < batch.length; bi++) {
           var prdid = batch[bi];
-          var graph = await snBuildProductGraph(prdid);
-          var paths = snFindAllPaths(graph);
-          var sets = snComputeNetworkSets(graph);
-          var ghosts = snFindGhostNodes(graph, sets);
-          var deadEnds = snFindDeadEnds(graph);
-          var isolatedPlants = snFindIsolatedPlants(graph, sets);
-          var cycles = snFindCycles(graph);
-          var ltIssues = snFindMissingLeadTimes(graph);
-          var cats = snEvaluateCategories(graph, paths);
-          var metrics = snComputeMetrics(prdid, graph, paths, ghosts, deadEnds);
-          var resData = snAnalyzeResilience(prdid, graph, paths);
-          var health = snComputeHealthScore(metrics, paths, ghosts, deadEnds);
-          var catName = snCategoryLabel(cats);
-          var catDesc = snCategoryDesc(cats, graph, paths, ghosts, deadEnds);
+          var inPSH = !!SN_IDX.pshPrds[prdid];
+          var inPSI = !!SN_IDX.psiCompPrds[prdid];
+          var inLS  = !!prdInLocSrc[prdid];
+          var inCS  = !!prdInCustSrc[prdid];
+          var inLP  = !!prdInLocProd[prdid];
+          var inCP  = !!prdInCustProd[prdid];
+          var onlyMaster = !inPSH && !inPSI && !inLS && !inCS && !inLP && !inCP;
 
-          // Sheet 1 — Product Network Quality
-          if (graph.plants.length === 0) {
-            addRow(0, [prdid, pd(prdid), pm(prdid), '', '', metrics.networkStatus, catName, catDesc]);
+          var graph     = await snBuildProductGraph(prdid);
+          var paths     = snFindAllPaths(graph);
+          var sets      = snComputeNetworkSets(graph);
+          var ghosts    = snFindGhostNodes(graph, sets);
+          var deadEnds  = snFindDeadEnds(graph);
+          var isoPlants = snFindIsolatedPlants(graph, sets);
+          var cycles    = snFindCycles(graph);
+          var ltIssues  = snFindMissingLeadTimes(graph);
+          var metrics   = snComputeMetrics(prdid, graph, paths, ghosts, deadEnds);
+          var resData   = snAnalyzeResilience(prdid, graph, paths);
+          var health    = snComputeHealthScore(metrics, paths, ghosts, deadEnds);
+
+          /* ── Estado de la Red ── */
+          var networkStatus;
+          if (onlyMaster) {
+            networkStatus = 'Huérfano';
+          } else if (inPSH) {
+            networkStatus = paths.length > 0 ? 'Red Completa'
+              : inCS ? 'Distribución sin ruta completa'
+              : inLS ? 'Sin Entrega a Cliente'
+              : 'Sin Distribución';
+          } else if (inPSI) {
+            if (!inLS) { networkStatus = 'Sin Abastecimiento'; }
+            else {
+              var reachesPlant = graph.allLocations.some(function (l) { return locInPSH[l]; });
+              networkStatus = reachesPlant ? 'Abastecimiento Completo' : 'Abastecimiento Parcial';
+            }
           } else {
-            graph.plants.forEach(function (plant) {
-              var pp = paths.filter(function (p) { return p.plant === plant; });
-              var pSt = pp.length > 0 ? 'Complete'
-                : (graph.locEdges[plant] || graph.custEdges[plant]) ? 'Partial' : 'No Distribution';
-              addRow(0, [prdid, pd(prdid), pm(prdid), plant, ld(plant), pSt, catName, catDesc]);
-            });
+            networkStatus = (inLS && inCS) ? 'Solo Distribución + Entrega'
+              : inLS ? 'Solo Distribución'
+              : inCS ? 'Solo Entrega'
+              : 'Sin arcos de red';
           }
 
-          // Sheet 2 — Findings (índice 1)
-          cats.forEach(function (cat) {
-            if (cat === 7) return;
-            addRow(1, [snFindingType(cat), prdid, pd(prdid), '', '', '', '', snFindingDesc(cat), snFindingSeverity(cat)]);
-          });
-          ghosts.forEach(function (loc) {
-            addRow(1, ['Ghost Node', prdid, pd(prdid), loc, ld(loc), '', '',
-              'Node is fed from a plant and has outgoing connections, but none reach any customer', 'High']);
-            ghostCount++;
-          });
-          deadEnds.forEach(function (loc) {
-            addRow(1, ['Dead-End', prdid, pd(prdid), loc, ld(loc), '', '',
-              'Node receives product but has no outgoing connections at all', 'High']);
-          });
-          isolatedPlants.forEach(function (plant) {
-            addRow(1, ['Isolated Plant', prdid, pd(prdid), plant, ld(plant), '', '',
-              'Plant has no valid path to any customer', 'High']);
-          });
-          cycles.forEach(function (cycle) {
-            addRow(1, ['Network Cycle', prdid, pd(prdid), '', '', '', '',
-              'Circular dependency: ' + cycle, 'Critical']);
-          });
-          if (graph.plants.length > 0 && graph.allCustomers.length === 0) {
-            addRow(1, ['No Customers', prdid, pd(prdid), '', '', '', '',
-              'Product has production configured but no customers registered in the network', 'High']);
-          }
+          /* ── Observaciones ── */
+          var obs = [];
+          if (paths._truncated)  obs.push('Paths truncados (>50.000, red muy compleja)');
+          cycles.forEach(function (c)   { obs.push('Ciclo: ' + c); });
+          ghosts.forEach(function (l)   { obs.push('Ghost node: ' + l); });
+          deadEnds.forEach(function (l) { obs.push('Dead-end: ' + l); });
+          isoPlants.forEach(function(l) { obs.push('Planta aislada: ' + l); });
           ltIssues.forEach(function (lt) {
-            if (lt.type === 'loc')
-              addRow(1, ['Missing Lead Time', prdid, pd(prdid), lt.from, ld(lt.from), lt.to, ld(lt.to),
-                'TLEADTIME not defined for transport leg ' + lt.from + ' → ' + lt.to, 'Medium']);
-            else if (lt.type === 'cust')
-              addRow(1, ['Missing Lead Time', prdid, pd(prdid), lt.from, ld(lt.from), lt.to, '',
-                'CLEADTIME not defined for customer delivery ' + lt.from + ' → ' + lt.to, 'Medium']);
-            else if (lt.type === 'plant')
-              addRow(1, ['Missing Lead Time', prdid, pd(prdid), lt.loc, ld(lt.loc), '', '',
-                'PLEADTIME not defined for production at plant ' + lt.loc, 'Medium']);
+            if (lt.type === 'plant') obs.push('PLEADTIME faltante: ' + lt.loc);
+            else if (lt.type === 'loc')  obs.push('TLEADTIME faltante: ' + lt.from + '→' + lt.to);
+            else                         obs.push('CLEADTIME faltante: ' + lt.from + '→' + lt.to);
+          });
+          if (!inLP && (inPSH || inLS)) obs.push('Sin Location Product');
+          if (!inCP && inCS)            obs.push('Sin Customer Product');
+
+          /* ── Semáforo Product ── */
+          var RED_ST  = { 'Huérfano': 1, 'Sin Distribución': 1, 'Sin Abastecimiento': 1, 'Sin Entrega a Cliente': 1 };
+          var YEL_ST  = { 'Abastecimiento Parcial': 1, 'Solo Distribución': 1, 'Solo Entrega': 1,
+                          'Distribución sin ruta completa': 1, 'Solo Distribución + Entrega': 1, 'Sin arcos de red': 1 };
+          var pFill = (RED_ST[networkStatus] || cycles.length > 0) ? C_RED
+            : (YEL_ST[networkStatus] || health.score < 60 || (!inLP && (inPSH || inLS)) || (!inCP && inCS)) ? C_YEL
+            : null;
+
+          gPrd.addRow([
+            stLabel(pFill), prdid, pd(prdid), pm(prdid),
+            yn(inPSH), yn(inPSI), yn(inLS), yn(inCS), yn(inLP), yn(inCP), yn(onlyMaster),
+            networkStatus, metrics.plants, metrics.dcs, metrics.customers,
+            metrics.paths, metrics.longestPath, metrics.ghosts, metrics.deadEnds,
+            health.score, health.category,
+            obs.join(' | ') || 'OK'
+          ], pFill);
+
+          if (paths.length > 0) completeCount++;
+          totalPaths += paths.length;
+          healthSum  += health.score || 0;
+          ghostCount += ghosts.length;
+
+          /* ── Acumular locStats (topología) ── */
+          ghosts.forEach(function (l)    { if (!locStats[l]) locStats[l] = {}; locStats[l].isGhost    = true; });
+          deadEnds.forEach(function (l)  { if (!locStats[l]) locStats[l] = {}; locStats[l].isDeadEnd  = true; });
+          isoPlants.forEach(function (l) { if (!locStats[l]) locStats[l] = {}; locStats[l].isIsolated = true; });
+          cycles.forEach(function (cStr) {
+            cStr.split(' → ').forEach(function (loc) {
+              if (!loc) return;
+              cycleLocSet[loc] = true;
+              if (!locStats[loc]) locStats[loc] = {};
+              locStats[loc].inCycle = true;
+              if (!locStats[loc].cycleDescs) locStats[loc].cycleDescs = [];
+              if (locStats[loc].cycleDescs.length < 3 && locStats[loc].cycleDescs.indexOf(cStr) < 0)
+                locStats[loc].cycleDescs.push(cStr);
+            });
           });
 
-          // V1 — Location Source arcs vs Location Product
-          if (selLocProd) {
-            var lpRows = await idbGetByIndex('sn_loc_prod', 'by_prdid', prdid);
-            var lpSet = {};
-            lpRows.forEach(function (r) { var k = str(r.LOCID); if (k) lpSet[k] = true; });
-            var lpReported = {};
-            graph.locRawRows.forEach(function (r) {
-              var fr = str(r.LOCFR), to = str(r.LOCID);
-              if (fr && !lpSet[fr] && !lpReported[fr]) {
-                lpReported[fr] = true;
-                addRow(1, ['Missing Location Product (Origin)', prdid, pd(prdid), fr, ld(fr), '', '',
-                  'Transport arc ' + fr + ' → ' + to + ': origin has no Location Product record for this material', 'High']);
-              }
-              if (to && !lpSet[to] && !lpReported[to]) {
-                lpReported[to] = true;
-                addRow(1, ['Missing Location Product (Destination)', prdid, pd(prdid), to, ld(to), '', '',
-                  'Transport arc ' + fr + ' → ' + to + ': destination has no Location Product record for this material', 'High']);
-              }
-            });
-            lpRows = null; lpReported = null;
-          }
-
-          // V2 — Customer Source arcs vs Customer Product
-          if (selCustProd) {
-            var cpRows = await idbGetByIndex('sn_cust_prod', 'by_prdid', prdid);
-            var cpSet = {};
-            cpRows.forEach(function (r) { var k = str(r.CUSTID); if (k) cpSet[k] = true; });
-            var cpReported = {};
-            graph.custRawRows.forEach(function (r) {
-              var cust = str(r.CUSTID);
-              if (cust && !cpSet[cust] && !cpReported[cust]) {
-                cpReported[cust] = true;
-                addRow(1, ['Missing Customer Product', prdid, pd(prdid), str(r.LOCID), ld(str(r.LOCID)), cust, cd(cust),
-                  'Customer Source arc exists but customer ' + cust + ' has no Customer Product record for this material', 'High']);
-              }
-            });
-            cpRows = null; cpReported = null;
-          }
-
-          // Sheet 3 — Network Metrics (índice 2)
-          addRow(2, [prdid, pd(prdid), metrics.plants, metrics.dcs, metrics.customers,
-            metrics.paths, metrics.longestPath, metrics.ghosts, metrics.networkStatus]);
-          if (metrics.networkStatus === 'Complete') completeCount++;
-          totalPaths += metrics.paths || 0;
-
-          // Sheet 4 — Network Resilience (índice 3)
+          /* ── Acumular custStats + critNodeMap ── */
           resData.forEach(function (r) {
-            addRow(3, [prdid, pd(prdid), r.custid, cd(r.custid),
-              r.pathCount, r.criticalNodes.join('; '), r.category, snResilienceDesc(r)]);
+            if (!custStats[r.custid]) custStats[r.custid] = { pathCount: 0, prdCount: 0, single: 0, dep: 0, resilient: 0 };
+            custStats[r.custid].pathCount += r.pathCount;
+            custStats[r.custid].prdCount++;
+            if (r.category === 'Single Path')                custStats[r.custid].single++;
+            else if (r.category === 'Single Node Dependency') custStats[r.custid].dep++;
+            else                                              custStats[r.custid].resilient++;
             r.criticalNodes.forEach(function (node) {
               if (!critNodeMap[node]) critNodeMap[node] = { products: {}, customers: {} };
-              critNodeMap[node].products[prdid] = true;
+              critNodeMap[node].products[prdid]     = true;
               critNodeMap[node].customers[r.custid] = true;
             });
           });
 
-          // Sheet 6 — Network Health Score (índice 5)
-          addRow(5, [prdid, pd(prdid), health.score, health.category,
-            metrics.plants, metrics.customers, metrics.paths, metrics.ghosts,
-            metrics.criticalNodes, metrics.plants === 1 ? 'Yes' : 'No', health.comments]);
-          healthSum += health.score || 0;
+          /* ── Acumular arcInCompletePath ── */
+          paths.forEach(function (p) {
+            if (!p.customer) return;
+            for (var k = 0; k < p.nodes.length - 1; k++)
+              arcInCompletePath['LS|' + p.nodes[k] + '|' + p.nodes[k + 1] + '|' + prdid] = true;
+            arcInCompletePath['CS|' + p.nodes[p.nodes.length - 1] + '|' + p.customer + '|' + prdid] = true;
+          });
 
-          // Liberar referencias para GC inmediato
+          /* ── Hoja Paths ── */
+          var tipoPrd = inPSH ? 'Producido' : (inPSI ? 'Componente' : 'Distribución');
+
+          if (paths.length > 0) {
+            gPaths.checkSplit(PATHS_SAFETY);
+            paths.forEach(function (p) {
+              var routeArr = p.nodes.concat(p.customer ? [p.customer] : []);
+              var routeStr = routeArr.join(' → ');
+              var isComplete = !!p.customer;
+              var tipoRuta;
+              if (isComplete && inPSH)        tipoRuta = 'Producción → Cliente';
+              else if (!isComplete && inPSH)  tipoRuta = 'Producción → Distribución (sin cliente)';
+              else if (isComplete && !inPSH)  tipoRuta = 'Distribución → Cliente (sin producción)';
+              else                            tipoRuta = 'Fragmento';
+
+              /* Lead time total */
+              var ltTotal = 0, ltMissing = false;
+              var plt = parseFloat(graph.plantLeadTimes[p.nodes[0]] || '');
+              if (!isNaN(plt)) ltTotal += plt; else ltMissing = true;
+              for (var k = 0; k < p.nodes.length - 1; k++) {
+                var tlt = parseFloat(graph.locLeadTimes[p.nodes[k] + '||' + p.nodes[k + 1]] || '');
+                if (!isNaN(tlt)) ltTotal += tlt; else ltMissing = true;
+              }
+              if (p.customer) {
+                var clt = parseFloat(graph.custLeadTimes[p.nodes[p.nodes.length - 1] + '||' + p.customer] || '');
+                if (!isNaN(clt)) ltTotal += clt; else ltMissing = true;
+              }
+
+              gPaths.addRow([
+                prdid, pd(prdid), tipoPrd, routeStr, routeArr.length,
+                p.nodes[0] || '', p.customer || '',
+                yn(isComplete), tipoRuta,
+                ltMissing ? ltTotal + ' (incompleto)' : ltTotal
+              ]);
+            });
+          } else {
+            /* Sin paths completos — mostrar arcos como fragmentos */
+            var hasArcs = Object.keys(graph.locEdges).length > 0 || Object.keys(graph.custEdges).length > 0;
+            if (hasArcs || (inPSI && !inPSH && graph.locRawRows.length > 0)) {
+              gPaths.checkSplit(PATHS_SAFETY);
+              if (inPSI && !inPSH) {
+                /* Componente: mostrar arcos de abastecimiento */
+                graph.locRawRows.forEach(function (r) {
+                  var fr = str(r.LOCFR), to = str(r.LOCID);
+                  if (!fr || !to) return;
+                  var toPlant = !!locInPSH[to];
+                  gPaths.addRow([
+                    prdid, pd(prdid), 'Componente', fr + ' → ' + to, 2,
+                    fr, '', yn(toPlant),
+                    toPlant ? 'Abastecimiento → Planta' : 'Abastecimiento Parcial',
+                    str(r.TLEADTIME || '-')
+                  ]);
+                });
+              } else {
+                /* Arcos fragmentados sin path completo */
+                Object.keys(graph.locEdges).forEach(function (fr) {
+                  graph.locEdges[fr].forEach(function (to) {
+                    var frIsPlant = !!graph.plantSet[fr];
+                    gPaths.addRow([prdid, pd(prdid), tipoPrd, fr + ' → ' + to, 2,
+                      frIsPlant ? fr : '', '', 'No', 'Fragmento', '-']);
+                  });
+                });
+                Object.keys(graph.custEdges).forEach(function (fr) {
+                  graph.custEdges[fr].forEach(function (c) {
+                    gPaths.addRow([prdid, pd(prdid), tipoPrd, fr + ' → ' + c, 2,
+                      '', c, 'No', 'Distribución → Cliente (sin producción)', '-']);
+                  });
+                });
+              }
+            }
+          }
+
+          /* Liberar para GC inmediato */
           graph = null; paths = null; ghosts = null; deadEnds = null;
-          cats = null; metrics = null; resData = null; health = null;
+          cycles = null; ltIssues = null; metrics = null; resData = null; health = null;
         }
 
         await new Promise(function (r) { setTimeout(r, 0); });
         var done = Math.min(i + CHUNK, n);
-        if (onProgress) onProgress(50 + Math.round((done / n) * 40));
-        if (onStatus) onStatus('Analizando ' + done + '/' + n + ' productos...');
+        if (onProgress) onProgress(57 + Math.round((done / n) * 28));
+        if (onStatus)   onStatus('Analizando ' + done + '/' + n + ' productos...');
         if (logEl && i > 0 && i % 500 === 0)
-          log(logEl, 'info', timer.fmt() + ' Analizados ' + done + '/' + n + ' productos...');
+          log(logEl, 'info', timer.fmt() + ' Analizados ' + done + '/' + n + '...');
       }
 
-      // V3 / V3b — Purchased inputs (post-loop, requires PSI + Location)
-      if (selSourceItem && Object.keys(SN_IDX.psiCompPrds).length > 0) {
-        if (onStatus) onStatus('Analizando insumos comprados...');
-        if (logEl) log(logEl, 'info', timer.fmt() + ' Analizando insumos comprados (V3/V3b)...');
-        var purchasedPrds = Object.keys(SN_IDX.psiCompPrds).filter(function (p) { return !SN_IDX.pshPrds[p]; });
-        for (var vi = 0; vi < purchasedPrds.length; vi++) {
-          var compPrd = purchasedPrds[vi];
-          var compSrcRows = await idbGetByIndex('sn_loc', 'by_prdid', compPrd);
-          var supplierArcs = compSrcRows.filter(function (r) {
-            var loc = SN_IDX.locLookup[str(r.LOCFR)] || {};
-            return str(loc.LOCTYPE) === 'V';
-          });
-          if (supplierArcs.length === 0) {
-            // V3 — purchased input with no supplier arc at all
-            addRow(1, ['Purchased Input without Supplier', compPrd, pd(compPrd), '', '', '', '',
-              'Component is consumed in production (PSI) with no production source (PSH) and no supplier arc (no Location Source from LOCTYPE=V)', 'High']);
-          } else if (selLocProd) {
-            // V3b — supplier arcs exist but supplier may lack Location Product
-            var suppLpRows = await idbGetByIndex('sn_loc_prod', 'by_prdid', compPrd);
-            var suppLpSet = {};
-            suppLpRows.forEach(function (r) { var k = str(r.LOCID); if (k) suppLpSet[k] = true; });
-            var suppReported = {};
-            supplierArcs.forEach(function (arc) {
-              var suppLoc = str(arc.LOCFR);
-              if (!suppLpSet[suppLoc] && !suppReported[suppLoc]) {
-                suppReported[suppLoc] = true;
-                addRow(1, ['Supplier Missing Location Product', compPrd, pd(compPrd), suppLoc, ld(suppLoc), '', '',
-                  'Supplier ' + suppLoc + ' has a supplier arc for component ' + compPrd + ' but no Location Product record', 'Medium']);
-              }
-            });
-            suppLpRows = null; suppReported = null;
-          }
-          compSrcRows = null; supplierArcs = null;
-          if (vi % 200 === 0 && vi > 0) await new Promise(function (r) { setTimeout(r, 0); });
-        }
-        if (logEl) log(logEl, 'ok', timer.fmt() + ' V3/V3b: ' + purchasedPrds.length + ' insumos comprados evaluados');
-      }
+      /* ════════════════════════════════════════════════════════════════
+         FASE 4 — Hoja Location
+         ════════════════════════════════════════════════════════════════ */
+      if (onStatus) onStatus('Escribiendo hoja Location...');
 
-      // ── Master data orphan detection ─────────────────────────────
-      if (onStatus) onStatus('Detectando datos maestros huérfanos...');
-
-      // Build per-entity sets for all three master types in one IDB pass
-      var prdInLocSrc = {}, prdInCustSrc = {}, prdInPSH = {};
-      var locInLocSrc = {}, locInCustSrc = {}, locInPSH = {};
-      var usedLocs = {}, usedCusts = {};
-
-      var _snLocRows = await idbGetAll('sn_loc');
-      _snLocRows.forEach(function (r) {
-        var p = str(r.PRDID); if (p) prdInLocSrc[p] = true;
-        var fr = str(r.LOCFR); if (fr) { usedLocs[fr] = true; locInLocSrc[fr] = true; }
-        var to = str(r.LOCID); if (to) { usedLocs[to] = true; locInLocSrc[to] = true; }
-      });
-      _snLocRows = null;
-
-      var _snCustRows = await idbGetAll('sn_cust');
-      _snCustRows.forEach(function (r) {
-        var p = str(r.PRDID); if (p) prdInCustSrc[p] = true;
-        var loc = str(r.LOCID); if (loc) { usedLocs[loc] = true; locInCustSrc[loc] = true; }
-        var c = str(r.CUSTID); if (c) usedCusts[c] = true;
-      });
-      _snCustRows = null;
-
-      var _snPlantRows = await idbGetAll('sn_plant');
-      _snPlantRows.forEach(function (r) {
-        var p = str(r.PRDID); if (p) prdInPSH[p] = true;
-        var loc = str(r.LOCID); if (loc) { usedLocs[loc] = true; locInPSH[loc] = true; }
-      });
-      _snPlantRows = null;
-
-      // Products in master not used in any composite entity
-      if (Object.keys(SN_IDX.prdLookup).length > 0) {
-        Object.keys(SN_IDX.prdLookup).forEach(function (prdid) {
-          var inLS = !!prdInLocSrc[prdid];
-          var inCS = !!prdInCustSrc[prdid];
-          var inPS = !!prdInPSH[prdid];
-          if (!inLS && !inCS && !inPS) {
-            addRow(1, ['Orphan Product Master', prdid, pd(prdid), '', '', '', '',
-              'Product exists in product master but does not appear in any composite entity (Location Source, Customer Source, Production Source Header)', 'Medium']);
-          } else if (!inLS || !inCS || !inPS) {
-            var present = [inLS && 'Location Source', inCS && 'Customer Source', inPS && 'PSH'].filter(Boolean).join(', ');
-            var missing = [!inLS && 'Location Source', !inCS && 'Customer Source', !inPS && 'PSH'].filter(Boolean).join(', ');
-            addRow(1, ['Orphan Product Master', prdid, pd(prdid), '', '', '', '',
-              'Product appears in: ' + present + ' — NOT in: ' + missing, 'Info']);
-          }
-        });
-      }
-
-      // Locations in master not used in any composite entity
-      if (Object.keys(SN_IDX.locLookup).length > 0) {
-        Object.keys(SN_IDX.locLookup).forEach(function (locid) {
-          var inLS = !!locInLocSrc[locid];
-          var inCS = !!locInCustSrc[locid];
-          var inPS = !!locInPSH[locid];
-          if (!usedLocs[locid]) {
-            addRow(1, ['Orphan Location Master', '', '', locid, ld(locid), '', '',
-              'Location exists in location master but does not appear in any composite entity (Location Source, Customer Source, Production Source Header)', 'Medium']);
-          } else if (!inLS || !inCS || !inPS) {
-            var present = [inLS && 'Location Source', inCS && 'Customer Source', inPS && 'PSH'].filter(Boolean).join(', ');
-            var missing = [!inLS && 'Location Source', !inCS && 'Customer Source', !inPS && 'PSH'].filter(Boolean).join(', ');
-            addRow(1, ['Orphan Location Master', '', '', locid, ld(locid), '', '',
-              'Location appears in: ' + present + ' — NOT in: ' + missing, 'Info']);
-          }
-        });
-      }
-
-      // Customers in master not used in Customer Source
-      if (Object.keys(SN_IDX.custLookup).length > 0) {
-        Object.keys(SN_IDX.custLookup).forEach(function (custid) {
-          if (!usedCusts[custid]) {
-            addRow(1, ['Orphan Customer Master', '', '', '', '', custid, cd(custid),
-              'Customer exists in customer master but does not appear in any Customer Source record', 'Medium']);
-          }
-        });
-      }
-
-      // Sheet 5 — Critical Nodes (después del loop, índice 4)
-      var critCount = 0;
-      Object.keys(critNodeMap).sort().forEach(function (loc) {
+      /* Integrar critNodeMap en locStats */
+      Object.keys(critNodeMap).forEach(function (loc) {
+        if (!locStats[loc]) locStats[loc] = {};
         var d = critNodeMap[loc];
-        var pc = Object.keys(d.products).length;
-        var cc = Object.keys(d.customers).length;
-        addRow(4, [loc, ld(loc), pc, cc, 'Distribution Center',
-          pc > 3 ? 'Critical' : pc > 1 ? 'High' : 'Medium',
-          'Single point of failure for ' + pc + ' product(s) and ' + cc + ' customer(s)']);
-        critCount++;
+        locStats[loc].isCritical        = true;
+        locStats[loc].productsImpacted  = Object.keys(d.products).length;
+        locStats[loc].customersImpacted = Object.keys(d.customers).length;
+        locStats[loc].riskLevel = locStats[loc].productsImpacted > 3 ? 'Critical'
+          : locStats[loc].productsImpacted > 1 ? 'High' : 'Medium';
       });
       critNodeMap = null;
 
-      // Aplicar anchos de columna calculados al vuelo
-      DEFS.forEach(function (def) {
-        def.ws.columns.forEach(function (col, ci) {
-          col.width = Math.min(Math.max((def.colW[ci] || 10) + 2, 10), 60);
-        });
-      });
+      var allLocObj = Object.assign({}, SN_IDX.locLookup, locInLocSrc, locInCustSrc, locInPSH, locInLocProd);
+      Object.keys(allLocObj).sort().forEach(function (locid) {
+        var inPSHL   = !!locInPSH[locid];
+        var inLSL    = !!locInLocSrc[locid];
+        var inCSL    = !!locInCustSrc[locid];
+        var inLPL    = !!locInLocProd[locid];
+        var onlyMstL = !inPSHL && !inLSL && !inCSL && !inLPL;
 
-      // Generar buffer y descargar
-      if (onProgress) onProgress(95);
-      if (onStatus) onStatus('Generando archivo Excel...');
-      var buf = await wb.xlsx.writeBuffer();
+        var lSt  = locStats[locid]    || {};
+        var lSrc = locStatsSrc[locid] || { asOriginPrds: {}, asDestPrds: {}, custServed: {} };
+
+        var numPrd    = Object.keys(Object.assign({}, lSrc.asOriginPrds, lSrc.asDestPrds)).length;
+        var numOrigin = Object.keys(lSrc.asOriginPrds).length;
+        var numDest   = Object.keys(lSrc.asDestPrds).length;
+        var numCust   = Object.keys(lSrc.custServed).length;
+
+        var lobs = [];
+        if (lSt.isGhost)    lobs.push('Ghost node (alimentado sin salida útil)');
+        if (lSt.isDeadEnd)  lobs.push('Dead-end (recibe pero no reenvía)');
+        if (lSt.isIsolated) lobs.push('Planta aislada (sin ruta a ningún cliente)');
+        if (lSt.inCycle && lSt.cycleDescs) lobs.push('Participa en ciclo: ' + lSt.cycleDescs[0]);
+        if (!inLPL && (inLSL || inPSHL))   lobs.push('Sin Location Product');
+        if (lSt.isCritical) lobs.push('Nodo crítico: ' + lSt.productsImpacted + ' prod, ' + lSt.customersImpacted + ' clientes');
+
+        var lFill = (lSt.isGhost || lSt.isDeadEnd || lSt.isIsolated || lSt.inCycle || (!inLPL && (inLSL || inPSHL))) ? C_RED
+          : (onlyMstL || lSt.isCritical) ? C_YEL : null;
+
+        gLoc.addRow([
+          stLabel(lFill), locid, ld(locid), locType(locid),
+          yn(inPSHL), yn(inLSL), yn(inCSL), yn(inLPL), yn(onlyMstL),
+          numPrd, numOrigin, numDest, numCust,
+          yn(!!lSt.isCritical), lSt.productsImpacted || '', lSt.customersImpacted || '', lSt.riskLevel || '',
+          lobs.join(' | ') || 'OK'
+        ], lFill);
+      });
+      locStats = null; locStatsSrc = null;
+      if (onProgress) onProgress(88);
+
+      /* ════════════════════════════════════════════════════════════════
+         FASE 5 — Hoja Customer
+         ════════════════════════════════════════════════════════════════ */
+      if (onStatus) onStatus('Escribiendo hoja Customer...');
+
+      var allCustObj = Object.assign({}, SN_IDX.custLookup, custInCustSrc, custInCustProd);
+      Object.keys(allCustObj).sort().forEach(function (custid) {
+        var inCS2  = !!custInCustSrc[custid];
+        var inCP2  = !!custInCustProd[custid];
+        var onlyM2 = !inCS2 && !inCP2;
+
+        var cSrc = custStatsSrc[custid] || { prds: {}, locs: {} };
+        var cSt  = custStats[custid]    || { pathCount: 0, prdCount: 0, single: 0, dep: 0, resilient: 0 };
+
+        var numPrd2 = Object.keys(cSrc.prds).length;
+        var numLoc2 = Object.keys(cSrc.locs).length;
+        var domRes  = cSt.single > 0 ? 'Single Path'
+          : cSt.dep > 0 ? 'Single Node Dependency'
+          : cSt.prdCount > 0 ? 'Resilient' : '-';
+
+        var cobs = [];
+        if (onlyM2)               cobs.push('Solo en maestro, sin uso en red');
+        if (!inCP2 && inCS2)      cobs.push('Sin Customer Product');
+        if (cSt.single > 0)       cobs.push(cSt.single + ' producto(s) con única ruta');
+        if (cSt.dep > 0)          cobs.push(cSt.dep + ' producto(s) con nodo crítico único');
+        if (!onlyM2 && numPrd2 === 0) cobs.push('Sin productos alcanzables desde producción');
+
+        var cFill = (onlyM2 || (!onlyM2 && numPrd2 === 0)) ? C_RED
+          : (!inCP2 && inCS2 || cSt.single > 0) ? C_YEL : null;
+
+        gCust.addRow([
+          stLabel(cFill), custid, cd(custid),
+          yn(inCS2), yn(inCP2), yn(onlyM2),
+          numPrd2, numLoc2, cSt.pathCount, domRes,
+          cobs.join(' | ') || 'OK'
+        ], cFill);
+      });
+      custStats = null; custStatsSrc = null;
+      if (onProgress) onProgress(91);
+
+      /* ════════════════════════════════════════════════════════════════
+         FASE 6 — Hoja Location Source (cursor IDB, sin acumular array)
+         ════════════════════════════════════════════════════════════════ */
+      if (onStatus) onStatus('Escribiendo hoja Location Source...');
+      var lsSeenArcs = new Set();  // para detectar duplicados en esta pasada
+
+      await idbCursorEach('sn_loc', function (r) {
+        var p  = str(r.PRDID), fr = str(r.LOCFR), to = str(r.LOCID), tlt = str(r.TLEADTIME || '');
+        if (!p || !fr || !to) return;
+
+        var arcKey   = p + '|' + fr + '|' + to;
+        var isDup    = lsSeenArcs.has(arcKey);
+        lsSeenArcs.add(arcKey);
+        var isInv    = lsArcSet.has(p + '|' + to + '|' + fr);
+        var inLPFr   = locProdSet.has(fr + '|' + p);
+        var inLPTo   = locProdSet.has(to + '|' + p);
+        var pInPSH   = !!SN_IDX.pshPrds[p];
+        var inPath   = !!arcInCompletePath['LS|' + fr + '|' + to + '|' + p];
+        var ltNum    = parseFloat(tlt);
+        var ltSt     = !tlt ? 'Missing' : (ltNum === 0 ? 'Zero' : 'OK');
+
+        var lsObs = [];
+        if (!inLPFr) lsObs.push('Sin Location Product en origen (' + fr + ')');
+        if (!inLPTo) lsObs.push('Sin Location Product en destino (' + to + ')');
+        if (isDup)   lsObs.push('Arco duplicado en el dataset');
+        if (isInv)   lsObs.push('Existe arco inverso (' + to + '→' + fr + ')');
+        if (ltSt !== 'OK') lsObs.push('TLEADTIME ' + ltSt.toLowerCase());
+
+        var lsFill = (!inLPFr || !inLPTo || isDup) ? C_RED
+          : (isInv || ltSt !== 'OK') ? C_YEL : null;
+
+        gLS.addRow([
+          stLabel(lsFill), p, pd(p), fr, ld(fr), to, ld(to), tlt,
+          yn(inLPFr), yn(inLPTo), yn(pInPSH),
+          yn(inPath), yn(isDup), yn(isInv), ltSt,
+          lsObs.join(' | ') || 'OK'
+        ], lsFill);
+      });
+      lsSeenArcs = null; lsArcSet = null;
+      if (onProgress) onProgress(94);
+
+      /* ════════════════════════════════════════════════════════════════
+         FASE 7 — Hoja Customer Source (cursor IDB)
+         ════════════════════════════════════════════════════════════════ */
+      if (onStatus) onStatus('Escribiendo hoja Customer Source...');
+
+      await idbCursorEach('sn_cust', function (r) {
+        var p   = str(r.PRDID), loc = str(r.LOCID), c = str(r.CUSTID), clt = str(r.CLEADTIME || '');
+        if (!p || !loc || !c) return;
+
+        var inLPLoc  = locProdSet.has(loc + '|' + p);
+        var inCPCust = custProdSet.has(c + '|' + p);
+        var pInPSH2  = !!SN_IDX.pshPrds[p];
+        var inPath2  = !!arcInCompletePath['CS|' + loc + '|' + c + '|' + p];
+        var ltNum2   = parseFloat(clt);
+        var ltSt2    = !clt ? 'Missing' : (ltNum2 === 0 ? 'Zero' : 'OK');
+
+        var csObs = [];
+        if (!inLPLoc)               csObs.push('Sin Location Product en ubicación (' + loc + ')');
+        if (!inCPCust)              csObs.push('Sin Customer Product para cliente (' + c + ')');
+        if (!inPath2 && pInPSH2)    csObs.push('Entrega no alcanzable desde producción');
+        if (ltSt2 !== 'OK')         csObs.push('CLEADTIME ' + ltSt2.toLowerCase());
+
+        var csFill = (!inLPLoc || !inCPCust) ? C_RED
+          : (ltSt2 !== 'OK' || (!inPath2 && pInPSH2)) ? C_YEL : null;
+
+        gCS.addRow([
+          stLabel(csFill), p, pd(p), loc, ld(loc), c, cd(c), clt,
+          yn(inLPLoc), yn(inCPCust), yn(pInPSH2),
+          yn(inPath2), ltSt2,
+          csObs.join(' | ') || 'OK'
+        ], csFill);
+      });
+      arcInCompletePath = null; locProdSet = null; custProdSet = null;
+      if (onProgress) onProgress(96);
+
+      /* ════════════════════════════════════════════════════════════════
+         FASE 8 — Hoja Resumen + column widths + export
+         ════════════════════════════════════════════════════════════════ */
+      if (onStatus) onStatus('Generando Resumen...');
+
+      [{ key: 'Product', num: 1 }, { key: 'Location', num: 2 }, { key: 'Customer', num: 3 },
+       { key: 'Location Source', num: 4 }, { key: 'Customer Source', num: 5 }, { key: 'Paths', num: 6 }
+      ].forEach(function (d) {
+        var s = STATS[d.key]; if (!s) return;
+        var pct  = s.total > 0 ? Math.round((s.ok / s.total) * 100) : 100;
+        var fill = s.red > 0 ? C_RED : s.yel > 0 ? C_YEL : null;
+        var row  = [d.num, d.key, s.total, s.red, s.yel, s.ok, pct + '%'];
+        var exRow = s0ws.addRow(row);
+        if (fill) exRow.eachCell(function (cell) { cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } }; });
+        row.forEach(function (v, ci) { var len = v != null ? String(v).length : 0; if (len > s0colW[ci]) s0colW[ci] = len; });
+      });
+      s0ws.columns.forEach(function (col, ci) { col.width = Math.min(Math.max((s0colW[ci] || 10) + 2, 10), 60); });
+
+      [gPrd, gLoc, gCust, gLS, gCS, gPaths].forEach(function (g) { g.finalize(); });
+
+      if (onProgress) onProgress(97);
+      if (onStatus)   onStatus('Generando archivo Excel...');
+      var buf  = await wb.xlsx.writeBuffer();
       var blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      var url = URL.createObjectURL(blob);
+      var dlUrl = URL.createObjectURL(blob);
       var a = document.createElement('a');
-      a.href = url; a.download = 'SupplyNetworkAnalysis_' + today + '.xlsx';
+      a.href = dlUrl; a.download = 'SupplyNetworkAnalysis_' + today + '.xlsx';
       document.body.appendChild(a); a.click();
-      document.body.removeChild(a); URL.revokeObjectURL(url);
+      document.body.removeChild(a); URL.revokeObjectURL(dlUrl);
 
       return {
-        totalProducts: n,
-        completeProducts: completeCount,
-        totalPaths: totalPaths,
-        ghostNodes: ghostCount,
-        criticalNodes: critCount,
-        avgHealthScore: n > 0 ? Math.round(healthSum / n) : 0
+        totalProducts: n, completeProducts: completeCount, totalPaths: totalPaths,
+        ghostNodes: ghostCount, avgHealthScore: n > 0 ? Math.round(healthSum / n) : 0
       };
     }
 
@@ -689,18 +924,21 @@
       };
     }
 
-    /* ── Path enumeration (DFS with cycle guard) ── */
+    /* ── Path enumeration (DFS with cycle guard) ──
+       MAX_PATHS_PRD = 50 000 por producto como safety valve contra redes
+       combinatorialmente explosivas. Si se alcanza, paths._truncated = true
+       y se indica en la columna Observaciones del producto. ── */
     function snFindAllPaths(graph) {
       var paths = [];
-      var MAX_DEPTH = 12, MAX_PATHS = 2000;
+      var MAX_DEPTH = 12, MAX_PATHS_PRD = 50000;
 
       graph.plants.forEach(function (plant) {
         var stack = [[plant]];
-        while (stack.length > 0 && paths.length < MAX_PATHS) {
-          var cur = stack.pop();
+        while (stack.length > 0 && paths.length < MAX_PATHS_PRD) {
+          var cur  = stack.pop();
           var last = cur[cur.length - 1];
           (graph.custEdges[last] || []).forEach(function (cust) {
-            if (paths.length < MAX_PATHS)
+            if (paths.length < MAX_PATHS_PRD)
               paths.push({ plant: plant, nodes: cur.slice(), customer: cust });
           });
           if (cur.length < MAX_DEPTH) {
@@ -710,6 +948,7 @@
           }
         }
       });
+      paths._truncated = paths.length >= MAX_PATHS_PRD;
       return paths;
     }
 

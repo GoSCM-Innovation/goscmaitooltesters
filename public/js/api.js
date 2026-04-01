@@ -139,6 +139,24 @@
       });
     }
 
+    /* Itera todos los registros de un store con cursor (bajo consumo de RAM).
+       onRecord(row) es síncrono — no acumula array, cada registro se descarta
+       tras el callback. */
+    function idbCursorEach(storeName, onRecord) {
+      return new Promise(function (resolve, reject) {
+        var tx  = IDB.transaction(storeName, 'readonly');
+        var req = tx.objectStore(storeName).openCursor();
+        req.onsuccess = function (e) {
+          var cursor = e.target.result;
+          if (!cursor) { resolve(); return; }
+          onRecord(cursor.value);
+          cursor.continue();
+        };
+        req.onerror   = function (e) { reject(e.target.error); };
+        tx.onerror    = function (e) { reject(e.target.error); };
+      });
+    }
+
     /* Builds prodSuggestions by iterating unique PRDID keys from bom_psh
        and looking up descriptions from bom_prd — single transaction, no N+1. */
     function idbBuildProdSuggestions() {
