@@ -137,9 +137,7 @@
       document.getElementById('vizEmpty').style.display = 'none';
       document.getElementById('vizStatus').textContent = 'Procesando…';
       document.getElementById('btnVizFullscreen').style.display = 'none';
-      document.getElementById('vizAnalysisBar').style.display = 'none';
       document.getElementById('vizAnalysisPanel').style.display = 'none';
-      document.getElementById('btnVizAnalysis').textContent = 'Ver análisis ▼';
 
       var paBase = CFG.pa
         ? (CFG.pver
@@ -265,7 +263,9 @@
         document.getElementById('vizStatus').textContent = statusMsg;
         document.getElementById('btnVizFullscreen').style.display = '';
         document.getElementById('btnVizFilter').style.display = '';
-        document.getElementById('vizAnalysisBar').style.display = 'flex';
+        var _apanel = document.getElementById('vizAnalysisPanel');
+        _apanel.style.display = 'block';
+        vizRunAnalysis();
         log(logEl, 'ok', '✓ Diagrama: ' + summary);
       } catch (e) {
         statusText.textContent = '✕ Error: ' + e.message;

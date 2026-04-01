@@ -361,9 +361,6 @@
             '<span>Prof.máx: <strong class="bom-stat-depth">-</strong></span>' +
           '</div>' +
         '</div>' +
-        '<div class="bom-analysis-bar" style="display:none;background:var(--bg2);border-bottom:1px solid var(--border);padding:4px 24px;align-items:center;gap:8px;">' +
-          '<button class="btn btn-secondary btn-small bom-quality-btn" onclick="bomToggleQuality(\'' + tab.id + '\')" style="padding:2px 8px;font-size:11px;">Ver análisis ▼</button>' +
-        '</div>' +
         '<div class="bom-quality-panel" style="display:none"></div>' +
         '<div class="empty-state bom-prompt" style="display:block">' +
           '<div class="icon">🔍</div>' +
@@ -535,9 +532,13 @@
       expandedIds = {};
       bomRenderTable(tabId);
       bomRenderTabBar();
-      // Show analysis bar
-      var analysisBar = pane.querySelector('.bom-analysis-bar');
-      if (analysisBar) analysisBar.style.display = 'flex';
+      // Auto-show quality panel on product load
+      var qPanel = pane.querySelector('.bom-quality-panel');
+      if (qPanel) {
+        qPanel.style.display = 'block';
+        tab.qualityOpen = true;
+        bomRunQuality(tab, qPanel);
+      }
     }
 
     function bomExpandAll(tabId) {
@@ -574,10 +575,6 @@
       tab.inverted = false;
       tab.qualityOpen = false;
       pane.querySelector('.bom-quality-panel').style.display = 'none';
-      var analysisBar = pane.querySelector('.bom-analysis-bar');
-      if (analysisBar) analysisBar.style.display = 'none';
-      var qBtn = pane.querySelector('.bom-quality-btn');
-      if (qBtn) qBtn.textContent = 'Ver análisis ▼';
       bomRenderTable(tabId);
       bomRenderTabBar();
     }
