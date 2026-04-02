@@ -264,7 +264,6 @@
       var GOLD  = 'FFF7A800', ORANGE = 'FFE8622A', NAVY = 'FF0B1120';
       var C_RED = 'FFFFCCCC', C_YEL  = 'FFFFFFCC';
       var ROW_LIMIT    = 900000;   // máx filas por hoja (Excel soporta 1 048 576)
-      var PATHS_SAFETY = 50001;    // margen mínimo libre antes de iniciar un PRDID en Paths
 
       /* ── STATS (para Resumen) ── */
       var STATS = {};
@@ -365,10 +364,6 @@
         'Estado','PRDID','PRDDESCR','LOCID','LOCID Descripción','CUSTID','CUSTID Descripción','CLEADTIME',
         'LOCID+PRDID en Location Product?','CUSTID+PRDID en Customer Product?','PRDID en PSH?',
         'Entrega alcanzable desde producción?','Lead Time Status','Observaciones'
-      ]);
-      var gPaths = makeGroup('Paths', 'FFa78bfa', [
-        'PRDID','PRDDESCR','Tipo Producto','Ruta','# Nodos','Planta origen','Cliente destino',
-        'Ruta completa?','Tipo de Ruta','Lead Time Total'
       ]);
 
       /* ════════════════════════════════════════════════════════════════
@@ -572,78 +567,6 @@
             arcInCompletePath['CS|' + p.nodes[p.nodes.length - 1] + '|' + p.customer + '|' + prdid] = true;
           });
 
-          /* ── Hoja Paths ── */
-          var tipoPrd = inPSH ? 'Producido' : (inPSI ? 'Componente' : 'Distribución');
-
-          if (paths.length > 0) {
-            gPaths.checkSplit(PATHS_SAFETY);
-            paths.forEach(function (p) {
-              var routeArr = p.nodes.concat(p.customer ? [p.customer] : []);
-              var routeStr = routeArr.join(' → ');
-              var isComplete = !!p.customer;
-              var tipoRuta;
-              if (isComplete && inPSH)        tipoRuta = 'Producción → Cliente';
-              else if (!isComplete && inPSH)  tipoRuta = 'Producción → Distribución (sin cliente)';
-              else if (isComplete && !inPSH)  tipoRuta = 'Distribución → Cliente (sin producción)';
-              else                            tipoRuta = 'Fragmento';
-
-              /* Lead time total */
-              var ltTotal = 0, ltMissing = false;
-              var plt = parseFloat(graph.plantLeadTimes[p.nodes[0]] || '');
-              if (!isNaN(plt)) ltTotal += plt; else ltMissing = true;
-              for (var k = 0; k < p.nodes.length - 1; k++) {
-                var tlt = parseFloat(graph.locLeadTimes[p.nodes[k] + '||' + p.nodes[k + 1]] || '');
-                if (!isNaN(tlt)) ltTotal += tlt; else ltMissing = true;
-              }
-              if (p.customer) {
-                var clt = parseFloat(graph.custLeadTimes[p.nodes[p.nodes.length - 1] + '||' + p.customer] || '');
-                if (!isNaN(clt)) ltTotal += clt; else ltMissing = true;
-              }
-
-              gPaths.addRow([
-                prdid, pd(prdid), tipoPrd, routeStr, routeArr.length,
-                p.nodes[0] || '', p.customer || '',
-                yn(isComplete), tipoRuta,
-                ltMissing ? ltTotal + ' (incompleto)' : ltTotal
-              ]);
-            });
-          } else {
-            /* Sin paths completos — mostrar arcos como fragmentos */
-            var hasArcs = Object.keys(graph.locEdges).length > 0 || Object.keys(graph.custEdges).length > 0;
-            if (hasArcs || (inPSI && !inPSH && graph.locRawRows.length > 0)) {
-              gPaths.checkSplit(PATHS_SAFETY);
-              if (inPSI && !inPSH) {
-                /* Componente: mostrar arcos de abastecimiento */
-                graph.locRawRows.forEach(function (r) {
-                  var fr = str(r.LOCFR), to = str(r.LOCID);
-                  if (!fr || !to) return;
-                  var toPlant = !!locInPSH[to];
-                  gPaths.addRow([
-                    prdid, pd(prdid), 'Componente', fr + ' → ' + to, 2,
-                    fr, '', yn(toPlant),
-                    toPlant ? 'Abastecimiento → Planta' : 'Abastecimiento Parcial',
-                    str(r.TLEADTIME || '-')
-                  ]);
-                });
-              } else {
-                /* Arcos fragmentados sin path completo */
-                Object.keys(graph.locEdges).forEach(function (fr) {
-                  graph.locEdges[fr].forEach(function (to) {
-                    var frIsPlant = !!graph.plantSet[fr];
-                    gPaths.addRow([prdid, pd(prdid), tipoPrd, fr + ' → ' + to, 2,
-                      frIsPlant ? fr : '', '', 'No', 'Fragmento', '-']);
-                  });
-                });
-                Object.keys(graph.custEdges).forEach(function (fr) {
-                  graph.custEdges[fr].forEach(function (c) {
-                    gPaths.addRow([prdid, pd(prdid), tipoPrd, fr + ' → ' + c, 2,
-                      '', c, 'No', 'Distribución → Cliente (sin producción)', '-']);
-                  });
-                });
-              }
-            }
-          }
-
           /* Liberar para GC inmediato */
           graph = null; paths = null; ghosts = null; deadEnds = null;
           cycles = null; ltIssues = null; metrics = null; resData = null; health = null;
@@ -834,7 +757,7 @@
       if (onStatus) onStatus('Generando Resumen...');
 
       [{ key: 'Product', num: 1 }, { key: 'Location', num: 2 }, { key: 'Customer', num: 3 },
-       { key: 'Location Source', num: 4 }, { key: 'Customer Source', num: 5 }, { key: 'Paths', num: 6 }
+       { key: 'Location Source', num: 4 }, { key: 'Customer Source', num: 5 }
       ].forEach(function (d) {
         var s = STATS[d.key]; if (!s) return;
         var pct  = s.total > 0 ? Math.round((s.ok / s.total) * 100) : 100;
@@ -846,7 +769,7 @@
       });
       s0ws.columns.forEach(function (col, ci) { col.width = Math.min(Math.max((s0colW[ci] || 10) + 2, 10), 60); });
 
-      [gPrd, gLoc, gCust, gLS, gCS, gPaths].forEach(function (g) { g.finalize(); });
+      [gPrd, gLoc, gCust, gLS, gCS].forEach(function (g) { g.finalize(); });
 
       if (onProgress) onProgress(97);
       if (onStatus)   onStatus('Generando archivo Excel...');
