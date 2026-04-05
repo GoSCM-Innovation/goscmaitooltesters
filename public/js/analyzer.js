@@ -301,6 +301,9 @@
       /* ── CSV helpers (modo Light) ── */
       function csvEsc(v) {
         var s = v != null ? String(v) : '';
+        // Eliminar tildes/acentos y emojis para compatibilidad CSV
+        s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        s = s.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '').trim();
         if (s.search(/[,"\r\n]/) !== -1) return '"' + s.replace(/"/g, '""') + '"';
         return s;
       }
