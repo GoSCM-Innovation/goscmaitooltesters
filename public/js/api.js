@@ -214,7 +214,7 @@
 
     async function fetchAllPages(entityUrl, logEl, pverFilter, selectFields) {
       var all = [];
-      var PAGE_SIZE = 5000;
+      var PAGE_SIZE = 50000;
       var page = 0;
       var filterParam = pverFilter ? '&$filter=' + encodeURIComponent(pverFilter) : '';
       var selectParam = selectFields ? '&$select=' + selectFields : '';

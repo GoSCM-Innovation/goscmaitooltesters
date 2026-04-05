@@ -141,7 +141,7 @@
           ? "PlanningAreaID eq '" + CFG.pa + "' and VersionID eq '" + CFG.pver + "'"
           : "PlanningAreaID eq '" + CFG.pa + "'";
         var vsmtUrl = CFG.url + '/sap/opu/odata/IBP/' + CFG.service
-          + '/VersionSpecificMasterDataTypes?$format=json&$top=500&$filter=' + encodeURIComponent(mdtFilter);
+          + '/VersionSpecificMasterDataTypes?$format=json&$top=50000&$filter=' + encodeURIComponent(mdtFilter);
         var vsmtData = await apiJson(vsmtUrl);
         var vsmtItems = (vsmtData.d && vsmtData.d.results) ? vsmtData.d.results : (vsmtData.value || []);
         var mdtIds = vsmtItems.map(function (it) { return it.MasterDataTypeID; }).filter(Boolean);

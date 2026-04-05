@@ -4,7 +4,7 @@
 
     /* Fetches all OData pages, calls onPage(results) per page (no accumulation). */
     async function fetchAndIndex(entityUrl, logEl, pverFilter, selectFields, onPage) {
-      var PAGE_SIZE = 5000;
+      var PAGE_SIZE = 50000;
       var page = 0, total = 0;
       var filterParam = pverFilter ? '&$filter=' + encodeURIComponent(pverFilter) : '';
       var selectParam = selectFields ? '&$select=' + encodeURIComponent(selectFields) : '';
@@ -34,7 +34,43 @@
     }
 
     /* Single-button handler: index → analyse → export — no raw arrays in memory */
+    function doConfirmMapping() {
+      var body = document.getElementById('bodySNMDT');
+      var arr  = document.getElementById('arrSNMDT');
+      if (body && !body.classList.contains('hidden')) {
+        body.classList.add('hidden');
+        if (arr) arr.textContent = '▶';
+      }
+      var panel = document.getElementById('panelSNExportMode');
+      if (panel) {
+        panel.classList.remove('hidden');
+        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+
+    function doBackToMapping() {
+      var panel = document.getElementById('panelSNExportMode');
+      if (panel) panel.classList.add('hidden');
+      var body = document.getElementById('bodySNMDT');
+      var arr  = document.getElementById('arrSNMDT');
+      if (body) {
+        body.classList.remove('hidden');
+        if (arr) arr.textContent = '▼';
+        document.getElementById('panelSNMDT').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+
+    function snModeChange() {
+      var light = document.getElementById('modeLightSN').checked;
+      var cardL = document.getElementById('cardLightSN');
+      var cardH = document.getElementById('cardHeavySN');
+      if (cardL) cardL.style.borderColor = light ? 'var(--accent)' : 'var(--border,#1e2d45)';
+      if (cardH) cardH.style.borderColor = light ? 'var(--border,#1e2d45)' : 'var(--cyan)';
+    }
+
     async function doAnalyzeAndExport() {
+      var modeEl     = document.querySelector('input[name="snExportMode"]:checked');
+      var exportMode = modeEl ? modeEl.value : 'light';
       var logEl = document.getElementById('logSN');
       logEl.innerHTML = '';
       logEl.classList.add('hidden');
@@ -195,15 +231,17 @@
         log(logEl, 'ok', timer.fmt() + ' Índices listos. ' + totalPrds + ' productos en la red. Iniciando análisis...');
         setStatusSN('info', 'Analizando red (' + totalPrds + ' productos)...');
 
-        // ── PHASE 2+3: Análisis + Excel streaming (50 → 100%) ──────────────
-        // Las filas se escriben directamente a ExcelJS — sin arrays intermedios s1-s7.
+        // ── PHASE 2+3: Análisis + exportación (50 → 100%) ──────────────
         function onProg(pct) { progEl.style.width = pct + '%'; }
         function onStat(msg) { setStatusSN('info', msg); }
-        var summary = await analyzeAndStreamExcel(onProg, onStat, timer, logEl);
+        var summary = await analyzeAndStreamExcel(onProg, onStat, timer, logEl, exportMode);
         progEl.style.width = '100%';
 
-        log(logEl, 'ok', timer.fmt() + ' ¡Excel descargado! ' + summary.totalProducts + ' productos analizados.');
+        var modeLabel = exportMode === 'light' ? 'ZIP (6 CSVs)' : 'Excel (6 hojas)';
+        log(logEl, 'ok', timer.fmt() + ' ¡' + modeLabel + ' descargado! ' + summary.totalProducts + ' productos analizados.');
         setStatusSN('ok', '¡Completado! ' + summary.totalProducts + ' productos · ' + timer.ms() + 'ms');
+        var bannerP = document.querySelector('#snSuccessBanner p');
+        if (bannerP) bannerP.textContent = 'El informe (' + modeLabel + ') ha sido descargado exitosamente.';
         document.getElementById('snSuccessBanner').classList.remove('hidden');
 
       } catch (e) {
@@ -248,7 +286,9 @@
        7 grupos de hojas orientados a entidad (con auto-split >900k).
        Las filas se escriben directo a ExcelJS — sin arrays intermedios.
        ═══════════════════════════════════════════════════════════════ */
-    async function analyzeAndStreamExcel(onProgress, onStatus, timer, logEl) {
+    async function analyzeAndStreamExcel(onProgress, onStatus, timer, logEl, mode) {
+      var isCSV = (mode === 'light');
+
       /* ── micro-helpers ── */
       function pd(id)      { var p = SN_IDX.prdLookup[id]  || {}; return str(p.PRDDESCR  || ''); }
       function pm(id)      { var p = SN_IDX.prdLookup[id]  || {}; return str(p.MATTYPEID || ''); }
@@ -258,8 +298,29 @@
       function yn(b)       { return b ? 'Sí' : 'No'; }
       function stLabel(f)  { return f === C_RED ? '🔴 Alerta' : f === C_YEL ? '🟡 Advertencia' : '✅ OK'; }
 
-      /* ── Workbook ── */
-      var wb    = new ExcelJS.Workbook();
+      /* ── CSV helpers (modo Light) ── */
+      function csvEsc(v) {
+        var s = v != null ? String(v) : '';
+        if (s.search(/[,"\r\n]/) !== -1) return '"' + s.replace(/"/g, '""') + '"';
+        return s;
+      }
+      function makeCSVGroup(baseName, _argb, headers) {
+        initStat(baseName);
+        var lines = [headers.map(csvEsc).join(',')];
+        return {
+          addRow: function (data, fill) {
+            lines.push(data.map(csvEsc).join(','));
+            var s = STATS[baseName];
+            if (s) { s.total++; if (fill === C_RED) s.red++; else if (fill === C_YEL) s.yel++; else s.ok++; }
+          },
+          checkSplit: function () {},
+          finalize:   function () {},
+          getLines:   function () { return lines; }
+        };
+      }
+
+      /* ── Workbook (modo Heavy) ── */
+      var wb    = isCSV ? null : new ExcelJS.Workbook();
       var today = new Date().toISOString().slice(0, 10);
       var GOLD  = 'FFF7A800', ORANGE = 'FFE8622A', NAVY = 'FF0B1120';
       var C_RED = 'FFFFCCCC', C_YEL  = 'FFFFFFCC';
@@ -325,20 +386,27 @@
       }
 
       /* ── Hoja Resumen (se llena al final) ── */
-      var s0ws  = wb.addWorksheet('Resumen', { views: [{ state: 'frozen', ySplit: 1 }], properties: { tabColor: { argb: 'FF34D399' } } });
       var s0hdr = ['#', 'Hoja', 'Total registros', 'Alertas 🔴', 'Advertencias 🟡', 'OK ✅', '% Consistencia'];
-      s0ws.addRow(s0hdr);
-      s0ws.getRow(1).eachCell(function (cell) {
-        cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: GOLD } };
-        cell.font  = { bold: true, name: 'DM Sans', size: 10, color: { argb: NAVY } };
-        cell.alignment = { vertical: 'middle', horizontal: 'center' };
-        cell.border = { bottom: { style: 'medium', color: { argb: ORANGE } } };
-      });
-      s0ws.getRow(1).height = 20;
-      var s0colW = s0hdr.map(function (h) { return h.length; });
+      var s0ws = null, s0colW = null, s0csvLines = null;
+      if (isCSV) {
+        s0csvLines = [s0hdr.map(csvEsc).join(',')];
+      } else {
+        s0ws = wb.addWorksheet('Resumen', { views: [{ state: 'frozen', ySplit: 1 }], properties: { tabColor: { argb: 'FF34D399' } } });
+        s0ws.addRow(s0hdr);
+        s0ws.getRow(1).eachCell(function (cell) {
+          cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: GOLD } };
+          cell.font  = { bold: true, name: 'DM Sans', size: 10, color: { argb: NAVY } };
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          cell.border = { bottom: { style: 'medium', color: { argb: ORANGE } } };
+        });
+        s0ws.getRow(1).height = 20;
+        s0colW = s0hdr.map(function (h) { return h.length; });
+      }
+
+      var grpFactory = isCSV ? makeCSVGroup : makeGroup;
 
       /* ── Crear grupos de hojas ── */
-      var gPrd = makeGroup('Product', 'FF29ABE2', [
+      var gPrd = grpFactory('Product', 'FF29ABE2', [
         'Estado','PRDID','PRDDESCR','MATTYPEID',
         'En PSH?','En PSI?','En Location Source?','En Customer Source?','En Location Product?','En Customer Product?','Solo en maestro?',
         'Estado de la Red','Plants','DCs','Customers','Paths','Longest Path','Ghost Nodes','Dead Ends',
@@ -350,17 +418,17 @@
         '# Productos manejados','# Como origen (LOCFR)','# Como destino (LOCID)','# Clientes servidos',
         'Es nodo crítico?','# Productos impactados','# Clientes impactados','Nivel de riesgo','Observaciones'
       ]);
-      var gCust = makeGroup('Customer', 'FF10B981', [
+      var gCust = grpFactory('Customer', 'FF10B981', [
         'Estado','CUSTID','CUSTDESCR',
         'En Customer Source?','En Customer Product?','Solo en maestro?',
         '# Productos recibidos','# Ubicaciones proveedoras','# Paths que llegan','Resiliencia predominante','Observaciones'
       ]);
-      var gLS = makeGroup('Location Source', 'FFF7A800', [
+      var gLS = grpFactory('Location Source', 'FFF7A800', [
         'Estado','PRDID','PRDDESCR','LOCFR','LOCFR Descripción','LOCID','LOCID Descripción','TLEADTIME',
         'LOCFR+PRDID en Location Product?','LOCID+PRDID en Location Product?','PRDID en PSH?',
         'Arco en ruta completa?','Arco duplicado?','Arco inverso?','Lead Time Status','Observaciones'
       ]);
-      var gCS = makeGroup('Customer Source', 'FFE8622A', [
+      var gCS = grpFactory('Customer Source', 'FFE8622A', [
         'Estado','PRDID','PRDDESCR','LOCID','LOCID Descripción','CUSTID','CUSTID Descripción','CLEADTIME',
         'LOCID+PRDID en Location Product?','CUSTID+PRDID en Customer Product?','PRDID en PSH?',
         'Entrega alcanzable desde producción?','Lead Time Status','Observaciones'
@@ -761,25 +829,47 @@
       ].forEach(function (d) {
         var s = STATS[d.key]; if (!s) return;
         var pct  = s.total > 0 ? Math.round((s.ok / s.total) * 100) : 100;
-        var fill = s.red > 0 ? C_RED : s.yel > 0 ? C_YEL : null;
         var row  = [d.num, d.key, s.total, s.red, s.yel, s.ok, pct + '%'];
-        var exRow = s0ws.addRow(row);
-        if (fill) exRow.eachCell(function (cell) { cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } }; });
-        row.forEach(function (v, ci) { var len = v != null ? String(v).length : 0; if (len > s0colW[ci]) s0colW[ci] = len; });
+        if (isCSV) {
+          s0csvLines.push(row.map(csvEsc).join(','));
+        } else {
+          var fill  = s.red > 0 ? C_RED : s.yel > 0 ? C_YEL : null;
+          var exRow = s0ws.addRow(row);
+          if (fill) exRow.eachCell(function (cell) { cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } }; });
+          row.forEach(function (v, ci) { var len = v != null ? String(v).length : 0; if (len > s0colW[ci]) s0colW[ci] = len; });
+        }
       });
-      s0ws.columns.forEach(function (col, ci) { col.width = Math.min(Math.max((s0colW[ci] || 10) + 2, 10), 60); });
 
       [gPrd, gLoc, gCust, gLS, gCS].forEach(function (g) { g.finalize(); });
 
-      if (onProgress) onProgress(97);
-      if (onStatus)   onStatus('Generando archivo Excel...');
-      var buf  = await wb.xlsx.writeBuffer();
-      var blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      var dlUrl = URL.createObjectURL(blob);
-      var a = document.createElement('a');
-      a.href = dlUrl; a.download = 'SupplyNetworkAnalysis_' + today + '.xlsx';
-      document.body.appendChild(a); a.click();
-      document.body.removeChild(a); URL.revokeObjectURL(dlUrl);
+      if (isCSV) {
+        if (onProgress) onProgress(97);
+        if (onStatus)   onStatus('Comprimiendo CSVs...');
+        var zip = new JSZip();
+        zip.file('00_Resumen.csv',        s0csvLines.join('\r\n'));
+        zip.file('01_Product.csv',        gPrd.getLines().join('\r\n'));
+        zip.file('02_Location.csv',       gLoc.getLines().join('\r\n'));
+        zip.file('03_Customer.csv',       gCust.getLines().join('\r\n'));
+        zip.file('04_Location_Source.csv', gLS.getLines().join('\r\n'));
+        zip.file('05_Customer_Source.csv', gCS.getLines().join('\r\n'));
+        var content = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+        var dlUrl = URL.createObjectURL(content);
+        var a = document.createElement('a');
+        a.href = dlUrl; a.download = 'SupplyNetworkAnalysis_' + today + '.zip';
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a); URL.revokeObjectURL(dlUrl);
+      } else {
+        s0ws.columns.forEach(function (col, ci) { col.width = Math.min(Math.max((s0colW[ci] || 10) + 2, 10), 60); });
+        if (onProgress) onProgress(97);
+        if (onStatus)   onStatus('Generando archivo Excel...');
+        var buf  = await wb.xlsx.writeBuffer();
+        var blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        var dlUrl = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = dlUrl; a.download = 'SupplyNetworkAnalysis_' + today + '.xlsx';
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a); URL.revokeObjectURL(dlUrl);
+      }
 
       return {
         totalProducts: n, completeProducts: completeCount, totalPaths: totalPaths,
