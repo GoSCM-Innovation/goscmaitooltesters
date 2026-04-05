@@ -412,7 +412,7 @@
         'Estado de la Red','Plants','DCs','Customers','Paths','Longest Path','Ghost Nodes','Dead Ends',
         'Health Score','Health Category','Observaciones'
       ]);
-      var gLoc = makeGroup('Location', 'FF06B6D4', [
+      var gLoc = grpFactory('Location', 'FF06B6D4', [
         'Estado','LOCID','LOCDESCR','LOCTYPE',
         'En PSH?','En Location Source?','En Customer Source?','En Location Product?','Solo en maestro?',
         '# Productos manejados','# Como origen (LOCFR)','# Como destino (LOCID)','# Clientes servidos',
