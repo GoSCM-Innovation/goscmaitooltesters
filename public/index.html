@@ -606,9 +606,46 @@
           </div>
         </div>
         <div class="btn-row">
-          <button class="btn btn-primary" id="btnFetchSN" onclick="doAnalyzeAndExport()">Analizar red y Exportar
-            Excel</button>
+          <button class="btn btn-primary" id="btnConfirmMapping" onclick="doConfirmMapping()">Continuar &#8594;</button>
           <button class="btn btn-secondary btn-small" onclick="doConnect()">Reconectar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ SUPPLY NETWORK: MODO DE EXPORTACIÓN ═══ -->
+    <div class="panel hidden" id="panelSNExportMode">
+      <div class="panel-title">③ Modo de exportación</div>
+      <div id="bodySNExportMode">
+        <p style="font-size:12px;color:var(--text2);margin-bottom:12px;">
+          Selecciona cómo deseas exportar el análisis de la red de suministro.
+        </p>
+        <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+
+          <!-- LIGHT -->
+          <label for="modeLightSN" style="flex:1;min-width:240px;cursor:pointer;display:block;border:2px solid var(--accent);border-radius:8px;padding:14px 16px;background:rgba(247,168,0,0.06);transition:border-color .2s;" id="cardLightSN">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+              <input type="radio" name="snExportMode" value="light" id="modeLightSN" checked onchange="snModeChange()">
+              <span style="font-weight:700;font-size:13px;color:var(--accent);">Light — CSV comprimido</span>
+              <span style="font-size:10px;background:var(--accent);color:#0b1120;padding:1px 6px;border-radius:10px;font-weight:700;">Recomendado</span>
+            </div>
+            <p style="font-size:12px;color:var(--text2);margin:0 0 6px;">Genera un archivo <strong>.zip</strong> con 6 archivos <strong>.csv</strong> (Resumen, Product, Location, Customer, Location Source, Customer Source). Sin formato ni colores. Ideal para volúmenes de datos altos o procesamiento posterior en Excel / Python / BI.</p>
+            <p style="font-size:11px;color:var(--green);margin:0;"><strong>Uso de memoria: muy bajo.</strong> Los datos se construyen como texto plano y se comprimen con JSZip sin mantener todo en RAM simultáneamente.</p>
+          </label>
+
+          <!-- HEAVY -->
+          <label for="modeHeavySN" style="flex:1;min-width:240px;cursor:pointer;display:block;border:2px solid var(--border,#1e2d45);border-radius:8px;padding:14px 16px;background:rgba(41,171,226,0.04);transition:border-color .2s;" id="cardHeavySN">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+              <input type="radio" name="snExportMode" value="heavy" id="modeHeavySN" onchange="snModeChange()">
+              <span style="font-weight:700;font-size:13px;color:var(--cyan);">Heavy — Excel formateado</span>
+            </div>
+            <p style="font-size:12px;color:var(--text2);margin:0 0 6px;">Genera un archivo <strong>.xlsx</strong> con 6 hojas formateadas: colores por severidad (🔴/🟡/✅), encabezados congelados, anchos automáticos y hoja de Resumen con estadísticas de consistencia.</p>
+            <p style="font-size:11px;color:var(--amber,#f59e0b);margin:0;"><strong>Uso de memoria: alto.</strong> ExcelJS mantiene cada celda con metadatos de estilo en memoria; en datasets grandes puede superar varios cientos de MB en el navegador.</p>
+          </label>
+
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btnFetchSN" onclick="doAnalyzeAndExport()">Iniciar análisis</button>
+          <button class="btn btn-secondary btn-small" onclick="doBackToMapping()">← Volver al mapeo</button>
         </div>
         <div class="progress-bar hidden" id="progBarSN">
           <div class="fill" id="progFillSN" style="width:0%"></div>
@@ -626,8 +663,7 @@
     <div class="empty-state hidden" id="snSuccessBanner" style="margin-top:40px;">
       <div class="icon">✅</div>
       <strong style="font-size:15px;color:var(--green)">¡Análisis completado!</strong>
-      <p style="font-size:13px;color:var(--text2);margin-top:6px;">El informe Excel con 6 hojas ha sido descargado
-        exitosamente.</p>
+      <p style="font-size:13px;color:var(--text2);margin-top:6px;">El informe ha sido descargado exitosamente.</p>
     </div>
 
   </div><!-- /tab-network -->
@@ -1109,8 +1145,46 @@
           </div>
         </div>
         <div class="btn-row">
-          <button class="btn btn-primary" id="btnFetchPA" onclick="doProductionAnalysis()">Analizar producción y Exportar Excel</button>
+          <button class="btn btn-primary" onclick="paConfirmMapping()">Continuar &#8594;</button>
           <button class="btn btn-secondary btn-small" onclick="doConnect()">Reconectar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ PA: MODO DE EXPORTACIÓN ═══ -->
+    <div class="panel hidden" id="panelPAExportMode">
+      <div class="panel-title">③ Modo de exportación</div>
+      <div id="bodyPAExportMode">
+        <p style="font-size:12px;color:var(--text2);margin-bottom:12px;">
+          Selecciona cómo deseas exportar el análisis de jerarquía de producción.
+        </p>
+        <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+
+          <!-- LIGHT -->
+          <label for="modeLightPA" style="flex:1;min-width:240px;cursor:pointer;display:block;border:2px solid var(--accent);border-radius:8px;padding:14px 16px;background:rgba(247,168,0,0.06);transition:border-color .2s;" id="cardLightPA">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+              <input type="radio" name="paExportMode" value="light" id="modeLightPA" checked onchange="paModeChange()">
+              <span style="font-weight:700;font-size:13px;color:var(--accent);">Light — CSV comprimido</span>
+              <span style="font-size:10px;background:var(--accent);color:#0b1120;padding:1px 6px;border-radius:10px;font-weight:700;">Recomendado</span>
+            </div>
+            <p style="font-size:12px;color:var(--text2);margin:0 0 6px;">Genera un archivo <strong>.zip</strong> con 7 archivos <strong>.csv</strong> (Resumen, Product, Resource, Resource Location, Prod Source Header, Prod Source Item, Prod Source Resource). Sin formato ni colores. Ideal para volúmenes de datos altos o procesamiento posterior en Excel / Python / BI.</p>
+            <p style="font-size:11px;color:var(--green);margin:0;"><strong>Uso de memoria: muy bajo.</strong> Los datos se construyen como texto plano y se comprimen con JSZip sin mantener todo en RAM simultáneamente.</p>
+          </label>
+
+          <!-- HEAVY -->
+          <label for="modeHeavyPA" style="flex:1;min-width:240px;cursor:pointer;display:block;border:2px solid var(--border,#1e2d45);border-radius:8px;padding:14px 16px;background:rgba(41,171,226,0.04);transition:border-color .2s;" id="cardHeavyPA">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+              <input type="radio" name="paExportMode" value="heavy" id="modeHeavyPA" onchange="paModeChange()">
+              <span style="font-weight:700;font-size:13px;color:var(--cyan);">Heavy — Excel formateado</span>
+            </div>
+            <p style="font-size:12px;color:var(--text2);margin:0 0 6px;">Genera un archivo <strong>.xlsx</strong> con 7 hojas formateadas: colores por severidad (🔴/🟡/✅), encabezados congelados, anchos automáticos y hoja de Resumen con estadísticas de consistencia.</p>
+            <p style="font-size:11px;color:var(--amber,#f59e0b);margin:0;"><strong>Uso de memoria: alto.</strong> ExcelJS mantiene cada celda con metadatos de estilo en memoria; en datasets grandes puede superar varios cientos de MB en el navegador.</p>
+          </label>
+
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btnFetchPA" onclick="doProductionAnalysis()">Iniciar análisis</button>
+          <button class="btn btn-secondary btn-small" onclick="paBackToMapping()">&#8592; Volver al mapeo</button>
         </div>
         <div class="progress-bar hidden" id="progBarPA">
           <div class="fill" id="progFillPA" style="width:0%"></div>
@@ -1128,7 +1202,7 @@
     <div class="empty-state hidden" id="paSuccessBanner" style="margin-top:40px;">
       <div class="icon">✅</div>
       <strong style="font-size:15px;color:var(--green)">¡Análisis completado!</strong>
-      <p style="font-size:13px;color:var(--text2);margin-top:6px;">El informe Excel con los hallazgos de producción ha sido descargado exitosamente.</p>
+      <p style="font-size:13px;color:var(--text2);margin-top:6px;">El informe ha sido descargado exitosamente.</p>
     </div>
 
   </div><!-- /tab-pa -->
