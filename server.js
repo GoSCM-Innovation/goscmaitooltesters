@@ -246,8 +246,9 @@ app.post('/api/send-feedback', async (req, res) => {
 
     if (resp.ok) return res.json({ ok: true });
 
-    console.error('[feedback] EmailJS error:', resp.status);
-    res.status(500).json({ error: 'Error al enviar feedback' });
+    const errBody = await resp.text();
+    console.error('[feedback] EmailJS error:', resp.status, errBody);
+    res.status(500).json({ error: 'Error al enviar feedback', detail: errBody });
   } catch (err) {
     console.error('[feedback error]', err.message);
     res.status(500).json({ error: 'Error interno' });
