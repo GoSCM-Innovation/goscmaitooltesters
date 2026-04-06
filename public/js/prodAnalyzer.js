@@ -377,7 +377,7 @@
       }
       function csvEsc(v) {
         var s = csvStr(v);
-        if (s.indexOf(',') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\n') >= 0)
+        if (s.indexOf(';') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\n') >= 0)
           s = '"' + s.replace(/"/g, '""') + '"';
         return s;
       }
@@ -386,9 +386,9 @@
       function makeGroup(name, tabArgb, hdrsExcel, hdrsCSV) {
         if (isCSV) {
           var hdr = (hdrsCSV || hdrsExcel).map(csvStr);
-          var lines = [hdr.map(csvEsc).join(',')];
+          var lines = [hdr.map(csvEsc).join(';')];
           return {
-            addRow:   function(data) { lines.push(data.map(csvEsc).join(',')); },
+            addRow:   function(data) { lines.push(data.map(csvEsc).join(';')); },
             finalize: function() {},
             getLines: function() { return lines; }
           };

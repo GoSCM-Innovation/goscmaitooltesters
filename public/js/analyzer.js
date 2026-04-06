@@ -304,15 +304,15 @@
         // Eliminar tildes/acentos y emojis para compatibilidad CSV
         s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         s = s.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '').trim();
-        if (s.search(/[,"\r\n]/) !== -1) return '"' + s.replace(/"/g, '""') + '"';
+        if (s.search(/[;"\r\n]/) !== -1) return '"' + s.replace(/"/g, '""') + '"';
         return s;
       }
       function makeCSVGroup(baseName, _argb, headers) {
         initStat(baseName);
-        var lines = [headers.map(csvEsc).join(',')];
+        var lines = [headers.map(csvEsc).join(';')];
         return {
           addRow: function (data, fill) {
-            lines.push(data.map(csvEsc).join(','));
+            lines.push(data.map(csvEsc).join(';'));
             var s = STATS[baseName];
             if (s) { s.total++; if (fill === C_RED) s.red++; else if (fill === C_YEL) s.yel++; else s.ok++; }
           },
@@ -392,7 +392,7 @@
       var s0hdr = ['#', 'Hoja', 'Total registros', 'Alertas 🔴', 'Advertencias 🟡', 'OK ✅', '% Consistencia'];
       var s0ws = null, s0colW = null, s0csvLines = null;
       if (isCSV) {
-        s0csvLines = [s0hdr.map(csvEsc).join(',')];
+        s0csvLines = [s0hdr.map(csvEsc).join(';')];
       } else {
         s0ws = wb.addWorksheet('Resumen', { views: [{ state: 'frozen', ySplit: 1 }], properties: { tabColor: { argb: 'FF34D399' } } });
         s0ws.addRow(s0hdr);
@@ -834,7 +834,7 @@
         var pct  = s.total > 0 ? Math.round((s.ok / s.total) * 100) : 100;
         var row  = [d.num, d.key, s.total, s.red, s.yel, s.ok, pct + '%'];
         if (isCSV) {
-          s0csvLines.push(row.map(csvEsc).join(','));
+          s0csvLines.push(row.map(csvEsc).join(';'));
         } else {
           var fill  = s.red > 0 ? C_RED : s.yel > 0 ? C_YEL : null;
           var exRow = s0ws.addRow(row);
