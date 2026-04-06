@@ -9,12 +9,13 @@
       var filterParam = pverFilter ? '&$filter=' + encodeURIComponent(pverFilter) : '';
       var selectParam = selectFields ? '&$select=' + encodeURIComponent(selectFields) : '';
       var url = entityUrl + '?$format=json&$top=' + PAGE_SIZE + filterParam + selectParam;
+      var isNextLink = false;
 
       while (url) {
         page++;
         if (page === 1) log(logEl, 'info', '  ↳ URL: ' + url);
         else log(logEl, 'info', '  ↳ Pág.' + page + ' → ' + url);
-        var data = await apiJson(url);
+        var data = await (isNextLink ? apiJsonNext(url) : apiJson(url));
         var results = (data.d && data.d.results) ? data.d.results : (data.value || []);
         await onPage(results);   // index/store this page, then let it be GC'd
         total += results.length;
@@ -25,8 +26,10 @@
         if (!next && data['@odata.nextLink']) next = data['@odata.nextLink'];
         if (next) {
           url = (next.indexOf('http') === 0) ? next : (CFG.url + next);
+          isNextLink = true;
         } else if (results.length === PAGE_SIZE) {
           url = entityUrl + '?$format=json&$top=' + PAGE_SIZE + '&$skip=' + total + filterParam + selectParam;
+          isNextLink = false;
           log(logEl, 'warn', '  ↳ Sin __next, fallback $skip=' + total);
         } else { url = null; }
       }

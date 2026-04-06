@@ -17,11 +17,10 @@ async function fetchIbpFieldDescriptions() {
   const descs = {};
   const results = await Promise.allSettled(
     services.map(svc => {
-      const url = `${CFG.url}/sap/opu/odata/IBP/${svc}/$metadata`;
       return fetch('/api/proxy-xml', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, user: CFG.user, password: CFG.pass })
+        body: JSON.stringify({ base: CFG.url, service: svc, user: CFG.user, password: CFG.pass })
       }).then(r => r.ok ? r.text() : Promise.reject(r.status));
     })
   );
@@ -78,7 +77,7 @@ function renderFiles() {
   document.getElementById('file-list').innerHTML = files.map((f, i) => `
     <div class="file-tag">
       <span class="ico">📦</span>
-      <span class="name">${f.name}</span>
+      <span class="name">${escH(f.name)}</span>
       <span class="size">${(f.data.byteLength/1024).toFixed(0)} KB</span>
       <button class="rm" onclick="removeFile(${i})">✕</button>
     </div>`).join('');
@@ -1099,12 +1098,12 @@ function renderSelList() {
     const badgeClass = t === 'KF' ? 'badge-kf' : t === 'MD' ? 'badge-md' : 'badge-file';
     const jobName = item.paramRow.jobName || item.sheetName;
     const df = item.paramRow.dataflowName
-      ? `<span class="si-df">${item.paramRow.dataflowName}</span>` : '';
+      ? `<span class="si-df">${escH(item.paramRow.dataflowName)}</span>` : '';
     return `<label class="sel-item" data-idx="${i}">
       <input type="checkbox" checked onchange="updateCounter()">
       <span class="si-badge ${badgeClass}">${t || '?'}</span>
-      <span class="si-name">${jobName}${df}</span>
-      <span class="badge-pkg" title="${item.pkg}">${item.pkg}</span>
+      <span class="si-name">${escH(jobName)}${df}</span>
+      <span class="badge-pkg" title="${escH(item.pkg)}">${escH(item.pkg)}</span>
     </label>`;
   }).join('');
   document.getElementById('sel-search').value = '';

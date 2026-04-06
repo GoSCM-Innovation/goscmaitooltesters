@@ -185,8 +185,54 @@
     /* ═══════════════════════════════════════════════════════════════
        API HELPERS
        ═══════════════════════════════════════════════════════════════ */
+
+    // Decomposes a full OData URL into structured components for the server proxy.
+    // Prevents client-side manipulation of the OData path prefix and service name
+    // from reaching the server as-is; the server validates each component separately.
+    function decomposeODataUrl(fullUrl) {
+      var parsed = new URL(fullUrl);
+      var base  = parsed.origin;
+      var parts = parsed.pathname.split('/');
+      // pathname: /sap/opu/odata/IBP/{service}/{entity}
+      var ibpIdx  = parts.indexOf('IBP');
+      var service = ibpIdx >= 0 ? (parts[ibpIdx + 1] || '') : '';
+      var ePath   = ibpIdx >= 0 ? (parts.slice(ibpIdx + 2).join('/') || '$metadata') : '';
+      var query   = parsed.search ? parsed.search.substring(1) : '';
+      return { base: base, service: service, path: ePath, query: query };
+    }
+
     async function apiJson(url) {
+      var d = decomposeODataUrl(url);
       var resp = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base: d.base, service: d.service, path: d.path, query: d.query, user: CFG.user, password: CFG.pass })
+      });
+      if (!resp.ok) {
+        var err = await resp.json().catch(function () { return { error: resp.statusText }; });
+        throw new Error(err.error || resp.statusText);
+      }
+      return resp.json();
+    }
+
+    async function apiXml(url) {
+      var d = decomposeODataUrl(url);
+      var resp = await fetch('/api/proxy-xml', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base: d.base, service: d.service, user: CFG.user, password: CFG.pass })
+      });
+      if (!resp.ok) {
+        var err = await resp.json().catch(function () { return { error: resp.statusText }; });
+        throw new Error(err.error || resp.statusText);
+      }
+      return resp.text();
+    }
+
+    // Used exclusively for SAP-provided pagination links (__next / @odata.nextLink).
+    // These are full URLs returned by the SAP server, not constructed by the client.
+    async function apiJsonNext(url) {
+      var resp = await fetch('/api/proxy-next', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: url, user: CFG.user, password: CFG.pass })
@@ -198,19 +244,6 @@
       return resp.json();
     }
 
-    async function apiXml(url) {
-      var resp = await fetch('/api/proxy-xml', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: url, user: CFG.user, password: CFG.pass })
-      });
-      if (!resp.ok) {
-        var err = await resp.json().catch(function () { return { error: resp.statusText }; });
-        throw new Error(err.error || resp.statusText);
-      }
-      return resp.text();
-    }
-
 
     async function fetchAllPages(entityUrl, logEl, pverFilter, selectFields) {
       var all = [];
@@ -219,13 +252,14 @@
       var filterParam = pverFilter ? '&$filter=' + encodeURIComponent(pverFilter) : '';
       var selectParam = selectFields ? '&$select=' + selectFields : '';
       var url = entityUrl + '?$format=json&$top=' + PAGE_SIZE + filterParam + selectParam;
+      var isNextLink = false;
 
       while (url) {
         page++;
         if (page > 1) {
           log(logEl, 'info', '  ↳ Pág.' + page + ' GET → ' + url);
         }
-        var data = await apiJson(url);
+        var data = await (isNextLink ? apiJsonNext(url) : apiJson(url));
         var results = (data.d && data.d.results) ? data.d.results : (data.value || []);
         all = all.concat(results);
 
@@ -239,10 +273,12 @@
 
         if (next) {
           url = (next.indexOf('http') === 0) ? next : (CFG.url + next);
+          isNextLink = true;
         } else if (results.length === PAGE_SIZE) {
           // Página completa sin link → fallback $skip para no perder registros
           var skip = all.length;
           url = entityUrl + '?$format=json&$top=' + PAGE_SIZE + '&$skip=' + skip + filterParam + selectParam;
+          isNextLink = false;
           log(logEl, 'warn', '  ↳ Sin __next, fallback $skip=' + skip + ' → ' + url);
         } else {
           // Página parcial → fin de datos

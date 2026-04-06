@@ -8,10 +8,15 @@
   <link
     href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap"
     rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
-  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"
+    integrity="sha512-dlPw+ytv/6JyepmelABrgeYgHI0O+frEwgfnPdXDTOIZz+eDgfW07QXG02/O8COfivBdGNINy+Vex+lYmJ5rxw=="
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/10.0.2/standalone/umd/vis-network.min.js"
+    integrity="sha512-9YVQZyV2hlSqEXZDwSEVia7u4T+qBkLE7KYG24LalL3J1zoQJXAiWpobprig/vGhV1VCfPIxF4EvHDYCSrSpmw=="
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
+    integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg=="
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <link rel="stylesheet" href="css/styles.css">
   <link rel="icon" type="image/png" href="favicon.png">
 </head>
@@ -52,7 +57,7 @@
         <div class="form-group full">
           <label>API Base URL</label>
           <input type="url" id="inpUrl" name="api_url" list="urlsList" autocomplete="url"
-            placeholder="https://my400444-api.scmibp.ondemand.com" value="" required>
+            placeholder="https://example123-api.scmibp.ondemand.com" value="" required>
           <datalist id="urlsList"></datalist>
         </div>
         <div class="form-group">
@@ -76,7 +81,7 @@
             placeholder="ID de la versión (vacío = Baseline)" style="font-family:var(--mono);">
           <datalist id="pverList"></datalist>
         </div>
-        <input type="hidden" id="inpService" value="MASTER_DATA_API_SRV">
+
       </div>
       <div class="btn-row" style="margin-top:20px;">
         <button type="submit" class="btn btn-primary" id="btnConnect">Conectar y detectar entidades</button>

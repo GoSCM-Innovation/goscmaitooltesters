@@ -1,6 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════
        GLOBAL STATE
        ═══════════════════════════════════════════════════════════════ */
+    var IBP_SERVICE = 'MASTER_DATA_API_SRV'; // server-validated against ALLOWED_SERVICES
     var CFG = { url: '', user: '', pass: '', pa: '', service: '', pver: '', paEntities: [] };
     var IS_CONNECTED = false;
     var ENTITIES = [];       // [{name, fields:[]}]
