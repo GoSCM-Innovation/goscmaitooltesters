@@ -84,7 +84,7 @@
       CFG.pass = document.getElementById('inpPass').value;
       CFG.pa = document.getElementById('inpPA').value.toUpperCase().trim();
       CFG.pver = document.getElementById('inpPver').value.toUpperCase().trim();
-      CFG.service = document.getElementById('inpService').value;
+      CFG.service = IBP_SERVICE;
 
       if (!CFG.url || !CFG.user || !CFG.pass || !CFG.pa) {
         log(logEl, 'err', 'Completa URL, usuario, contraseña y Planning Area');
@@ -730,8 +730,6 @@
 
 
     /* ── Feedback ── */
-    emailjs.init('DoHbN3x-66upumtbm');
-
     function openFeedback() {
       document.getElementById('feedbackOverlay').style.display = 'block';
       document.getElementById('feedbackPanel').style.transform = 'translateX(0)';
@@ -750,18 +748,28 @@
       var msg = document.getElementById('fbMsg');
       if (!name || !desc) { msg.style.color = '#EF4444'; msg.textContent = 'Nombre y descripción son obligatorios.'; return; }
       btn.disabled = true; btn.textContent = 'Enviando…'; msg.textContent = '';
-      emailjs.send('service_tw7qns4', 'template_hd02kde', { from_name: name, app: app, type: type, description: desc })
-        .then(function () {
-          msg.style.color = '#10B981';
-          msg.textContent = '✓ Enviado correctamente. ¡Gracias!';
-          btn.textContent = 'Enviar';
-          btn.disabled = false;
-          document.getElementById('fbName').value = '';
-          document.getElementById('fbDesc').value = '';
-          setTimeout(closeFeedback, 1800);
-        }, function (err) {
+      fetch('/api/send-feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name, app: app, type: type, description: desc })
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.ok) {
+            msg.style.color = '#10B981';
+            msg.textContent = '✓ Enviado correctamente. ¡Gracias!';
+            btn.textContent = 'Enviar';
+            btn.disabled = false;
+            document.getElementById('fbName').value = '';
+            document.getElementById('fbDesc').value = '';
+            setTimeout(closeFeedback, 1800);
+          } else {
+            throw new Error(data.error || 'Error desconocido');
+          }
+        })
+        .catch(function () {
           msg.style.color = '#EF4444';
-          msg.textContent = '✕ Error al enviar: ' + (err.text || JSON.stringify(err));
+          msg.textContent = '✕ Error al enviar. Intenta de nuevo.';
           btn.textContent = 'Enviar';
           btn.disabled = false;
         });
@@ -806,7 +814,7 @@
       function popList(key, listId) {
         var arr = JSON.parse(localStorage.getItem(key) || '[]');
         var dl = document.getElementById(listId);
-        if (dl) dl.innerHTML = arr.map(function(v) { return '<option value="' + v + '">'; }).join('');
+        if (dl) dl.innerHTML = arr.map(function(v) { return '<option value="' + escH(v) + '">'; }).join('');
       }
       popList('ibp_h_url', 'urlsList');
       popList('ibp_h_pa', 'paList');
