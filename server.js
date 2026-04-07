@@ -16,6 +16,9 @@ const rateLimit = require('express-rate-limit');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Vercel sits behind a proxy — required for express-rate-limit to read the real client IP
+app.set('trust proxy', 1);
+
 // ─── OData constants ──────────────────────────────────────────────
 const ALLOWED_SERVICES = ['MASTER_DATA_API_SRV', 'PLANNING_DATA_API_SRV'];
 const ODATA_PREFIX = '/sap/opu/odata/IBP/';
@@ -231,35 +234,23 @@ app.post('/api/send-feedback', async (req, res) => {
     return res.status(400).json({ error: 'Faltan campos requeridos' });
   }
 
-  const envCheck = {
-    EMAILJS_SERVICE_ID:   !!process.env.EMAILJS_SERVICE_ID,
-    EMAILJS_TEMPLATE_ID:  !!process.env.EMAILJS_TEMPLATE_ID,
-    EMAILJS_PUBLIC_KEY:   !!process.env.EMAILJS_PUBLIC_KEY,
-    EMAILJS_PRIVATE_KEY:  !!process.env.EMAILJS_PRIVATE_KEY
-  };
-  console.log('[feedback] env vars present:', envCheck);
-
   try {
-    const payload = {
-      service_id:      process.env.EMAILJS_SERVICE_ID,
-      template_id:     process.env.EMAILJS_TEMPLATE_ID,
-      user_id:         process.env.EMAILJS_PUBLIC_KEY,
-      accessToken:     process.env.EMAILJS_PRIVATE_KEY,
-      template_params: { from_name: name, app: appName, type, description }
-    };
-    console.log('[feedback] sending to EmailJS, service_id:', payload.service_id, 'user_id:', payload.user_id);
-
     const resp = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({
+        service_id:      process.env.EMAILJS_SERVICE_ID,
+        template_id:     process.env.EMAILJS_TEMPLATE_ID,
+        user_id:         process.env.EMAILJS_PUBLIC_KEY,
+        accessToken:     process.env.EMAILJS_PRIVATE_KEY,
+        template_params: { from_name: name, app: appName, type, description }
+      })
     });
 
     if (resp.ok) return res.json({ ok: true });
 
-    const errBody = await resp.text();
-    console.error('[feedback] EmailJS error:', resp.status, errBody);
-    res.status(500).json({ error: 'Error al enviar feedback', detail: errBody });
+    console.error('[feedback] EmailJS error:', resp.status);
+    res.status(500).json({ error: 'Error al enviar feedback' });
   } catch (err) {
     console.error('[feedback error]', err.message);
     res.status(500).json({ error: 'Error interno' });
