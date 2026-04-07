@@ -16,6 +16,9 @@ const rateLimit = require('express-rate-limit');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Vercel sits behind a proxy — required for express-rate-limit to read the real client IP
+app.set('trust proxy', 1);
+
 // ─── OData constants ──────────────────────────────────────────────
 const ALLOWED_SERVICES = ['MASTER_DATA_API_SRV', 'PLANNING_DATA_API_SRV'];
 const ODATA_PREFIX = '/sap/opu/odata/IBP/';
@@ -246,9 +249,8 @@ app.post('/api/send-feedback', async (req, res) => {
 
     if (resp.ok) return res.json({ ok: true });
 
-    const errBody = await resp.text();
-    console.error('[feedback] EmailJS error:', resp.status, errBody);
-    res.status(500).json({ error: 'Error al enviar feedback', detail: errBody });
+    console.error('[feedback] EmailJS error:', resp.status);
+    res.status(500).json({ error: 'Error al enviar feedback' });
   } catch (err) {
     console.error('[feedback error]', err.message);
     res.status(500).json({ error: 'Error interno' });
