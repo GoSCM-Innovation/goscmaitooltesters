@@ -231,17 +231,28 @@ app.post('/api/send-feedback', async (req, res) => {
     return res.status(400).json({ error: 'Faltan campos requeridos' });
   }
 
+  const envCheck = {
+    EMAILJS_SERVICE_ID:   !!process.env.EMAILJS_SERVICE_ID,
+    EMAILJS_TEMPLATE_ID:  !!process.env.EMAILJS_TEMPLATE_ID,
+    EMAILJS_PUBLIC_KEY:   !!process.env.EMAILJS_PUBLIC_KEY,
+    EMAILJS_PRIVATE_KEY:  !!process.env.EMAILJS_PRIVATE_KEY
+  };
+  console.log('[feedback] env vars present:', envCheck);
+
   try {
+    const payload = {
+      service_id:      process.env.EMAILJS_SERVICE_ID,
+      template_id:     process.env.EMAILJS_TEMPLATE_ID,
+      user_id:         process.env.EMAILJS_PUBLIC_KEY,
+      accessToken:     process.env.EMAILJS_PRIVATE_KEY,
+      template_params: { from_name: name, app: appName, type, description }
+    };
+    console.log('[feedback] sending to EmailJS, service_id:', payload.service_id, 'user_id:', payload.user_id);
+
     const resp = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        service_id:      process.env.EMAILJS_SERVICE_ID,
-        template_id:     process.env.EMAILJS_TEMPLATE_ID,
-        user_id:         process.env.EMAILJS_PUBLIC_KEY,
-        accessToken:     process.env.EMAILJS_PRIVATE_KEY,
-        template_params: { from_name: name, app: appName, type, description }
-      })
+      body: JSON.stringify(payload)
     });
 
     if (resp.ok) return res.json({ ok: true });
