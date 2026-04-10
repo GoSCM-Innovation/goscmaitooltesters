@@ -1221,6 +1221,12 @@
       </div>
     </div>
 
+    <!-- MODE TOGGLE -->
+    <div class="docs-mode-toggle">
+      <button class="mode-btn active" id="mode-zip" onclick="switchDocsMode('zip')">📦 Desde archivos ZIP</button>
+      <button class="mode-btn" id="mode-jobs" onclick="switchDocsMode('jobs')">🔄 Desde Application Jobs</button>
+    </div>
+
     <!-- PRO TIP BANNER -->
     <div class="pro-tip-banner">
       <span class="pro-tip-icon">💡</span>
@@ -1229,32 +1235,112 @@
       </div>
     </div>
 
-    <!-- MAIN UPLOAD PANEL -->
-    <div class="panel">
-      <div class="panel-title" style="display:flex;align-items:center;gap:8px;">
-        📦 Archivos ZIP de entrada
-        <span class="zip-help-icon" tabindex="0">?
-          <div class="zip-help-tooltip">
-            <img src="ci-ds-export.png" alt="CI-DS Export" style="width:100%;border-radius:6px;margin-bottom:8px;">
-            <p>Debes exportar el project desde CI-DS y obtendrás el archivo comprimido, luego adjúntalo aquí. Puedes
-              exportar y adjuntar los que necesites.</p>
-          </div>
-        </span>
+    <!-- ═══ ZIP MODE PANELS ═══ -->
+    <div id="docs-zip-panels">
+      <div class="panel">
+        <div class="panel-title" style="display:flex;align-items:center;gap:8px;">
+          📦 Archivos ZIP de entrada
+          <span class="zip-help-icon" tabindex="0">?
+            <div class="zip-help-tooltip">
+              <img src="ci-ds-export.png" alt="CI-DS Export" style="width:100%;border-radius:6px;margin-bottom:8px;">
+              <p>Debes exportar el project desde CI-DS y obtendrás el archivo comprimido, luego adjúntalo aquí. Puedes
+                exportar y adjuntar los que necesites.</p>
+            </div>
+          </span>
+        </div>
+        <div class="drop-zone" id="dz">
+          <input type="file" id="fi" accept=".zip" multiple>
+          <span class="drop-icon">🗂️</span>
+          <p class="drop-title">Arrastra los ZIP aquí</p>
+          <p class="drop-hint">o haz click para seleccionar &nbsp;·&nbsp; <b>Múltiples archivos</b> permitidos</p>
+        </div>
+        <div id="file-list"></div>
+        <div class="progress-wrap" id="pw">
+          <div class="progress-bar" id="pb"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="gen-btn" disabled onclick="generate()">⚙️ Analizar Integraciones</button>
+        </div>
       </div>
-      <div class="drop-zone" id="dz">
-        <input type="file" id="fi" accept=".zip" multiple>
-        <span class="drop-icon">🗂️</span>
-        <p class="drop-title">Arrastra los ZIP aquí</p>
-        <p class="drop-hint">o haz click para seleccionar &nbsp;·&nbsp; <b>Múltiples archivos</b> permitidos</p>
+    </div><!-- /docs-zip-panels -->
+
+    <!-- ═══ JOBS MODE PANELS ═══ -->
+    <div id="docs-jobs-panels" style="display:none">
+
+      <!-- Step 1: Fetch Jobs -->
+      <div class="panel">
+        <div class="panel-title">🔄 Application Jobs desde SAP IBP</div>
+        <p class="panel-desc">Conecta tu sistema SAP IBP para obtener los Application Jobs configurados. Requiere Communication Arrangement <b>SAP_COM_0326</b>.</p>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="fetch-jobs-btn" onclick="fetchAndDisplayJobs()">🔍 Obtener Application Jobs</button>
+        </div>
       </div>
-      <div id="file-list"></div>
-      <div class="progress-wrap" id="pw">
-        <div class="progress-bar" id="pb"></div>
+
+      <!-- Step 2: Job Selection -->
+      <div class="panel" id="jobs-sel-card" style="display:none">
+        <div class="panel-title">✅ Selección de Jobs</div>
+        <div class="sel-toolbar">
+          <input class="sel-search" id="jobs-search" type="text" placeholder="🔍  Buscar por nombre de job…"
+            oninput="filterJobsList()">
+          <button class="btn-sm" onclick="toggleJobsFiltered(true)">Activar filtrados</button>
+          <button class="btn-sm" onclick="toggleJobsFiltered(false)">Desactivar filtrados</button>
+          <span class="sel-counter" id="jobs-counter"></span>
+        </div>
+        <div class="sel-list" id="jobs-list"></div>
       </div>
-      <div class="btn-row">
-        <button class="btn btn-primary" id="gen-btn" disabled onclick="generate()">⚙️ Analizar Integraciones</button>
+
+      <!-- Step 3: ATL Upload -->
+      <div class="panel" id="atl-upload-panel" style="display:none">
+        <div class="panel-title" style="display:flex;align-items:center;gap:8px;">
+          📄 Archivos ATL de procesos CI-DS
+          <span class="zip-help-icon" tabindex="0">?
+            <div class="zip-help-tooltip">
+              <p>Exporta los procesos (tasks) CI-DS en formato ATL desde SAP Data Services. El archivo ATL contiene la estructura de ejecución: grupos paralelos y orden de dataflows.</p>
+            </div>
+          </span>
+        </div>
+        <div class="drop-zone" id="atl-dz">
+          <input type="file" id="atl-fi" accept=".atl,.txt" multiple>
+          <span class="drop-icon">📄</span>
+          <p class="drop-title">Arrastra archivos ATL aquí</p>
+          <p class="drop-hint">Formato .atl o .txt &nbsp;·&nbsp; <b>Múltiples archivos</b> permitidos</p>
+        </div>
+        <div id="atl-file-list"></div>
       </div>
-    </div>
+
+      <!-- Step 4: ZIP Upload (jobs mode) -->
+      <div class="panel" id="jobs-zip-panel" style="display:none">
+        <div class="panel-title">📦 Archivos ZIP de integraciones CI-DS</div>
+        <div class="drop-zone" id="jobs-zip-dz">
+          <input type="file" id="jobs-zip-fi" accept=".zip" multiple>
+          <span class="drop-icon">🗂️</span>
+          <p class="drop-title">Arrastra los ZIP aquí</p>
+          <p class="drop-hint">Los mismos exports de CI-DS que usarías en el modo ZIP</p>
+        </div>
+        <div id="jobs-zip-file-list"></div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="jobs-gen-btn" disabled onclick="generateFromJobs()">⚙️ Analizar y Generar</button>
+        </div>
+      </div>
+
+      <!-- Communication Arrangement Guide -->
+      <div class="panel" id="comm-arr-guide">
+        <div class="panel-title">🔧 Configuración: Communication Arrangement</div>
+        <div class="comm-guide-content">
+          <p>Para usar la funcionalidad de Application Jobs, necesitas configurar el escenario <b>SAP_COM_0326</b> en tu sistema SAP IBP:</p>
+          <ol>
+            <li><b>Communication User:</b> Crea un usuario técnico en <em>Maintain Communication Users</em></li>
+            <li><b>Communication System:</b> Crea un sistema en <em>Communication Systems</em> apuntando a tu tenant IBP</li>
+            <li><b>Communication Arrangement:</b> Crea un arrangement con escenario <b>SAP_COM_0326</b> (External Scheduler - Application Job Administration Integration)</li>
+            <li>Asigna el Communication User y System al arrangement</li>
+            <li>Configura autenticación <b>Basic Auth</b> (usuario y contraseña)</li>
+            <li>Usa las mismas credenciales en el panel de conexión de GoSCM</li>
+          </ol>
+          <p class="panel-desc">Este Communication Arrangement expone el servicio <code>BC_EXT_APPJOB_MANAGEMENT</code> que permite leer los Application Jobs y sus pasos.</p>
+        </div>
+      </div>
+
+    </div><!-- /docs-jobs-panels -->
 
     <!-- SELECTION PANEL -->
     <div class="panel" id="sel-card" style="display:none">
@@ -1269,8 +1355,8 @@
       <div class="sel-list" id="sel-list"></div>
       <div class="btn-row">
         <button class="btn btn-primary" style="margin-top:18px" onclick="buildExcel()">⚙️ Generar Excel</button>
-        <button class="btn btn-primary" style="margin-top:18px" id="dl-btn"
-          style="display:none; background: var(--green);" onclick="downloadExcel()">⬇️ Descargar Excel</button>
+        <button class="btn btn-primary" id="dl-btn"
+          style="display:none; margin-top:18px; background: var(--green);" onclick="downloadExcel()">⬇️ Descargar Excel</button>
       </div>
     </div>
 
@@ -1284,6 +1370,10 @@
         </div>
         <div class="stat-box"><span class="stat-num green" id="s-filt">0</span><span class="stat-label">Filtros</span>
         </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="dl-btn-shared"
+          style="background: var(--green);" onclick="downloadExcel()">⬇️ Descargar Excel</button>
       </div>
     </div>
 
