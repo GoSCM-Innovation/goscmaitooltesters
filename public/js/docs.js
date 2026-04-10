@@ -1,9 +1,21 @@
+// @ts-nocheck
 // ════════════════════════════════════════════════════════════
 //  STATE
 // ════════════════════════════════════════════════════════════
 let files = [];
 let xlsBuf = null;
 let parsedIntegrations = [];   // [{sheetName, pkg, parsed, paramRow}] — filled after scan
+
+// ── Jobs-mode state ──
+let docsMode = 'zip';           // 'zip' | 'jobs'
+
+const SVC_APPJOB   = '/sap/opu/odata/sap/BC_EXT_APPJOB_MANAGEMENT;v=0002';
+const JCE_DATA_INT = 'DATA INTEGRATION';  // substring of JceText that identifies CI-DS steps
+const ATL_NO_GROUP = 'Sin grupo ATL';
+let fetchedJobs = [];           // raw job data from API
+let jobsFiles = [];             // [{name, data: ArrayBuffer}] ZIPs in jobs mode
+let atlFiles  = [];             // [{name, text}] uploaded ATL files
+let atlParsed = [];             // parsed ATL structures
 
 // ════════════════════════════════════════════════════════════
 //  IBP FIELD DESCRIPTIONS — fetched from OData $metadata
@@ -307,6 +319,22 @@ const FIELD_DESC_FALLBACK = {
  *         each produce their own entry.
  * Fix #9: handles FileLoader (writes to flat file) in addition to TableLoader.
  */
+async function parseBatchCsv(zip) {
+  const bf = zip.file('batch.csv');
+  if (!bf) return {};
+  const csv  = await bf.async('string');
+  const rows = csv.trim().split(/\r?\n/);
+  const hdrs = rows[0].split(',').map(h => h.trim());
+  const map  = {};
+  for (let i = 1; i < rows.length; i++) {
+    const cols  = rows[i].split(',').map(c => c.trim());
+    const entry = {};
+    hdrs.forEach((h, j) => entry[h] = cols[j] || '');
+    if (entry['Xmlfilename']) map[entry['Xmlfilename']] = entry;
+  }
+  return map;
+}
+
 function parseDataflow(dfEl, dsIdx, ffIdx, srcDSFallback, dstDSFallback) {
   // Use extended schema map that includes FileReader sources
   const schemaMap = buildSchemaMapFull(dfEl, dsIdx);
@@ -425,10 +453,11 @@ function parseDataflow(dfEl, dsIdx, ffIdx, srcDSFallback, dstDSFallback) {
     }
   }
 
-  // DataFlow display name
+  // DataFlow name and GUID (used for exact ATL matching)
   const dataflowName = dfEl.getAttribute('name') || dfEl.getAttribute('displayName') || '';
+  const dataflowGuid = dfEl.getAttribute('guid') || '';
 
-  return { mappings, filters, lookups, targetTable, targetDS, dataflowName, fileLoaderFileName };
+  return { mappings, filters, lookups, targetTable, targetDS, dataflowName, dataflowGuid, fileLoaderFileName };
 }
 
 /**
@@ -505,6 +534,7 @@ function parseIntegration(xmlStr, batchEntry) {
       jobName, jobDesc,
       tipoIntegracion: getTipo(jobName, isFile),
       dataflowName:    r.dataflowName,
+      dataflowGuid:    r.dataflowGuid || '',
       fileLoaderFileName: r.fileLoaderFileName || '',
       srcDSName,
       dstDSName:   dstDSFinal,
@@ -752,38 +782,58 @@ class SheetBuilder {
 // Col A: hyperlink al detalle; A-C en theme:8 (9DC3E6); D-G en theme:9 (DDEBF7)
 // Header: theme:5 (4472C4) bold Calibri 11 blanco
 // Col widths según template: A=33.4, B≈20, C=64.6, D=35.9, E=71.1, F=71.1, G=79.2
-function buildParamSheet(rows) {
+function buildParamSheet(rows, jobsMode) {
   const sb = new SheetBuilder();
-  const N = 7; // 7 columns A-G
 
   // Header row (row 1)
-  sb.addRow([
+  const headers = [
     {v:'Dato - Click Aquí para más detalle', s:XF.PRM_HDR},
     {v:'Tipo de Integración',               s:XF.PRM_HDR},
-    {v:'Task CI-DS',                        s:XF.PRM_HDR},
-    {v:'Descripción de la task',            s:XF.PRM_HDR},
-    {v:'Dataflow CIDS',                     s:XF.PRM_HDR},
-    {v:'Sistema fuente',                    s:XF.PRM_HDR},
-    {v:'Sistema Destino',                   s:XF.PRM_HDR},
-  ], 18);
+  ];
+  if (jobsMode) {
+    headers.push({v:'Job IBP',      s:XF.PRM_HDR});
+    headers.push({v:'Step',         s:XF.PRM_HDR});
+    headers.push({v:'Tipo de paso', s:XF.PRM_HDR});
+    headers.push({v:'Grupo',        s:XF.PRM_HDR});
+  }
+  headers.push(
+    {v:'Task CI-DS',             s:XF.PRM_HDR},
+    {v:'Descripción de la task', s:XF.PRM_HDR},
+    {v:'Dataflow CIDS',          s:XF.PRM_HDR},
+    {v:'Sistema fuente',         s:XF.PRM_HDR},
+    {v:'Sistema Destino',        s:XF.PRM_HDR}
+  );
+  sb.addRow(headers, 18);
 
   rows.forEach((p, i) => {
+    const isNonDI = p.isNonDI;
     const dataRowIdx = sb.rows.length;
-    sb.addRow([
-      {v: i + 1,              s: XF.PRM_LINK},   // A: número ascendente, hyperlink
-      {v: p.tipoIntegracion || '', s: XF.PRM_ABC}, // B
-      {v: p.jobName || '',    s: XF.PRM_ABC},    // C
-      {v: p.jobDesc || '',    s: XF.PRM_DEF},    // D
-      {v: p.dataflowName || '', s: XF.PRM_DEF},  // E
-      {v: p.srcDS || '',      s: XF.PRM_DEF},    // F
-      {v: p.dstDS || '',      s: XF.PRM_DEF},    // G
-    ], 20);
-    // Hyperlink en col A (índice 0) → hoja de detalle
-    sb.addHyperlink(dataRowIdx, 0, `#'${p.sheetName}'!A1`);
+    const row = [
+      {v: i + 1,              s: isNonDI ? XF.PRM_ABC : XF.PRM_LINK},
+      {v: p.tipoIntegracion || '', s: XF.PRM_ABC},
+    ];
+    if (jobsMode) {
+      row.push({v: p.ibpJobName  || '', s: XF.PRM_DEF});
+      row.push({v: p.ibpStepName || '', s: XF.PRM_DEF});
+      row.push({v: p.ibpStepType || '', s: XF.PRM_DEF});
+      row.push({v: p.atlGroup    || '', s: XF.PRM_DEF});
+    }
+    row.push(
+      {v: p.jobName || '',      s: XF.PRM_ABC},
+      {v: p.jobDesc || '',      s: XF.PRM_DEF},
+      {v: p.dataflowName || '', s: XF.PRM_DEF},
+      {v: p.srcDS || '',        s: XF.PRM_DEF},
+      {v: p.dstDS || '',        s: XF.PRM_DEF}
+    );
+    sb.addRow(row, 20);
+    // Hyperlink en col A (índice 0) → hoja de detalle (only for DI rows)
+    if (!isNonDI) sb.addHyperlink(dataRowIdx, 0, `#'${p.sheetName}'!A1`);
   });
 
-  // Col widths: A=33.4, B=20, C=64.6, D=35.9, E=71.1, F=71.1, G=79.2
-  sb.setColWidths([33.4, 20, 64.6, 35.9, 71.1, 71.1, 79.2]);
+  const widths = jobsMode
+    ? [33.4, 20, 40, 35, 40, 25, 64.6, 35.9, 71.1, 71.1, 79.2]
+    : [33.4, 20, 64.6, 35.9, 71.1, 71.1, 79.2];
+  sb.setColWidths(widths);
   return sb;
 }
 
@@ -1010,7 +1060,6 @@ async function generate() {
   docsLogHint.style.display = 'none';
   document.getElementById('stats-card').style.display = 'none';
   document.getElementById('sel-card').style.display = 'none';
-  document.getElementById('dl-btn').style.display = 'none';
   document.getElementById('gen-btn').disabled = true;
   xlsBuf = null;
   parsedIntegrations = [];
@@ -1034,20 +1083,8 @@ async function generate() {
     try { zip = await JSZip.loadAsync(zf.data); }
     catch(e) { docsLog(`  ✗ ${e.message}`, 'l-err'); continue; }
 
-    const batchMap = {};
-    const bf = zip.file('batch.csv');
-    if (bf) {
-      const csv = await bf.async('string');
-      const lines = csv.trim().split(/\r?\n/);
-      const hdrs  = lines[0].split(',').map(h => h.trim());
-      for (let i = 1; i < lines.length; i++) {
-        const cols  = lines[i].split(',').map(c => c.trim());
-        const entry = {};
-        hdrs.forEach((h, j) => entry[h] = cols[j] || '');
-        if (entry['Xmlfilename']) batchMap[entry['Xmlfilename']] = entry;
-      }
-      docsLog(`  ✔ batch.csv: ${Object.keys(batchMap).length} entradas`, 'l-ok');
-    } else docsLog('  ⚠ Sin batch.csv', 'l-warn');
+    const batchMap = await parseBatchCsv(zip);
+    docsLog(`  ✔ batch.csv: ${Object.keys(batchMap).length} entradas`, 'l-ok');
 
     const xmlNames = Object.keys(zip.files).filter(n => n.endsWith('.xml') && !n.includes('/'));
     docsLog(`  📄 ${xmlNames.length} XMLs`, 'l-line');
@@ -1159,7 +1196,6 @@ async function buildExcel() {
   docsLogEl.innerHTML = '';
   docsLogEl.style.display = 'block';
   document.getElementById('stats-card').style.display = 'none';
-  document.getElementById('dl-btn').style.display = 'none';
   xlsBuf = null;
 
   // Gather selected indices
@@ -1225,8 +1261,761 @@ async function buildExcel() {
   document.getElementById('s-maps').textContent = totalMaps;
   document.getElementById('s-filt').textContent = totalFilts;
   document.getElementById('stats-card').style.display = 'block';
-  document.getElementById('dl-btn').style.display = 'flex';
 }
+
+// ════════════════════════════════════════════════════════════
+//  JOBS MODE — ATL PARSER + JOB FLOW
+// ════════════════════════════════════════════════════════════
+
+// ── Mode switcher ────────────────────────────────────────────
+function switchDocsMode(mode) {
+  docsMode = mode;
+  document.getElementById('docs-zip-panels').style.display = mode === 'zip' ? '' : 'none';
+  document.getElementById('docs-jobs-panels').style.display = mode === 'jobs' ? '' : 'none';
+  document.getElementById('mode-zip').classList.toggle('active', mode === 'zip');
+  document.getElementById('mode-jobs').classList.toggle('active', mode === 'jobs');
+  // Hide shared panels when switching
+  document.getElementById('sel-card').style.display = 'none';
+  document.getElementById('stats-card').style.display = 'none';
+}
+
+// ── ATL file handling ────────────────────────────────────────
+function initAtlDropZone() {
+  const dz = document.getElementById('atl-dz');
+  if (!dz) return;
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+  dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag-over'); addAtlFiles([...e.dataTransfer.files]); });
+  document.getElementById('atl-fi').addEventListener('change', e => addAtlFiles([...e.target.files]));
+}
+
+function addAtlFiles(list) {
+  list.filter(f => f.name.endsWith('.atl') || f.name.endsWith('.txt')).forEach(f => {
+    if (atlFiles.find(x => x.name === f.name)) return;
+    const r = new FileReader();
+    r.onload = ev => { atlFiles.push({ name: f.name, text: ev.target.result }); renderAtlFiles(); };
+    r.readAsText(f);
+  });
+}
+
+function removeAtlFile(i) { atlFiles.splice(i, 1); renderAtlFiles(); }
+
+function renderAtlFiles() {
+  document.getElementById('atl-file-list').innerHTML = atlFiles.map((f, i) => `
+    <div class="file-tag">
+      <span class="ico">📄</span>
+      <span class="name">${escH(f.name)}</span>
+      <span class="size">${(f.text.length/1024).toFixed(0)} KB</span>
+      <button class="rm" onclick="removeAtlFile(${i})">✕</button>
+    </div>`).join('');
+  updateJobsGenBtn();
+}
+
+// ── Jobs-mode ZIP handling ───────────────────────────────────
+function initJobsZipDropZone() {
+  const dz = document.getElementById('jobs-zip-dz');
+  if (!dz) return;
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+  dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag-over'); addJobsZipFiles([...e.dataTransfer.files]); });
+  document.getElementById('jobs-zip-fi').addEventListener('change', e => addJobsZipFiles([...e.target.files]));
+}
+
+function addJobsZipFiles(list) {
+  list.filter(f => f.name.endsWith('.zip')).forEach(f => {
+    if (jobsFiles.find(x => x.name === f.name)) return;
+    const r = new FileReader();
+    r.onload = ev => { jobsFiles.push({ name: f.name, data: ev.target.result }); renderJobsZipFiles(); };
+    r.readAsArrayBuffer(f);
+  });
+}
+
+function removeJobsZipFile(i) { jobsFiles.splice(i, 1); renderJobsZipFiles(); }
+
+function renderJobsZipFiles() {
+  document.getElementById('jobs-zip-file-list').innerHTML = jobsFiles.map((f, i) => `
+    <div class="file-tag">
+      <span class="ico">📦</span>
+      <span class="name">${escH(f.name)}</span>
+      <span class="size">${(f.data.byteLength/1024).toFixed(0)} KB</span>
+      <button class="rm" onclick="removeJobsZipFile(${i})">✕</button>
+    </div>`).join('');
+  updateJobsGenBtn();
+}
+
+function updateJobsGenBtn() {
+  const btn = document.getElementById('jobs-gen-btn');
+  if (btn) btn.disabled = atlFiles.length === 0 && jobsFiles.length === 0;
+}
+
+// ── ATL Parser ───────────────────────────────────────────────
+// Parses a SAP Data Services ATL export into a structured process.
+// Returns: { sessionName, description, variables: [{name,type,default}],
+//            groups: [{name, displayName, parallel, dataflows: [{fullName, displayName}]}],
+//            globalDefaults: {$VAR: 'value'} }
+function parseATL(text) {
+  const lines = text.split(/\r?\n/);
+  const plans = {};       // planFullName → { displayName, parallel, dataflows }
+  let sessionName = '';
+  let sessionDisplayName = '';
+  let description = '';
+  const variables = [];
+  const groupOrder = [];  // ordered plan full names from SESSION body
+  const globalDefaults = {};
+
+  // Regex patterns
+  const reCreatePlan    = /^CREATE\s+PLAN\s+(\S+)::'[^']*'\s*\(/;
+  const reCreateSession = /^CREATE\s+SESSION\s+(\S+)::'[^']*'\s*\(/;
+  const reCallPlan      = /^CALL\s+PLAN\s+(\S+)::'[^']*'/;
+  const reCallDataflow  = /^CALL\s+DATAFLOW\s+(\S+)::'([^']*)'/;
+  const reDisplayName   = /ALGUICOMMENT\(.*?"ui_display_name"='([^']*)'/;
+  const reGlobal        = /^\s*GLOBAL\s+(\$\S+)\s+(\S+)/;
+  const reJobGV         = /"job_GV_(\$[^"]+)"='([^']*)'/g;
+  const reJobName       = /"job_name"='([^']*)'/;
+  const reDescription   = /"Description"='([^']*)'/;
+
+  let currentPlan = null;
+  let inSession = false;
+  let inSessionBody = false;
+  let sessionDeclare = false;
+  let pendingDisplayName = '';
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+
+    // ── CREATE PLAN
+    const planMatch = line.match(reCreatePlan);
+    if (planMatch) {
+      currentPlan = planMatch[1];
+      plans[currentPlan] = { displayName: '', parallel: false, dataflows: [] };
+      inSession = false;
+      continue;
+    }
+
+    // ── CREATE SESSION
+    const sessMatch = line.match(reCreateSession);
+    if (sessMatch) {
+      sessionName = sessMatch[1];
+      currentPlan = null;
+      inSession = true;
+      sessionDeclare = false;
+      inSessionBody = false;
+      continue;
+    }
+
+    // ── Inside PLAN block
+    if (currentPlan && plans[currentPlan]) {
+      if (/PARALLEL\s+BEGIN/.test(line)) {
+        plans[currentPlan].parallel = true;
+        continue;
+      }
+      const dnMatch = line.match(reDisplayName);
+      if (dnMatch) { pendingDisplayName = dnMatch[1]; continue; }
+
+      const dfMatch = line.match(reCallDataflow);
+      if (dfMatch) {
+        plans[currentPlan].dataflows.push({
+          fullName:    dfMatch[1],
+          guid:        dfMatch[2] || '',
+          displayName: pendingDisplayName || dfMatch[1].split('_').pop()
+        });
+        pendingDisplayName = '';
+        continue;
+      }
+
+      // Plan SET section — ends plan block
+      if (/^SET\s*\(/.test(line) || /^END$/.test(line)) {
+        // do nothing, plan continues until next CREATE
+      }
+    }
+
+    // ── Inside SESSION block
+    if (inSession) {
+      if (/^\s*DECLARE\b/.test(line)) { sessionDeclare = true; continue; }
+      if (sessionDeclare) {
+        const gv = line.match(reGlobal);
+        if (gv) { variables.push({ name: gv[1], type: gv[2] }); continue; }
+        if (/^BEGIN/.test(line)) { sessionDeclare = false; inSessionBody = true; continue; }
+      }
+
+      if (inSessionBody) {
+        const dnMatch = line.match(reDisplayName);
+        if (dnMatch) { pendingDisplayName = dnMatch[1]; continue; }
+
+        const cpMatch = line.match(reCallPlan);
+        if (cpMatch) {
+          groupOrder.push(cpMatch[1]);
+          if (plans[cpMatch[1]]) plans[cpMatch[1]].displayName = pendingDisplayName || '';
+          pendingDisplayName = '';
+          continue;
+        }
+      }
+
+    }
+
+    // ── Global: scan every line for SET properties (they appear at end of file)
+    const jnMatch = line.match(reJobName);
+    if (jnMatch) sessionDisplayName = jnMatch[1];
+
+    const descMatch = line.match(reDescription);
+    if (descMatch) description = descMatch[1];
+
+    let gvMatch;
+    reJobGV.lastIndex = 0;
+    while ((gvMatch = reJobGV.exec(line)) !== null) {
+      globalDefaults[gvMatch[1]] = gvMatch[2];
+    }
+  }
+
+  // Assign defaults to variables
+  variables.forEach(v => { v.default = globalDefaults[v.name] || ''; });
+
+  // Build ordered groups
+  const groups = groupOrder.map((planName, idx) => {
+    const p = plans[planName] || { displayName: '', parallel: false, dataflows: [] };
+    return {
+      name: planName,
+      displayName: p.displayName || ('Group ' + (idx + 1)),
+      parallel: p.parallel,
+      dataflows: p.dataflows
+    };
+  });
+
+  return {
+    sessionName: sessionDisplayName || sessionName,
+    description,
+    variables,
+    groups,
+    globalDefaults
+  };
+}
+
+// ── Fetch Application Jobs from IBP API ──────────────────────
+async function fetchAndDisplayJobs() {
+  if (typeof CFG === 'undefined' || !CFG.url || !CFG.user || !CFG.pass) {
+    docsLog('⚠ Debes conectarte a SAP IBP primero.', 'l-warn');
+    return;
+  }
+
+  const btn = document.getElementById('fetch-jobs-btn');
+  btn.disabled = true;
+  docsLogEl.innerHTML = '';
+  docsLogEl.style.display = 'block';
+  docsLogHint.style.display = 'none';
+  docsLog('🔍 Consultando Application Jobs…', 'l-info');
+
+  try {
+    // BC_EXT_APPJOB_MANAGEMENT uses /sap/opu/odata/sap/ (lowercase) with version suffix ;v=0002
+    // Fetch $metadata first to discover entities
+    const metaUrl = CFG.url + SVC_APPJOB + '/$metadata';
+    let metaXml;
+    try {
+      metaXml = await apiXml(metaUrl);
+      docsLog('✔ $metadata obtenido', 'l-ok');
+    } catch (e) {
+      docsLog('✗ Error obteniendo $metadata: ' + e.message, 'l-err');
+      docsLog('ℹ Asegúrate de tener el Communication Arrangement SAP_COM_0326 configurado.', 'l-info');
+      btn.disabled = false;
+      return;
+    }
+
+    // Parse $metadata to find entity set names
+    const metaDoc = new DOMParser().parseFromString(metaXml, 'text/xml');
+    const entitySets = [];
+    metaDoc.querySelectorAll('EntitySet').forEach(es => {
+      entitySets.push(es.getAttribute('Name'));
+    });
+    // Try to fetch job catalog/templates
+    const jobEntity = entitySets.find(n => /JobTemplate|CatalogEntries|JobSchedule/i.test(n)) || entitySets[0];
+    if (!jobEntity) {
+      docsLog('✗ No se encontraron entidades de jobs en el servicio.', 'l-err');
+      btn.disabled = false;
+      return;
+    }
+
+    docsLog(`🔍 Fetching ${jobEntity}…`, 'l-info');
+    const jobsUrl = CFG.url + SVC_APPJOB + '/' + jobEntity;
+    const jobs = await fetchAllPages(jobsUrl, docsLogEl);
+    fetchedJobs = jobs;
+    docsLog(`✔ ${jobs.length} jobs obtenidos`, 'l-ok');
+
+    renderJobSelection(jobs, entitySets);
+  } catch (e) {
+    docsLog('✗ Error: ' + e.message, 'l-err');
+  }
+  btn.disabled = false;
+}
+
+// ── Render job selection ─────────────────────────────────────
+function renderJobSelection(jobs, entitySets) {
+  const panel = document.getElementById('jobs-sel-card');
+  const list  = document.getElementById('jobs-list');
+
+  if (!jobs.length) {
+    list.innerHTML = '<div class="si-empty">No se encontraron jobs.</div>';
+    panel.style.display = 'block';
+    return;
+  }
+
+  // Detect field names dynamically from first job
+  const sample = jobs[0];
+  const nameField = Object.keys(sample).find(k => /JobName|TemplateName|Name/i.test(k) && typeof sample[k] === 'string') || Object.keys(sample)[0];
+  const descField = Object.keys(sample).find(k => /Text|Desc|Description/i.test(k) && typeof sample[k] === 'string') || '';
+
+  list.innerHTML = jobs.map((j, i) => {
+    const name = j[nameField] || `Job ${i + 1}`;
+    const desc = descField ? (j[descField] || '') : '';
+    return `<label class="sel-item job-item" data-idx="${i}" data-name="${escH(name.toLowerCase())}">
+      <input type="checkbox" onchange="updateJobsCounter()">
+      <span class="si-name">${escH(desc)}</span>
+      ${desc ? `<span class="si-df">${escH(name)}</span>` : ''}
+
+    </label>`;
+  }).join('');
+
+  // Store field names for later use
+  list.dataset.nameField = nameField;
+  list.dataset.descField = descField || '';
+
+  document.getElementById('jobs-search').value = '';
+  updateJobsCounter();
+  panel.style.display = 'block';
+
+  // Show upload panels
+  document.getElementById('atl-upload-panel').style.display = 'block';
+  document.getElementById('jobs-zip-panel').style.display = 'block';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function filterJobsList() {
+  const q = document.getElementById('jobs-search').value.toLowerCase();
+  document.querySelectorAll('#jobs-list .job-item').forEach(item => {
+    const siName = item.querySelector('.si-name');
+    const text = siName ? siName.textContent.toLowerCase() : '';
+    item.classList.toggle('hidden', q !== '' && !text.includes(q));
+  });
+  updateJobsCounter();
+}
+
+function toggleJobsFiltered(state) {
+  document.querySelectorAll('#jobs-list .job-item:not(.hidden) input[type=checkbox]')
+    .forEach(cb => cb.checked = state);
+  updateJobsCounter();
+}
+
+function updateJobsCounter() {
+  const all     = document.querySelectorAll('#jobs-list .job-item');
+  const visible  = document.querySelectorAll('#jobs-list .job-item:not(.hidden)');
+  const checked  = document.querySelectorAll('#jobs-list .job-item input:checked');
+  const q = document.getElementById('jobs-search') ? document.getElementById('jobs-search').value.trim() : '';
+  const el = document.getElementById('jobs-counter');
+  if (!el) return;
+  if (q) {
+    const visChecked = [...visible].filter(el => el.querySelector('input').checked).length;
+    el.textContent = `${visChecked} / ${visible.length} filtrados · ${checked.length} / ${all.length} total`;
+  } else {
+    el.textContent = `${checked.length} / ${all.length} seleccionados`;
+  }
+}
+
+// ── Match ATL dataflows to ZIP integrations ──────────────────
+// Primary match: GUID (ATL CALL DATAFLOW ::'guid' == XML <dataflow:DataFlow guid="...">)
+// This is a globally unique identifier — no false positives possible.
+// Fallback (if ATL or ZIP has no guid): match by dataflowName (display name).
+function matchATLtoIntegrations(atlData, parsedInts) {
+  // Index by GUID — primary, unambiguous
+  const intByGuid = {};
+  // Index by dataflowName → [items] — fallback
+  const intByDf = {};
+  for (const item of parsedInts) {
+    const guid  = (item.parsed.dataflowGuid || '').trim();
+    const dfKey = (item.parsed.dataflowName || '').toUpperCase().trim();
+    if (guid)  intByGuid[guid] = item;
+    if (dfKey) {
+      if (!intByDf[dfKey]) intByDf[dfKey] = [];
+      intByDf[dfKey].push(item);
+    }
+  }
+
+  const ordered       = [];
+  const matchedSheets = new Set();
+
+  for (const group of atlData.groups) {
+    for (const df of group.dataflows) {
+      let item = null;
+
+      // ── Primary: match by GUID (exact, unique)
+      if (df.guid) {
+        item = intByGuid[df.guid] || null;
+      }
+
+      // ── Fallback: match by dataflow display name
+      if (!item) {
+        const displayUC  = df.displayName.toUpperCase().trim();
+        const candidates = intByDf[displayUC] || [];
+        if (candidates.length === 1) {
+          item = candidates[0];
+        } else if (candidates.length > 1) {
+          docsLog(`  ⚠ Múltiples ZIPs con dataflow "${df.displayName}" y sin GUID — no se puede desambiguar`, 'l-warn');
+          // Cannot determine which is correct without GUID — skip to avoid false match
+          continue;
+        }
+      }
+
+      if (!item) {
+        docsLog(`  ⚠ ATL dataflow sin match en ZIPs: ${df.displayName} (guid: ${df.guid || 'n/a'})`, 'l-warn');
+        continue;
+      }
+
+      if (!matchedSheets.has(item.sheetName)) {
+        matchedSheets.add(item.sheetName);
+        ordered.push({
+          ...item,
+          atlGroup:    (group.displayName || '').replace(/^FLOWof_/i, ''),
+          atlOrder:    ordered.length + 1
+        });
+      }
+    }
+  }
+
+  // Unmatched integrations go to 'Sin grupo ATL'
+  for (const item of parsedInts) {
+    if (!matchedSheets.has(item.sheetName)) {
+      ordered.push({ ...item, atlGroup: ATL_NO_GROUP, atlOrder: ordered.length + 1 });
+    }
+  }
+
+  return ordered;
+}
+
+// ── Generate from Jobs mode ──────────────────────────────────
+async function generateFromJobs() {
+  docsLogEl.innerHTML = '';
+  docsLogEl.style.display = 'block';
+  docsLogHint.style.display = 'none';
+  document.getElementById('stats-card').style.display = 'none';
+  document.getElementById('sel-card').style.display = 'none';
+  document.getElementById('dl-btn').style.display = 'none';
+  document.getElementById('jobs-gen-btn').disabled = true;
+  xlsBuf = null;
+  parsedIntegrations = [];
+
+  // Get selected jobs
+  const selectedJobIdxs = [];
+  document.querySelectorAll('#jobs-list .job-item').forEach(item => {
+    if (item.querySelector('input').checked) selectedJobIdxs.push(+item.dataset.idx);
+  });
+  const nameField = document.getElementById('jobs-list').dataset.nameField || '';
+  const descField = document.getElementById('jobs-list').dataset.descField || '';
+  const selectedJobNames = selectedJobIdxs.map(i => {
+    const j = fetchedJobs[i];
+    if (!j) return '';
+    return descField ? (j[descField] || j[nameField] || '') : (j[nameField] || '');
+  });
+
+  docsLog(`📋 ${selectedJobIdxs.length} jobs seleccionados`, 'l-info');
+
+  // ── Fetch job steps from JobTemplateSequenceSet
+  const stepMap = {};
+  if (CFG && CFG.url && CFG.user && selectedJobIdxs.length) {
+    docsLog('🔍 Obteniendo pasos de los jobs…', 'l-info');
+    const stepFetches = selectedJobIdxs.map(async function(_, ji) {
+      const job = fetchedJobs[selectedJobIdxs[ji]];
+      if (!job) return [];
+      const jtName = job.JobTemplateName || '';
+      const jtVer  = job.JobTemplateVersion || '0';
+      if (!jtName) return [];
+      try {
+        const filter = "JobTemplateName eq '" + jtName.replace(/'/g,"''") + "' and JobTemplateVersion eq '" + jtVer + "'";
+        const data = await apiJson(CFG.url + SVC_APPJOB + '/JobTemplateSequenceSet?$filter=' + encodeURIComponent(filter) + '&$format=json');
+        const steps = ((data.d && data.d.results) || data.value || [])
+          .sort(function(a, b) { return (a.JobSequencePosition || 0) - (b.JobSequencePosition || 0); });
+        docsLog('  ✔ ' + jtName + ': ' + steps.length + ' pasos', 'l-ok');
+        steps.forEach(function(s) {
+          docsLog('    pos=' + s.JobSequencePosition + ' → ' + (s.JobSequenceText || s.JceText || ''), 'l-info');
+        });
+        return steps.map(function(s) {
+          return { pos: s.JobSequencePosition || 0, text: s.JobSequenceText || s.JceText || '', jceText: s.JceText || '' };
+        });
+      } catch(e) {
+        docsLog('  ⚠ No se pudieron obtener pasos de ' + jtName + ': ' + e.message, 'l-warn');
+        return [];
+      }
+    });
+    const stepResults = await Promise.all(stepFetches);
+    stepResults.forEach(function(steps, ji) { stepMap[ji] = steps; });
+  }
+
+  // ── Parse ATL files
+  atlParsed = [];
+  if (atlFiles.length) {
+    docsLog('📄 Parseando archivos ATL…', 'l-info');
+    for (const af of atlFiles) {
+      try {
+        const parsed = parseATL(af.text);
+        atlParsed.push(parsed);
+        const dfCount = parsed.groups.reduce((s, g) => s + g.dataflows.length, 0);
+        docsLog(`  ✔ ${af.name}: "${parsed.sessionName}" — ${parsed.groups.length} grupos, ${dfCount} dataflows`, 'l-ok');
+      } catch (e) {
+        docsLog(`  ✗ ${af.name}: ${e.message}`, 'l-err');
+      }
+    }
+  } else {
+    docsLog('ℹ Sin archivos ATL — las integraciones no tendrán orden de proceso.', 'l-info');
+  }
+  setP(10);
+
+  // ── Parse ZIP files (reuse existing logic)
+  const usedNames = new Set();
+  function uniq(base) {
+    let clean = base.replace(/[:\\\/\?\*\[\]]/g, '_').substring(0, 28);
+    let n = clean, k = 0;
+    while (usedNames.has(n)) n = clean.substring(0, 25) + '_' + (++k);
+    usedNames.add(n); return n;
+  }
+
+  if (jobsFiles.length) {
+    docsLog('📦 Escaneando ZIPs…', 'l-info');
+    let done = 0;
+    for (const zf of jobsFiles) {
+      docsLog(`📦 ${zf.name}`, 'l-info');
+      let zip;
+      try { zip = await JSZip.loadAsync(zf.data); }
+      catch (e) { docsLog(`  ✗ ${e.message}`, 'l-err'); continue; }
+
+      const batchMap = await parseBatchCsv(zip);
+
+      const xmlNames = Object.keys(zip.files).filter(n => n.endsWith('.xml') && !n.includes('/'));
+      docsLog(`  📄 ${xmlNames.length} XMLs`, 'l-line');
+
+      for (let xi = 0; xi < xmlNames.length; xi++) {
+        const fname = xmlNames[xi];
+        setP(10 + Math.round(40 * (done + (xi + 1) / xmlNames.length) / jobsFiles.length));
+
+        let xmlStr;
+        try { xmlStr = await zip.file(fname).async('string'); }
+        catch (e) { docsLog(`  ✗ ${fname}: ${e.message}`, 'l-err'); continue; }
+
+        let dfResults;
+        try { dfResults = parseIntegration(xmlStr, batchMap[fname] || {}); }
+        catch (e) { docsLog(`  ✗ Parse ${fname}: ${e.message}`, 'l-err'); continue; }
+        if (!dfResults || !dfResults.length) continue;
+
+        const multiDF = dfResults.length > 1;
+        for (const parsed of dfResults) {
+          const { jobName, jobDesc, srcDSName, dstDSName, targetTable, mappings, filters, lookups } = parsed;
+          const baseName = jobName || fname.replace('.xml', '');
+          const sheetName = multiDF ? uniq(baseName + '_' + targetTable) : uniq(baseName);
+          const paramRow = {
+            jobName, jobDesc,
+            tipoIntegracion: parsed.tipoIntegracion,
+            dataflowName: parsed.dataflowName,
+            srcDS: srcDSName, dstDS: dstDSName,
+            targetTable, sheetName
+          };
+          parsedIntegrations.push({ sheetName, pkg: zf.name, parsed, paramRow });
+          docsLog(`  ✔ ${sheetName}  (${mappings.length} mapeos · ${filters.length} filtros)`, 'l-ok');
+        }
+      }
+      done++;
+    }
+  }
+  setP(55);
+
+  // ── Match ATL to integrations and order
+  // Each ATL is matched to integrations whose parsed.jobName starts with
+  // atl.sessionName + '_' (e.g. "IBP_002_PROCESS_MASTER_DATA_MD_CURRENCY" matches
+  // session "IBP_002_PROCESS_MASTER_DATA"). This prevents collisions when multiple
+  // processes share a dataflow name.
+  // For column H (ibpJobName): ATL[i] is associated with selectedJob[i].
+  // In job mode, ATL is required — without it we cannot know which integrations
+  // ATL is optional — jobs with only direct tasks (no processes) don't need it.
+
+  let orderedIntegrations = [];
+  {
+    docsLog('🔗 Mapeando steps → integraciones…', 'l-info');
+    const allOrdered = [];
+    const globalMatched = new Set();
+
+    for (let ai = 0; ai < atlParsed.length; ai++) {
+      const atl = atlParsed[ai];
+
+      // Find the step matching this ATL session across all selected jobs.
+      const sessionUC = atl.sessionName.toUpperCase();
+      let matchedStep = null;
+      let ibpJobIdxForAtl = Math.min(ai, selectedJobIdxs.length - 1);
+      let ibpJobNameForAtl = selectedJobNames[ibpJobIdxForAtl] || selectedJobNames[selectedJobNames.length - 1] || '';
+
+      // Pass 1: exact match (text === sessionName)
+      for (let ji = 0; ji < selectedJobIdxs.length; ji++) {
+        const step = (stepMap[ji] || []).find(s => s.text.toUpperCase() === sessionUC);
+        if (step) { matchedStep = step; ibpJobIdxForAtl = ji; ibpJobNameForAtl = selectedJobNames[ji] || ibpJobNameForAtl; break; }
+      }
+      // Pass 2: partial contains
+      if (!matchedStep) {
+        for (let ji = 0; ji < selectedJobIdxs.length; ji++) {
+          const step = (stepMap[ji] || []).find(s => s.text.toUpperCase().includes(sessionUC) || sessionUC.includes(s.text.toUpperCase()));
+          if (step) { matchedStep = step; ibpJobIdxForAtl = ji; ibpJobNameForAtl = selectedJobNames[ji] || ibpJobNameForAtl; break; }
+        }
+      }
+
+      const ibpStepName = matchedStep ? matchedStep.text    : atl.sessionName;
+      const ibpStepPos  = matchedStep ? matchedStep.pos     : 9999;
+      const ibpStepType = matchedStep ? matchedStep.jceText : '';
+
+      docsLog(`  📌 "${atl.sessionName}" → step: "${ibpStepName}" (pos ${ibpStepPos})`, 'l-info');
+
+      const matched = matchATLtoIntegrations(atl, parsedIntegrations);
+      for (const item of matched) {
+        if (item.atlGroup === ATL_NO_GROUP) continue;
+        if (globalMatched.has(item.sheetName)) continue;
+        globalMatched.add(item.sheetName);
+        allOrdered.push({ ...item, ibpJobName: ibpJobNameForAtl, ibpStepName, ibpStepPos, ibpStepType, ibpJobIdx: ibpJobIdxForAtl });
+      }
+    }
+
+    // ── Direct-task steps: CI-DS steps not covered by any ATL
+    // Some CI-DS steps are single tasks (not processes), so no ATL was uploaded for them.
+    // Match them directly by step.text === parsed.jobName from the ZIPs.
+    const coveredByAtlSessions = new Set(atlParsed.map(a => a.sessionName.toUpperCase()));
+    const intsByJobName = {};
+    for (const p of parsedIntegrations) {
+      const key = (p.parsed.jobName || '').toUpperCase();
+      if (key) { if (!intsByJobName[key]) intsByJobName[key] = []; intsByJobName[key].push(p); }
+    }
+
+    for (let ji = 0; ji < selectedJobIdxs.length; ji++) {
+      const jobNameJ = selectedJobNames[ji] || '';
+      for (const step of (stepMap[ji] || [])) {
+        if (!(step.jceText || '').toUpperCase().includes(JCE_DATA_INT)) continue;
+        const stepTextUC = step.text.toUpperCase();
+        if (coveredByAtlSessions.has(stepTextUC)) continue;
+
+        const directMatches = (intsByJobName[stepTextUC] || []).filter(p => !globalMatched.has(p.sheetName));
+        if (!directMatches.length) {
+          docsLog(`  ⚠ Step "${step.text}" sin ATL y sin ZIP con jobName coincidente`, 'l-warn');
+          continue;
+        }
+        docsLog(`  📎 "${step.text}" (tarea directa) → ${directMatches.length} integración(es)`, 'l-info');
+        for (const item of directMatches) {
+          globalMatched.add(item.sheetName);
+          allOrdered.push({
+            ...item,
+            atlGroup: '',
+            atlOrder: allOrdered.length + 1,
+            ibpJobName: jobNameJ,
+            ibpStepName: step.text,
+            ibpStepPos: step.pos,
+            ibpStepType: step.jceText || '',
+            ibpJobIdx: ji
+          });
+        }
+      }
+    }
+
+    // Sort: job selection order → step position → ATL order within step
+    allOrdered.sort(function(a, b) {
+      if (a.ibpJobIdx !== b.ibpJobIdx) return (a.ibpJobIdx || 0) - (b.ibpJobIdx || 0);
+      if (a.ibpStepPos !== b.ibpStepPos) return (a.ibpStepPos || 0) - (b.ibpStepPos || 0);
+      return (a.atlOrder || 0) - (b.atlOrder || 0);
+    });
+
+    orderedIntegrations = allOrdered;
+    docsLog(`✔ ${orderedIntegrations.length} integraciones documentadas (solo las presentes en el job)`, 'l-ok');
+  }
+  setP(60);
+
+  // ── Build Excel
+  docsLog('🔍 Obteniendo descripciones de campos desde IBP…', 'l-info');
+  let ibpDescs = {};
+  try {
+    ibpDescs = await fetchIbpFieldDescriptions();
+    const n = Object.keys(ibpDescs).length;
+    docsLog(n > 0 ? `✔ ${n} descripciones de campos obtenidas de IBP` : '⚠ Sin descripciones IBP', n > 0 ? 'l-ok' : 'l-warn');
+  } catch (e) { docsLog('⚠ No se pudo consultar IBP: ' + e.message, 'l-warn'); }
+  setP(70);
+
+  const sheets = [];
+  const paramRows = [];
+  let totalJobs = 0, totalMaps = 0, totalFilts = 0;
+
+  // ── Collect non-CI-DS steps as informational rows (no detail sheet)
+  const nonDIRows = [];
+  for (let ji = 0; ji < selectedJobIdxs.length; ji++) {
+    const jobNameJ = selectedJobNames[ji] || '';
+    for (const step of (stepMap[ji] || [])) {
+      if ((step.jceText || '').toUpperCase().includes(JCE_DATA_INT)) continue;
+      nonDIRows.push({
+        jobName: '', jobDesc: '', tipoIntegracion: step.jceText || step.text,
+        dataflowName: '', srcDS: '', dstDS: '', targetTable: '', sheetName: '',
+        atlGroup: '', ibpJobName: jobNameJ, ibpStepName: step.text,
+        ibpStepType: step.jceText || '',
+        ibpStepPos: step.pos, ibpJobIdx: ji, atlOrder: 0, isNonDI: true
+      });
+    }
+  }
+
+  // ── Merge DI integrations + non-DI rows, sort by job → step pos → ATL order
+  orderedIntegrations.forEach(item => {
+    item._sortJobIdx  = item.ibpJobIdx  || 0;
+    item._sortStepPos = item.ibpStepPos || 0;
+    item._sortOrder   = item.atlOrder   || 0;
+  });
+  nonDIRows.forEach(row => {
+    row._sortJobIdx  = row.ibpJobIdx;
+    row._sortStepPos = row.ibpStepPos;
+    row._sortOrder   = 0;
+  });
+  const allRows = [...orderedIntegrations, ...nonDIRows];
+  allRows.sort(function(a, b) {
+    if (a._sortJobIdx  !== b._sortJobIdx)  return a._sortJobIdx  - b._sortJobIdx;
+    if (a._sortStepPos !== b._sortStepPos) return a._sortStepPos - b._sortStepPos;
+    return a._sortOrder - b._sortOrder;
+  });
+
+  for (const row of allRows) {
+    if (!row.isNonDI) {
+      const { parsed, paramRow } = row;
+      parsed.mappings.forEach(m => {
+        if (!m.dstDesc && ibpDescs[m.dstField]) m.dstDesc = ibpDescs[m.dstField];
+      });
+      totalJobs++;
+      totalMaps += parsed.mappings.length;
+      totalFilts += parsed.filters.length;
+      paramRow.atlGroup    = row.atlGroup    || '';
+      paramRow.ibpJobName  = row.ibpJobName  || '';
+      paramRow.ibpStepName = row.ibpStepName || '';
+      paramRow.ibpStepType = row.ibpStepType || '';
+      paramRow.isNonDI     = false;
+      paramRows.push(paramRow);
+      const sb = buildIntegrationSheet(parsed);
+      sheets.push({ name: paramRow.sheetName, sb });
+    } else {
+      paramRows.push(row);
+    }
+  }
+
+  docsLog('📋 Generando hoja Parámetros…', 'l-info');
+  const paramSb = buildParamSheet(paramRows, true);
+  sheets.unshift({ name: 'Parámetros', sb: paramSb });
+
+  docsLog('📦 Ensamblando archivo Excel…', 'l-info');
+  xlsBuf = await assembleXlsx(sheets);
+  setP(100);
+  docsLog(`✅ Listo — ${totalJobs} integraciones · ${totalMaps} mapeos · ${totalFilts} filtros`, 'l-ok');
+
+  document.getElementById('s-jobs').textContent = totalJobs;
+  document.getElementById('s-maps').textContent = totalMaps;
+  document.getElementById('s-filt').textContent = totalFilts;
+  document.getElementById('stats-card').style.display = 'block';
+  document.getElementById('jobs-gen-btn').disabled = false;
+}
+
+// ── Init jobs-mode drop zones on load ────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  initAtlDropZone();
+  initJobsZipDropZone();
+});
 
 // ════════════════════════════════════════════════════════════
 //  DOWNLOAD

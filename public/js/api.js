@@ -193,12 +193,14 @@
       var parsed = new URL(fullUrl);
       var base  = parsed.origin;
       var parts = parsed.pathname.split('/');
-      // pathname: /sap/opu/odata/IBP/{service}/{entity}
-      var ibpIdx  = parts.indexOf('IBP');
-      var service = ibpIdx >= 0 ? (parts[ibpIdx + 1] || '') : '';
-      var ePath   = ibpIdx >= 0 ? (parts.slice(ibpIdx + 2).join('/') || '$metadata') : '';
+      // pathname always: /sap/opu/odata/{NS}/{service}/{entity}
+      // parts[0]='' parts[1]='sap' parts[2]='opu' parts[3]='odata' parts[4]=NS parts[5]=service parts[6+]=entity
+      var ns      = parts[4] ? parts[4].toUpperCase() : '';
+      var prefix  = ns === 'IBP' ? 'IBP' : 'SAP';
+      var service = parts[5] || '';                           // may include ;v=0002
+      var ePath   = parts.slice(6).join('/') || '$metadata';
       var query   = parsed.search ? parsed.search.substring(1) : '';
-      return { base: base, service: service, path: ePath, query: query };
+      return { base: base, service: service, path: ePath, query: query, prefix: prefix };
     }
 
     async function apiJson(url) {
@@ -206,7 +208,7 @@
       var resp = await fetch('/api/proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ base: d.base, service: d.service, path: d.path, query: d.query, user: CFG.user, password: CFG.pass })
+        body: JSON.stringify({ base: d.base, service: d.service, path: d.path, query: d.query, prefix: d.prefix, user: CFG.user, password: CFG.pass })
       });
       if (!resp.ok) {
         var err = await resp.json().catch(function () { return { error: resp.statusText }; });
@@ -220,7 +222,7 @@
       var resp = await fetch('/api/proxy-xml', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ base: d.base, service: d.service, user: CFG.user, password: CFG.pass })
+        body: JSON.stringify({ base: d.base, service: d.service, prefix: d.prefix, user: CFG.user, password: CFG.pass })
       });
       if (!resp.ok) {
         var err = await resp.json().catch(function () { return { error: resp.statusText }; });

@@ -33,11 +33,11 @@ Contexto completo del proyecto para sesiones de Claude Code.
   - `vis-network` — diagramas de red (Visualizer)
   - `jszip` — creación nativa de excel en frontend (.xlsx)
   - `exceljs` — exportación manual a Excel
-  - `emailjs/browser` — envío de feedback por mail
 
 ### Backend (Vercel Serverless)
-- `api/proxy.js` — proxy para llamadas a SAP IBP (evita CORS)
-  - Recibe `{ url, user, password, body?, method? }` vía POST
+- `server.js` — proxy para llamadas a SAP IBP (evita CORS)
+  - Recibe `{ base, service, path, query, user, password }` vía POST en `/api/proxy`
+  - Valida dominio, service y path antes de construir la URL destino
   - Reenvía la request a SAP IBP con Basic Auth
   - Devuelve la respuesta JSON al frontend
 
@@ -137,7 +137,7 @@ fetchAllPages(url, logEl, filter, select)
 ### 6. Feedback (botón flotante)
 - Botón fijo esquina inferior derecha
 - Panel lateral con formulario: Nombre, App, Tipo, Descripción
-- Envío via EmailJS (service: `service_tw7qns4`, template: `template_hd02kde`)
+- Envío via `POST /api/send-feedback` → server llama a EmailJS REST API con credenciales de env vars
 - Destinatario: gerardo.ahumada@go-scm.com
 
 ---
@@ -171,6 +171,37 @@ var CPR_BY_SID = {};                        // Co-productos por SOURCEID
 
 ---
 
+## Directrices de Seguridad
+
+### Secretos y credenciales
+- Nunca hardcodear API keys, tokens ni credenciales en código cliente ni en CLAUDE.md
+- Toda información sensible va en variables de entorno de Vercel (Dashboard → Settings → Environment Variables)
+- Usar `.env` local para desarrollo; `.env.example` con placeholders genéricos para documentar las variables requeridas
+
+### Proxy al backend (server.js)
+- El cliente nunca envía URLs completas al proxy — solo componentes estructurados: `{ base, service, path, query }`
+- El servidor valida cada componente por separado: dominio en allowlist, service en allowlist, path con regex estricto
+- Para agregar un nuevo servicio SAP permitido, actualizar `ALLOWED_SERVICES` en `server.js`
+- Los links de paginación SAP (`__next`) usan el endpoint `/api/proxy-next`, nunca `/api/proxy`
+
+### Frontend — renderizado de datos externos
+- Todo valor proveniente de fuentes externas (archivos subidos, respuestas de API, localStorage) debe escaparse con `escH()` antes de insertarse en `innerHTML`
+- No usar `innerHTML` con template literals que contengan datos no escapados; preferir `textContent` o `escH()`
+
+### Librerías externas (CDN)
+- Fijar versión exacta en cada `<script src="...">` de CDN
+- Incluir atributo `integrity` (SRI hash) y `crossorigin="anonymous"` en todos los scripts de CDN
+- Para obtener el hash SRI: https://www.srihash.org/
+
+### Nuevos endpoints en server.js
+Al agregar un endpoint nuevo:
+1. Validar todos los inputs antes de usarlos
+2. Respuestas de error al cliente: mensajes genéricos — los detalles van solo a `console.error()`
+3. Si el endpoint hace fetch a un servicio externo, validar el dominio destino
+4. El rate limiter `apiLimiter` ya cubre todas las rutas `/api/` automáticamente
+
+---
+
 ## Paleta de colores
 
 ```css
@@ -187,7 +218,7 @@ var CPR_BY_SID = {};                        // Co-productos por SOURCEID
 
 ## EmailJS
 
-- **Service ID:** service_tw7qns4
-- **Template ID:** template_hd02kde
-- **Public Key:** DoHbN3x-66upumtbm
+- Las credenciales se configuran como variables de entorno en Vercel Dashboard → Settings → Environment Variables
+- Variables requeridas: `EMAILJS_SERVICE_ID`, `EMAILJS_TEMPLATE_ID`, `EMAILJS_PUBLIC_KEY`, `EMAILJS_PRIVATE_KEY`
+- Ver `.env.example` para la lista completa de variables con placeholders
 - **Destinatario:** gerardo.ahumada@go-scm.com

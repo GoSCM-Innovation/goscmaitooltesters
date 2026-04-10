@@ -20,8 +20,10 @@ const PORT = process.env.PORT || 3000;
 app.set('trust proxy', 1);
 
 // ─── OData constants ──────────────────────────────────────────────
-const ALLOWED_SERVICES = ['MASTER_DATA_API_SRV', 'PLANNING_DATA_API_SRV'];
-const ODATA_PREFIX = '/sap/opu/odata/IBP/';
+const ALLOWED_SERVICES = ['MASTER_DATA_API_SRV', 'PLANNING_DATA_API_SRV', 'BC_EXT_APPJOB_MANAGEMENT'];
+const ODATA_PREFIX_IBP = '/sap/opu/odata/IBP/';
+const ODATA_PREFIX_SAP = '/sap/opu/odata/sap/';   // lowercase — BC_EXT_APPJOB_MANAGEMENT uses /sap/opu/odata/sap/
+const PREFIX_MAP = { IBP: ODATA_PREFIX_IBP, SAP: ODATA_PREFIX_SAP };
 
 // ─── Security headers ────────────────────────────────────────────
 app.use((_req, res, next) => {
@@ -69,8 +71,11 @@ function validateProxyUrl(rawUrl) {
 }
 
 // Validates that the OData service name is in the allowed list.
+// Strips optional version suffix (e.g. ;v=0002) before checking.
 function validateService(service) {
-  if (!service || !ALLOWED_SERVICES.includes(service)) return 'Servicio no permitido';
+  if (!service) return 'Servicio no permitido';
+  const baseName = service.split(';')[0];
+  if (!ALLOWED_SERVICES.includes(baseName)) return 'Servicio no permitido';
   return null;
 }
 
@@ -86,7 +91,7 @@ function validateEntityPath(entityPath) {
 // Body: { base, service, path, query, user, password }
 // Server reconstructs: ${base}/sap/opu/odata/IBP/${service}/${path}?${query}
 app.post('/api/proxy', async (req, res) => {
-  const { base, service, path: entityPath, query, user, password } = req.body;
+  const { base, service, path: entityPath, query, user, password, prefix } = req.body;
 
   if (!base || !service || !entityPath || !user || !password) {
     return res.status(400).json({ error: 'Faltan parámetros requeridos' });
@@ -100,7 +105,8 @@ app.post('/api/proxy', async (req, res) => {
   if (svcError)  return res.status(400).json({ error: svcError });
   if (pathError) return res.status(400).json({ error: pathError });
 
-  const url = `${base}${ODATA_PREFIX}${service}/${entityPath}${query ? '?' + query : ''}`;
+  const odataPrefix = PREFIX_MAP[prefix] || ODATA_PREFIX_IBP;
+  const url = `${base}${odataPrefix}${service}/${entityPath}${query ? '?' + query : ''}`;
 
   try {
     const auth = Buffer.from(`${user}:${password}`).toString('base64');
@@ -134,7 +140,7 @@ app.post('/api/proxy', async (req, res) => {
 // Body: { base, service, user, password }
 // Path is always $metadata — hardcoded server-side.
 app.post('/api/proxy-xml', async (req, res) => {
-  const { base, service, user, password } = req.body;
+  const { base, service, user, password, prefix } = req.body;
 
   if (!base || !service || !user || !password) {
     return res.status(400).json({ error: 'Faltan parámetros requeridos' });
@@ -146,7 +152,8 @@ app.post('/api/proxy-xml', async (req, res) => {
   if (baseError) return res.status(400).json({ error: baseError });
   if (svcError)  return res.status(400).json({ error: svcError });
 
-  const url = `${base}${ODATA_PREFIX}${service}/$metadata`;
+  const odataPrefix = PREFIX_MAP[prefix] || ODATA_PREFIX_IBP;
+  const url = `${base}${odataPrefix}${service}/$metadata`;
 
   try {
     const auth = Buffer.from(`${user}:${password}`).toString('base64');
@@ -192,7 +199,8 @@ app.post('/api/proxy-next', async (req, res) => {
   let parsed;
   try { parsed = new URL(url); } catch { return res.status(400).json({ error: 'URL inválida' }); }
 
-  if (!parsed.pathname.startsWith(ODATA_PREFIX)) {
+  const lcPath = parsed.pathname.toLowerCase();
+  if (!lcPath.startsWith('/sap/opu/odata/ibp/') && !lcPath.startsWith('/sap/opu/odata/sap/')) {
     return res.status(400).json({ error: 'Path no permitido' });
   }
 
@@ -261,7 +269,7 @@ if (!process.env.VERCEL) {
   app.listen(PORT, () => {
     console.log(`\n  ╔══════════════════════════════════════════╗`);
     console.log(`  ║  IBP BOM Hierarchy v7                    ║`);
-    console.log(`  ║  http://localhost:${PORT}                    ║`);
+    console.log(`  ║  http://localhost:${PORT}                   ║`);
     console.log(`  ╚══════════════════════════════════════════╝\n`);
   });
 }
