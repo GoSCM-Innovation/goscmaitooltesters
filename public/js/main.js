@@ -308,6 +308,7 @@
       return {
         header: best(['LOCID', 'PRDID', 'SOURCEID'], ['SOURCETYPE', 'OUTPUTCOEFFICIENT'], ['sourceprod', 'sourceproduction', 'prodhead']),
         item: best(['PRDID', 'SOURCEID', 'COMPONENTCOEFFICIENT'], [], ['sourceitem', 'proditem', 'sourceproditem', 'productionsourceitm']),
+        itemSub: best(['SOURCEID', 'PRDFR', 'SPRDFR'], [], ['sourceitemsub', 'proditemsub', 'itemsub', 'productionsourceitmsubstitution', 'itmsubstitution']),
         resource: best(['RESID', 'SOURCEID'], [], ['sourceres', 'prodres', 'sourceresource', 'productionresource']),
         product: best(['PRDID'], ['PRDDESCR', 'MATTYPEID'], ['product', 'material']),
         locMaster: best(['LOCID'], ['LOCDESCR', 'LOCTYPE'], ['location', 'loc'], ['LOCFR', 'PRDID', 'SOURCEID']),
@@ -320,6 +321,7 @@
       var pairs = [
         { id: 'selHeader', fields: 'fieldsHeader', val: detected.header },
         { id: 'selItem', fields: 'fieldsItem', val: detected.item },
+        { id: 'selItemSub', fields: 'fieldsItemSub', val: detected.itemSub },
         { id: 'selResource', fields: 'fieldsResource', val: detected.resource },
         { id: 'selProduct', fields: 'fieldsProduct', val: detected.product },
         { id: 'selBomLocMaster', fields: 'fieldsBomLocMaster', val: detected.locMaster },
@@ -592,6 +594,7 @@
 
       var headerEntity = document.getElementById('selHeader').value;
       var itemEntity = document.getElementById('selItem').value;
+      var itemSubEntity = document.getElementById('selItemSub').value;
       var resourceEntity = document.getElementById('selResource').value;
       var productEntity = document.getElementById('selProduct').value;
       var bomLocEntity = document.getElementById('selBomLocMaster').value;
@@ -617,7 +620,7 @@
         // Open IDB and wipe previous BOM data
         if (!IDB) IDB = await openDB();
         setStatus('info', 'Preparando base de datos local...');
-        await Promise.all(['bom_psh', 'bom_psi', 'bom_psr', 'bom_prd', 'bom_loc'].map(idbClear));
+        await Promise.all(['bom_psh', 'bom_psi', 'bom_psisub', 'bom_psr', 'bom_prd', 'bom_loc'].map(idbClear));
         RES_DESCR = {};
 
         // ── Header → IDB ───────────────────────────────────────────────────────
@@ -633,9 +636,22 @@
         setStatus('info', 'Descargando Production Source Item...');
         log(logEl, 'info', 'GET → ' + baseOData + itemEntity + (paFilter ? ' [filtro PA/Ver]' : ''));
         var nItm = await fetchAndIndex(baseOData + itemEntity, logEl, paFilter,
-          'SOURCEID,PRDID,COMPONENTCOEFFICIENT',
+          'SOURCEID,PRDID,COMPONENTCOEFFICIENT,ISALTITEM',
           function (rows) { return idbBulkPut('bom_psi', rows); });
         log(logEl, 'ok', 'Item: ' + nItm + ' registros → IDB');
+        setProgress(45);
+
+        // ── Item Sub → IDB ────────────────────────────────────────────────────
+        if (itemSubEntity) {
+          setStatus('info', 'Descargando Production Source Item Sub...');
+          log(logEl, 'info', 'GET → ' + baseOData + itemSubEntity + (paFilter ? ' [filtro PA/Ver]' : ''));
+          var nItmSub = await fetchAndIndex(baseOData + itemSubEntity, logEl, paFilter,
+            'SOURCEID,PRDFR,SPRDFR',
+            function (rows) { return idbBulkPut('bom_psisub', rows); });
+          log(logEl, 'ok', 'Item Sub: ' + nItmSub + ' registros → IDB');
+        } else {
+          log(logEl, 'warn', 'Item Sub: sin entidad configurada');
+        }
         setProgress(50);
 
         // ── Resource → IDB ─────────────────────────────────────────────────────

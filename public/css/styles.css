@@ -603,6 +603,12 @@
       color: var(--purple);
     }
 
+    .badge-alt {
+      background: rgba(247, 168, 0, .18);
+      color: var(--accent);
+      cursor: help;
+    }
+
     .badge-leaf {
       background: rgba(255, 200, 87, .12);
       color: var(--amber);

@@ -32,5 +32,6 @@
     // BOM enrichment lookups (populated during loadBomSubtree)
     var LOC_BY_ID = {};   // locid → { LOCID, LOCDESCR }
     var RES_DESCR = {};   // resid → RESDESCR
+    var PSISUB_BY_SID = {}; // SOURCEID -> [{PRDFR, SPRDFR}] (Production Source Item Sub)
 
 

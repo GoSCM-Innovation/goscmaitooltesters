@@ -5,7 +5,7 @@
        ═══════════════════════════════════════════════════════════════ */
     function openDB() {
       return new Promise(function (resolve, reject) {
-        var req = indexedDB.open('ibp_data', 2);
+        var req = indexedDB.open('ibp_data', 3);
         req.onupgradeneeded = function (e) {
           var db = e.target.result;
           // BOM stores
@@ -24,6 +24,10 @@
           }
           if (!db.objectStoreNames.contains('bom_prd')) {
             db.createObjectStore('bom_prd', { keyPath: 'PRDID' });
+          }
+          if (!db.objectStoreNames.contains('bom_psisub')) {
+            db.createObjectStore('bom_psisub', { autoIncrement: true })
+              .createIndex('by_sourceid', 'SOURCEID', { unique: false });
           }
           // BOM Location master (lookup for LOCID→LOCDESCR in BOM tab)
           if (!db.objectStoreNames.contains('bom_loc')) {

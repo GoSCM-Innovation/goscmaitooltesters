@@ -6,7 +6,7 @@
     async function loadBomSubtree(prdid) {
       // Reset BOM indexes — will hold only this product's subtree
       HDR_BY_PRD = {}; HDR_BY_SID = {}; ITM_BY_SID = {};
-      RES_BY_SID = {}; CPR_BY_SID = {};
+      RES_BY_SID = {}; CPR_BY_SID = {}; PSISUB_BY_SID = {};
       isCompAtLoc = {}; prdIndex = {}; LOC_BY_ID = {};
 
       var visitedPrds = {}; visitedPrds[prdid] = true;
@@ -71,6 +71,14 @@
               var rsid = str(r.SOURCEID), rid = str(r.RESID);
               if (!RES_BY_SID[rsid]) RES_BY_SID[rsid] = [];
               if (RES_BY_SID[rsid].indexOf(rid) < 0) RES_BY_SID[rsid].push(rid);
+            });
+
+            // 5. Get PSI Sub rows for this SOURCEID (item substitutions)
+            var subs = await idbGetByIndex('bom_psisub', 'by_sourceid', sid);
+            subs.forEach(function (sub) {
+              var ssid = str(sub.SOURCEID);
+              if (!PSISUB_BY_SID[ssid]) PSISUB_BY_SID[ssid] = [];
+              PSISUB_BY_SID[ssid].push(sub);
             });
           }
         }
@@ -258,6 +266,7 @@
           uomid: compUom,
           coefficient: '',
           inputCoeff: compCoeff,
+          isAltItem: str(it.ISALTITEM),
           type: 'LEAF',
           level: level + 1,
           resids: [],
@@ -277,6 +286,7 @@
               childNode.inputCoeff = compCoeff;   // PSI — consumed by parent
               childNode.uomid = compUom;     // UOM from component master
               childNode.type = 'COMPONENT';
+              childNode.isAltItem = str(it.ISALTITEM);
               node.children.push(childNode);
               anyAdded = true;
             }
@@ -373,6 +383,7 @@
             '<th class="col-loc">Planta</th>' +
             '<th class="col-src">ID de producción</th>' +
             '<th class="col-prd">Material</th>' +
+            '<th class="col-alt">Alt</th>' +
             '<th class="col-coef">Coeficiente</th>' +
             '<th class="col-mat">Tipo de Material</th>' +
             '<th class="col-type">Tipo</th>' +
@@ -765,6 +776,23 @@
         html += '<td style="font-family:var(--mono);font-size:11px">' + locLabel + '</td>';
         html += '<td style="font-family:var(--mono);font-size:11px">' + escH(n.sourceid) + '</td>';
         html += '<td style="font-family:var(--mono);font-size:11px">' + matLabel + '</td>';
+        var altHtml = '';
+        if (n.isAltItem === 'X') {
+          var parentSid = n.sourceid || '';
+          // Search in parent's SOURCEID context — the node's sourceid links back to parent PSH
+          // For leaf nodes without sourceid, look through all PSISUB entries
+          var altSubs = [];
+          // The PSISUB_BY_SID is indexed by the SOURCEID of the parent production source
+          // We need to find entries where SPRDFR matches this node's PRDID
+          Object.keys(PSISUB_BY_SID).forEach(function (ssid) {
+            (PSISUB_BY_SID[ssid] || []).forEach(function (sub) {
+              if (str(sub.SPRDFR) === n.prdid) altSubs.push(str(sub.PRDFR));
+            });
+          });
+          var altTitle = altSubs.length > 0 ? 'Reemplaza a: ' + altSubs.join(', ') : 'Material de reemplazo';
+          altHtml = '<span class="badge badge-alt" title="' + escH(altTitle) + '">X</span>';
+        }
+        html += '<td style="text-align:center">' + altHtml + '</td>';
         html += '<td style="text-align:right;font-family:var(--mono)">' + fmtDualCoef(n) + '</td>';
         html += '<td style="font-family:var(--mono);font-size:11px">' + escH(n.mattypeid) + '</td>';
         html += '<td>' + typeBadge + '</td>';
@@ -777,6 +805,7 @@
             html += '<tr class="rt-coprod">';
             html += '<td style="padding-left:' + (indent + 28) + 'px"></td><td></td><td></td><td></td>';
             html += '<td style="font-family:var(--mono);font-size:11px">' + cpMatLabel + '</td>';
+            html += '<td></td>';
             html += '<td style="text-align:right;font-family:var(--mono)">' + fmtDualCoef(cp) + '</td>';
             html += '<td style="font-family:var(--mono);font-size:11px">' + escH(cp.mattypeid) + '</td>';
             html += '<td>' + (cp.sourcetype ? '<span class="badge ' + (cp.sourcetype === 'C' ? 'badge-coprod' : 'badge-psh') + '">' + escH(cp.sourcetype) + '</span>' : '') + '</td>';
@@ -785,7 +814,7 @@
         }
         if (hasKids && isExp) {
           html += '<tr class="tr-comp-divider"><td style="padding-left:' + (indent + 28) + 'px"></td>';
-          html += '<td colspan="8"><span class="divider-lbl">↓ Componentes PSI (' + n.children.length + ')</span></td></tr>';
+          html += '<td colspan="9"><span class="divider-lbl">↓ Componentes PSI (' + n.children.length + ')</span></td></tr>';
         }
       });
 
