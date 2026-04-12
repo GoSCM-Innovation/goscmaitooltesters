@@ -453,6 +453,7 @@
       var pairs = [
         { id: 'selPAHeader', fields: 'fieldsPAHeader', val: detectedBom.header },
         { id: 'selPAItem', fields: 'fieldsPAItem', val: detectedBom.item },
+        { id: 'selPAItemSub', fields: 'fieldsPAItemSub', val: detectedBom.itemSub },
         { id: 'selPAResource', fields: 'fieldsPAResource', val: detectedBom.resource },
         { id: 'selPAProduct', fields: 'fieldsPAProduct', val: detectedBom.product },
         { id: 'selPALocMaster', fields: 'fieldsPALocMaster', val: detectedBom.locMaster },

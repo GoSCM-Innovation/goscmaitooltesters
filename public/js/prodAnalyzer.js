@@ -27,6 +27,7 @@
       var ent = {
         psh:    document.getElementById('selPAHeader').value,
         psi:    document.getElementById('selPAItem').value,
+        psiSub: document.getElementById('selPAItemSub').value,
         psr:    document.getElementById('selPAResource').value,
         prd:    document.getElementById('selPAProduct').value,
         loc:    document.getElementById('selPALocMaster').value,
@@ -59,7 +60,7 @@
       try {
         progEl.style.width = '0%';
         if (!IDB) IDB = await openDB();
-        await Promise.all(['pa_psh', 'pa_psi', 'pa_psr', 'pa_loc_prod', 'pa_loc_src'].map(idbClear));
+        await Promise.all(['pa_psh', 'pa_psi', 'pa_psisub', 'pa_psr', 'pa_loc_prod', 'pa_loc_src'].map(idbClear));
 
         /* ── PHASE 1: Download 8 entities (0 → 75%) ─────────────────── */
 
@@ -91,9 +92,20 @@
           setStatusPA('Descargando Production Source Item → IDB...', 12);
           log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + ent.psi);
           var nPsi = await fetchAndIndex(baseOData + ent.psi, logEl, paFilter,
-            'SOURCEID,PRDID,COMPONENTCOEFFICIENT',
+            'SOURCEID,PRDID,COMPONENTCOEFFICIENT,ISALTITEM',
             function (rows) { return idbBulkPut('pa_psi', rows); });
           log(logEl, 'ok', timer.fmt() + ' PSI: ' + nPsi + ' reg → IDB');
+        }
+        progEl.style.width = '18%';
+
+        // PSI Sub
+        if (ent.psiSub) {
+          setStatusPA('Descargando Production Source Item Sub → IDB...', 18);
+          log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + ent.psiSub);
+          var nPsiSub = await fetchAndIndex(baseOData + ent.psiSub, logEl, paFilter,
+            'SOURCEID,PRDFR,SPRDFR',
+            function (rows) { return idbBulkPut('pa_psisub', rows); });
+          log(logEl, 'ok', timer.fmt() + ' PSI Sub: ' + nPsiSub + ' reg → IDB');
         }
         progEl.style.width = '22%';
 
@@ -275,12 +287,14 @@
 
       /* ── PHASE A: leer todas las tablas IDB a memoria ───────────────── */
       setStatusPA('Cargando datos desde IndexedDB...', 75);
-      var allLocProd = ent.locPrd ? (await idbGetAll('pa_loc_prod')) : [];
-      var allLocSrc  = ent.locSrc ? (await idbGetAll('pa_loc_src'))  : [];
-      var allPsi     = ent.psi    ? (await idbGetAll('pa_psi'))      : [];
-      var allPsr     = ent.psr    ? (await idbGetAll('pa_psr'))      : [];
+      var allLocProd = ent.locPrd  ? (await idbGetAll('pa_loc_prod'))  : [];
+      var allLocSrc  = ent.locSrc  ? (await idbGetAll('pa_loc_src'))   : [];
+      var allPsi     = ent.psi     ? (await idbGetAll('pa_psi'))       : [];
+      var allPsiSub  = ent.psiSub  ? (await idbGetAll('pa_psisub'))    : [];
+      var allPsr     = ent.psr     ? (await idbGetAll('pa_psr'))       : [];
       log(logEl, 'ok', timer.fmt() + ' IDB cargado — LocProd:' + allLocProd.length +
-        ' LocSrc:' + allLocSrc.length + ' PSI:' + allPsi.length + ' PSR:' + allPsr.length);
+        ' LocSrc:' + allLocSrc.length + ' PSI:' + allPsi.length +
+        ' PSISub:' + allPsiSub.length + ' PSR:' + allPsr.length);
 
       /* ── PHASE B: construir índices cruzados ────────────────────────── */
       setStatusPA('Construyendo índices cruzados...', 77);
@@ -334,6 +348,16 @@
         var sid = str(r.SOURCEID), prd = str(r.PRDID || '');
         if (prd) psiPrdSet.add(prd);
         if (sid) { if (!psiBySourceid[sid]) psiBySourceid[sid] = []; psiBySourceid[sid].push(r); }
+      });
+
+      // PSI Sub — índice SPRDFR → [PRDFR] para lookup de materiales reemplazados
+      var psiSubBySprdfr = {};  // SPRDFR → [PRDFR] (qué materiales reemplaza)
+      allPsiSub.forEach(function(r) {
+        var sprdfr = str(r.SPRDFR || ''), prdfr = str(r.PRDFR || '');
+        if (sprdfr && prdfr) {
+          if (!psiSubBySprdfr[sprdfr]) psiSubBySprdfr[sprdfr] = [];
+          if (psiSubBySprdfr[sprdfr].indexOf(prdfr) < 0) psiSubBySprdfr[sprdfr].push(prdfr);
+        }
       });
 
       // PSR
@@ -570,17 +594,20 @@
           ['Estado', 'SOURCEID', 'PRDID output', 'LOCID planta', 'PRDID componente', 'COMPONENTCOEFFICIENT',
            'Tipo componente', 'PRDID comp+LOCID en Location Product',
            'En Location Source (insumo)', 'LOCFR origen', 'LOCTYPE origen',
-           'LOCFR+PRDID en Location Product', 'Observacion'],
+           'LOCFR+PRDID en Location Product', 'Material de reemplazo (ISALTITEM)', 'Reemplaza a',
+           'Observacion'],
           ['Estado', 'SOURCEID', 'PRDID output', 'LOCID planta', 'PRDID componente', 'COMPONENTCOEFFICIENT',
            'Tipo componente', 'PRDID comp+LOCID en Location Product',
            'En Location Source (insumo)', 'LOCFR origen', 'LOCTYPE origen',
-           'LOCFR+PRDID en Location Product', 'Observacion']);
+           'LOCFR+PRDID en Location Product', 'Material de reemplazo (ISALTITEM)', 'Reemplaza a',
+           'Observacion']);
         var PSI_CHUNK = 300;
         for (var pii = 0; pii < allPsi.length; pii += PSI_CHUNK) {
           allPsi.slice(pii, pii + PSI_CHUNK).forEach(function(r) {
             var sid    = str(r.SOURCEID);
             var comp   = str(r.PRDID || '');
             var coeff  = str(r.COMPONENTCOEFFICIENT || '');
+            var isAlt  = str(r.ISALTITEM || '');
             var info   = pshSidLocid[sid] || {};
             var locid  = info.LOCID || '';
             var outPrd = info.PRDID || '';
@@ -597,6 +624,12 @@
                           : isSemi ? 'N/A' : '';
             var locfrInLP = inLS ? yn(lsRows.some(function(x){ return locPrdSet.has(x.LOCFR + '|' + comp); }))
                           : isSemi ? 'N/A' : '';
+            // Materiales reemplazados (solo si ISALTITEM=X)
+            var replacedBy = '';
+            if (isAlt === 'X') {
+              var replaced = psiSubBySprdfr[comp] || [];
+              replacedBy = replaced.join(', ');
+            }
             var obs = [];
             if (noSrc)    obs.push('SOURCEID no encontrado en PSH - planta no determinada');
             if (noCoeff)  obs.push('Coeficiente = 0 o no definido');
@@ -611,13 +644,15 @@
               }
             }
             if (!compInLP && locid) obs.push('Componente no habilitado en Location Product para esta planta');
+            if (isAlt === 'X' && !replacedBy && ent.psiSub) obs.push('Material de reemplazo sin registro en Item Sub');
             if (!obs.length) obs.push('OK');
             var fill = (noCoeff || (!isSemi && !inLS && !noSrc) || (!compInLP && locid)) ? C_RED
-                     : (noSrc || (!isSemi && inLS && lsRows.some(function(x){ return (lct(x.LOCFR)||'').toUpperCase() !== 'V'; }))) ? C_YEL
+                     : (noSrc || (!isSemi && inLS && lsRows.some(function(x){ return (lct(x.LOCFR)||'').toUpperCase() !== 'V'; }))
+                        || (isAlt === 'X' && !replacedBy && ent.psiSub)) ? C_YEL
                      : null;
             S7.addRow([statusLabel(fill), sid, outPrd, locid, comp, coeff, tipo, yn(compInLP),
               !isSemi && !noSrc ? yn(inLS) : 'N/A',
-              locfrVal, locfrType, locfrInLP, obs.join(' | ')], fill);
+              locfrVal, locfrType, locfrInLP, isAlt || '', replacedBy, obs.join(' | ')], fill);
             track('Prod Source Item', fill);
           });
           await new Promise(function(r){ setTimeout(r, 0); });
