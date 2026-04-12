@@ -1420,6 +1420,20 @@
     style="position:fixed;bottom:24px;right:24px;z-index:9000;width:48px;height:48px;border-radius:50%;background:#6C63FF;border:none;cursor:pointer;box-shadow:0 4px 16px rgba(108,99,255,0.45);display:flex;align-items:center;justify-content:center;font-size:20px;color:#fff;transition:transform .2s;"
     onmouseenter="this.style.transform='scale(1.1)'" onmouseleave="this.style.transform='scale(1)'">💬</button>
 
+  <!-- Feedback tooltip -->
+  <div id="feedbackTooltip"
+    style="display:none;position:fixed;bottom:80px;right:24px;z-index:9000;max-width:280px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;box-shadow:0 8px 32px rgba(0,0,0,0.35);animation:fbTipIn .4s ease-out;">
+    <button onclick="dismissFeedbackTip()"
+      style="position:absolute;top:6px;right:8px;background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;line-height:1;padding:2px;">✕</button>
+    <div style="font-size:13px;color:var(--text);line-height:1.5;padding-right:14px;">
+      <strong style="color:#6C63FF;">Escríbenos</strong> si encuentras un error, tienes una consulta o quieres sugerir una mejora. Te respondemos por email.
+    </div>
+    <div style="position:absolute;bottom:-8px;right:28px;width:16px;height:16px;background:var(--surface);border-right:1px solid var(--border);border-bottom:1px solid var(--border);transform:rotate(45deg);"></div>
+  </div>
+  <style>
+    @keyframes fbTipIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+  </style>
+
   <!-- Overlay -->
   <div id="feedbackOverlay" onclick="closeFeedback()"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9001;"></div>

@@ -746,8 +746,23 @@
     }
 
 
+    /* ── Feedback tooltip ── */
+    function dismissFeedbackTip() {
+      var tip = document.getElementById('feedbackTooltip');
+      if (tip) tip.style.display = 'none';
+      try { localStorage.setItem('fbTipDismissed', '1'); } catch(e) {}
+    }
+    (function showFeedbackTip() {
+      try { if (localStorage.getItem('fbTipDismissed')) return; } catch(e) {}
+      setTimeout(function() {
+        var tip = document.getElementById('feedbackTooltip');
+        if (tip) tip.style.display = 'block';
+      }, 1500);
+    })();
+
     /* ── Feedback ── */
     function openFeedback() {
+      dismissFeedbackTip();
       document.getElementById('feedbackOverlay').style.display = 'block';
       document.getElementById('feedbackPanel').style.transform = 'translateX(0)';
       document.getElementById('fbName').focus();
