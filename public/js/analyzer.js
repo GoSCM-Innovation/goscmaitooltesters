@@ -402,30 +402,33 @@
 
       _Sheet.prototype._toXml = function () {
         this._flush();
-        var p = [
-          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
-          '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"',
+        var hdr = [
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+          '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"' +
           ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
         ];
         if (this._tab)
-          p.push('<sheetPr><tabColor rgb="', this._tab, '"/></sheetPr>');
+          hdr.push('<sheetPr><tabColor rgb="' + this._tab + '"/></sheetPr>');
+        if (this._rn > 0 && this._nCols > 0)
+          hdr.push('<dimension ref="A1:' + _col(this._nCols) + this._rn + '"/>');
         if (this._freeze)
-          p.push('<sheetViews><sheetView workbookViewId="0"><pane ySplit="', this._freeze,
-            '" topLeftCell="A', (this._freeze + 1),
+          hdr.push('<sheetViews><sheetView workbookViewId="0"><pane ySplit="' + this._freeze +
+            '" topLeftCell="A' + (this._freeze + 1) +
             '" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>');
+        hdr.push('<sheetFormatPr defaultRowHeight="15"/>');
         if (this._nCols > 0) {
-          p.push('<cols>');
+          hdr.push('<cols>');
           for (var ci = 0; ci < this._nCols; ci++) {
             var w = Math.min(Math.max((this._colW[ci] || 10) + 2, 10), 60);
-            p.push('<col min="', ci + 1, '" max="', ci + 1, '" width="', w, '" customWidth="1"/>');
+            hdr.push('<col min="' + (ci + 1) + '" max="' + (ci + 1) + '" width="' + w + '" customWidth="1"/>');
           }
-          p.push('</cols>');
+          hdr.push('</cols>');
         }
-        p.push('<sheetData>');
-        for (var i = 0; i < this._chunks.length; i++) { p.push(this._chunks[i]); this._chunks[i] = null; }
-        this._chunks = null;
-        p.push('</sheetData></worksheet>');
-        return p.join('');
+        hdr.push('<sheetData>');
+        var chunks = this._chunks || [];
+        this._chunks = null;   // libera refs → GC puede reclamar los strings de filas
+        return new Blob(hdr.concat(chunks, ['</sheetData></worksheet>']),
+                        { type: 'application/xml' });
       };
 
       /* ── Workbook ── */
