@@ -680,7 +680,7 @@
       var gLS = grpFactory('Location Source', 'FFF7A800', [
         'Estado','PRDID','PRDDESCR','LOCFR','LOCFR Descripción','LOCID','LOCID Descripción','TLEADTIME',
         'LOCFR+PRDID en Location Product?','LOCID+PRDID en Location Product?','PRDID en PSH?',
-        'Arco en ruta completa?','Arco duplicado?','Arco inverso?','Lead Time Status','Observaciones'
+        'Arco en ruta completa?','Arco inverso?','Lead Time Status','Observaciones'
       ]);
       var gCS = grpFactory('Customer Source', 'FFE8622A', [
         'Estado','PRDID','PRDDESCR','LOCID','LOCID Descripción','CUSTID','CUSTID Descripción','CLEADTIME',
@@ -1031,7 +1031,7 @@
         gLS.addRow([
           stLabel(lsFill), p, pd(p), fr, ld(fr), to, ld(to), tlt,
           yn(inLPFr), yn(inLPTo), yn(pInPSH),
-          yn(inPath), yn(isDup), yn(isInv), ltSt,
+          yn(inPath), yn(isInv), ltSt,
           lsObs.join(' | ') || 'OK'
         ], lsFill);
       });
