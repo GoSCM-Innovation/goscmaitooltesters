@@ -133,9 +133,11 @@
       statusBar.style.display = 'flex';
       statusText.textContent = 'Procesando red de ' + prdid + '…';
       btnLoad.disabled = true;
+      btnLoad.textContent = '⏳ Cargando...';
+      btnLoad.style.opacity = '0.7';
       document.getElementById('vizDetail').style.display = 'none';
       document.getElementById('vizEmpty').style.display = 'none';
-      document.getElementById('vizStatus').textContent = 'Procesando…';
+      document.getElementById('vizStatus').textContent = '⏳ Cargando ' + prdid + '…';
       document.getElementById('btnVizFullscreen').style.display = 'none';
 
       var paBase = CFG.pa
@@ -269,7 +271,7 @@
         log(logEl, 'err', '✕ Error: ' + e.message);
       } finally {
         var b = document.getElementById('btnVizLoadNet');
-        if (b) { b.disabled = false; b.style.opacity = '1'; }
+        if (b) { b.disabled = false; b.style.opacity = '1'; b.textContent = 'Cargar red logística'; }
       }
     }
 

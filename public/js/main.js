@@ -867,3 +867,12 @@
   }
   window.guideToggle = guideToggle;
 
+  /* ── Guide Panel minimize/expand ── */
+  function guideMinimize(panelId, btn) {
+    var body = document.getElementById(panelId + 'Body');
+    if (!body) return;
+    var minimized = body.classList.toggle('hidden');
+    btn.textContent = minimized ? '▼ Expandir' : '▲ Minimizar';
+  }
+  window.guideMinimize = guideMinimize;
+

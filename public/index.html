@@ -381,7 +381,7 @@
     <div class="panel hidden" id="panelMDT">
       <div class="panel-title" onclick="toggleMappingBody('bodyMDT', 'arrMDT')"
         style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
-        <span>② Mapeo de entidades (Master Data Types)</span>
+        <span>MAPEO DE ENTIDADES</span>
         <span id="arrMDT" style="font-size:11px;">▼</span>
       </div>
       <div id="bodyMDT">
@@ -517,7 +517,12 @@
 
     <!-- ═══ SUPPLY NETWORK: EXCEL GUIDE ═══ -->
     <div class="panel guide-panel" id="panelSNGuide">
-      <div class="panel-title">📄 ¿Qué contiene el archivo de salida?</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div class="panel-title" style="margin-bottom:0;">📄 ¿Qué contiene el archivo de salida?</div>
+        <button onclick="guideMinimize('panelSNGuide',this)"
+          style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:11px;cursor:pointer;padding:2px 10px;line-height:1.6;">▲ Minimizar</button>
+      </div>
+      <div class="guide-panel-body" id="panelSNGuideBody">
       <p style="font-size:12px;color:var(--text2);margin:0 0 14px;">El Excel generado contiene <strong style="color:var(--text);">6 hojas</strong>. Expande cada una para ver el detalle de sus columnas.</p>
 
       <div class="guide-accordion">
@@ -714,13 +719,14 @@
         <span style="color:#F7A800;">🟡 Amarillo</span> = advertencia o dato para revisar &nbsp;|&nbsp;
         <span style="color:var(--green);">Sin color</span> = registro consistente ✅
       </div>
+      </div><!-- /guide-panel-body -->
     </div><!-- /panelSNGuide -->
 
     <!-- ═══ SUPPLY NETWORK: MDT MAPPING ═══ -->
     <div class="panel hidden" id="panelSNMDT">
       <div class="panel-title" onclick="toggleMappingBody('bodySNMDT', 'arrSNMDT')"
         style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
-        <span>② Mapeo de entidades — Supply Network</span>
+        <span>MAPEO DE ENTIDADES</span>
         <span id="arrSNMDT" style="font-size:11px;">▼</span>
       </div>
       <div id="bodySNMDT">
@@ -913,7 +919,7 @@
     <div class="panel" id="panelVizMDT" style="display:none;">
       <div class="panel-title" onclick="toggleMappingBody('bodyVizMDT', 'arrVizMDT')"
         style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
-        <span>② Mapeo de entidades — Visualizer</span>
+        <span>MAPEO DE ENTIDADES</span>
         <span id="arrVizMDT" style="font-size:11px;">▼</span>
       </div>
       <div id="bodyVizMDT">
@@ -1033,25 +1039,21 @@
 
     <!-- Controls bar (hidden until products are loaded) -->
     <div id="vizControlsBar"
-      style="display:none;background:var(--bg2);border-bottom:1px solid var(--border);padding:10px 24px;align-items:center;gap:12px;flex-wrap:wrap;">
-      <div class="prod-search-group">
-        <label style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);">Material</label>
-        <div class="ss-wrap" style="width:320px;">
+      style="display:none;background:var(--bg2);border-bottom:1px solid var(--border);padding:8px 24px;">
+      <!-- Row única: buscador + botones + estado -->
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);white-space:nowrap;">Material</span>
+        <div class="ss-wrap" style="width:260px;flex-shrink:0;">
           <input class="ss-input-vis" id="vizPrdInput" type="text" placeholder="Buscar material..." autocomplete="off">
           <div class="ss-list" id="vizPrdList"></div>
         </div>
-      </div>
-      <div style="display:flex;gap:6px;align-items:center;margin-top:14px;flex-wrap:wrap;">
         <button class="btn btn-primary btn-small" id="btnVizLoadNet" onclick="vizLoadNetwork()" disabled
-          style="opacity:.5;">Cargar red logística</button>
+          style="opacity:.5;white-space:nowrap;">Cargar red logística</button>
         <button class="btn btn-secondary btn-small" onclick="vizFitGraph()">⊞ Ajustar</button>
         <button class="btn btn-secondary btn-small" onclick="vizCompact()">⊟ Compactar</button>
-        <button class="btn btn-secondary btn-small" id="btnVizFilter" onclick="vizOpenFilter()" style="display:none;">▼
-          Filtros</button>
-        <button class="btn btn-secondary btn-small" id="btnVizFullscreen" onclick="vizOpenFullscreen()"
-          style="display:none;">⛶ Pantalla completa</button>
-      </div>
-      <div id="vizStatus" style="font-size:12px;color:var(--text2);margin-left:4px;margin-top:14px;flex-basis:100%;">
+        <button class="btn btn-secondary btn-small" id="btnVizFilter" onclick="vizOpenFilter()" style="display:none;">▼ Filtros</button>
+        <button class="btn btn-secondary btn-small" id="btnVizFullscreen" onclick="vizOpenFullscreen()" style="display:none;">⛶ Pantalla completa</button>
+        <span id="vizStatus" style="font-size:11px;color:var(--text2);margin-left:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px;"></span>
       </div>
     </div>
 
@@ -1268,7 +1270,12 @@
 
     <!-- ═══ PA: EXCEL GUIDE ═══ -->
     <div class="panel guide-panel" id="panelPAGuide">
-      <div class="panel-title">📄 ¿Qué contiene el archivo de salida?</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div class="panel-title" style="margin-bottom:0;">📄 ¿Qué contiene el archivo de salida?</div>
+        <button onclick="guideMinimize('panelPAGuide',this)"
+          style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:11px;cursor:pointer;padding:2px 10px;line-height:1.6;">▲ Minimizar</button>
+      </div>
+      <div class="guide-panel-body" id="panelPAGuideBody">
       <p style="font-size:12px;color:var(--text2);margin:0 0 14px;">El Excel generado contiene <strong style="color:var(--text);">7 hojas</strong>. Expande cada una para ver el detalle de sus columnas.</p>
 
       <div class="guide-accordion">
@@ -1425,13 +1432,14 @@
         <span style="color:#F7A800;">🟡 Amarillo</span> = advertencia o dato para revisar &nbsp;|&nbsp;
         <span style="color:var(--green);">Sin color</span> = registro consistente ✅
       </div>
+      </div><!-- /guide-panel-body -->
     </div><!-- /panelPAGuide -->
 
     <!-- ═══ PA: MDT MAPPING ═══ -->
     <div class="panel hidden" id="panelPAMDT">
       <div class="panel-title" onclick="toggleMappingBody('bodyPAMDT', 'arrPAMDT')"
         style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
-        <span>② Mapeo de entidades — Production Hierarchy Analyzer</span>
+        <span>MAPEO DE ENTIDADES</span>
         <span id="arrPAMDT" style="font-size:11px;">▼</span>
       </div>
       <div id="bodyPAMDT">
