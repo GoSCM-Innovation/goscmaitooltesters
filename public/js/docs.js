@@ -1249,7 +1249,7 @@ async function buildExcel() {
   }
 
   docsLog('📋 Generando hoja Parámetros…', 'l-info');
-  const paramSb = buildParamSheet(paramRows);
+  const paramSb = buildParamSheet(paramRows, docsMode === 'zipjobs');
   sheets.unshift({ name: 'Parámetros', sb: paramSb });
 
   docsLog('📦 Ensamblando archivo Excel…', 'l-info');
@@ -1270,13 +1270,358 @@ async function buildExcel() {
 // ── Mode switcher ────────────────────────────────────────────
 function switchDocsMode(mode) {
   docsMode = mode;
-  document.getElementById('docs-zip-panels').style.display = mode === 'zip' ? '' : 'none';
-  document.getElementById('docs-jobs-panels').style.display = mode === 'jobs' ? '' : 'none';
-  document.getElementById('mode-zip').classList.toggle('active', mode === 'zip');
-  document.getElementById('mode-jobs').classList.toggle('active', mode === 'jobs');
+  document.getElementById('docs-zip-panels').style.display    = mode === 'zip'     ? '' : 'none';
+  document.getElementById('docs-jobs-panels').style.display   = mode === 'jobs'    ? '' : 'none';
+  document.getElementById('docs-zipjobs-panels').style.display = mode === 'zipjobs' ? '' : 'none';
+  document.getElementById('mode-zip').classList.toggle('active',     mode === 'zip');
+  document.getElementById('mode-jobs').classList.toggle('active',    mode === 'jobs');
+  document.getElementById('mode-zipjobs').classList.toggle('active', mode === 'zipjobs');
+  // In zipjobs mode, show ZIP panel directly (no need to explore API first)
+  if (mode === 'zipjobs') {
+    document.getElementById('zipjobs-zip-panel').style.display = '';
+  }
   // Hide shared panels when switching
   document.getElementById('sel-card').style.display = 'none';
   document.getElementById('stats-card').style.display = 'none';
+}
+
+// ════════════════════════════════════════════════════════════
+//  ZIP + JOBS MODE — API EXPLORER
+// ════════════════════════════════════════════════════════════
+
+// ── Explorar entidades del servicio BC_EXT_APPJOB_MANAGEMENT ─
+async function exploreJobsApi() {
+  const btn = document.getElementById('zipjobs-explore-btn');
+  btn.disabled = true;
+  docsLogEl.innerHTML = '';
+  docsLogEl.style.display = 'block';
+  docsLogHint.style.display = 'none';
+  document.getElementById('zipjobs-entity-list').style.display = 'none';
+  document.getElementById('zipjobs-sample-area').style.display = 'none';
+
+  if (!CFG || !CFG.url || !CFG.user || !CFG.pass) {
+    docsLog('⚠ Debes conectarte a SAP IBP antes de explorar la API.', 'l-warn');
+    btn.disabled = false;
+    return;
+  }
+
+  docsLog('🔍 Obteniendo $metadata de BC_EXT_APPJOB_MANAGEMENT…', 'l-info');
+
+  let metaXml;
+  try {
+    metaXml = await apiXml(CFG.url + SVC_APPJOB + '/$metadata');
+    docsLog('✔ $metadata obtenido', 'l-ok');
+  } catch (e) {
+    docsLog('✗ Error: ' + e.message, 'l-err');
+    docsLog('ℹ Asegúrate de tener el Communication Arrangement SAP_COM_0326 configurado.', 'l-info');
+    btn.disabled = false;
+    return;
+  }
+
+  // Parse entity sets and their property names from $metadata
+  const metaDoc = new DOMParser().parseFromString(metaXml, 'text/xml');
+  const entitySets = [];
+  metaDoc.querySelectorAll('EntitySet').forEach(es => {
+    entitySets.push(es.getAttribute('Name'));
+  });
+
+  // Build a map of EntityType → properties
+  const typeProps = {};
+  metaDoc.querySelectorAll('EntityType').forEach(et => {
+    const tname = et.getAttribute('Name') || '';
+    const props = [];
+    et.querySelectorAll('Property').forEach(p => {
+      props.push({ name: p.getAttribute('Name'), type: p.getAttribute('Type') });
+    });
+    typeProps[tname] = props;
+  });
+  // Map EntitySet → EntityType
+  const setType = {};
+  metaDoc.querySelectorAll('EntitySet').forEach(es => {
+    const raw = (es.getAttribute('EntityType') || '').split('.').pop();
+    setType[es.getAttribute('Name')] = raw;
+  });
+
+  docsLog(`✔ ${entitySets.length} entity sets encontrados`, 'l-ok');
+  entitySets.forEach(n => docsLog('  · ' + n, 'l-line'));
+
+  // Build entity buttons
+  const entDiv = document.getElementById('zipjobs-entities');
+  entDiv.innerHTML = entitySets.map(name => {
+    const tname = setType[name] || '';
+    const props  = typeProps[tname] || [];
+    const fields = props.map(p =>
+      `<span style="color:#94a3b8" title="${escH(p.type || '')}">${escH(p.name)}</span>`
+    ).join('  ');
+    return `<div class="zipjobs-entity-row">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;flex-wrap:wrap;">
+        <span data-entity-name="${escH(name)}" style="font-weight:600;color:#f1f5f9">${escH(name)}</span>
+        <span class="entity-status-badge" style="font-size:0.78rem;color:#475569">—</span>
+        <button class="btn-sm" onclick="fetchEntitySample('${escH(name)}')">Ver muestra</button>
+      </div>
+      <div style="font-size:0.75rem;line-height:1.9;padding-left:4px;color:#64748b;word-break:break-word">
+        ${fields || '<em style="color:#475569">Sin propiedades en metadata</em>'}
+      </div>
+    </div>`;
+  }).join('<hr style="border-color:#1e3a5f;margin:8px 0">');
+
+  // Insert "Probar todas" button above the list
+  const headerDiv = document.querySelector('#zipjobs-entity-list > .panel-title');
+  if (headerDiv && !document.getElementById('zipjobs-probar-btn')) {
+    const pbtn = document.createElement('button');
+    pbtn.id = 'zipjobs-probar-btn';
+    pbtn.className = 'btn-sm';
+    pbtn.style.cssText = 'margin-left:12px;vertical-align:middle';
+    pbtn.textContent = '⚡ Probar todas';
+    pbtn.onclick = probarTodasEntidades;
+    headerDiv.appendChild(pbtn);
+  }
+
+  document.getElementById('zipjobs-entity-list').style.display = '';
+  document.getElementById('zipjobs-zip-panel').style.display = '';
+  btn.disabled = false;
+}
+
+// ── Fetch top-5 sample from an entity and show as JSON ──────
+// Returns 'ok' | '501' | 'error'
+async function fetchEntitySample(entityName) {
+  const sampleArea  = document.getElementById('zipjobs-sample-area');
+  const sampleJson  = document.getElementById('zipjobs-sample-json');
+  const sampleTitle = document.getElementById('zipjobs-sample-entity-name');
+
+  sampleTitle.textContent = entityName;
+  sampleJson.textContent  = 'Cargando…';
+  sampleArea.style.display = '';
+  sampleArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  try {
+    const url  = CFG.url + SVC_APPJOB + '/' + entityName + '?$format=json&$top=5';
+    const data = await apiJson(url);
+    const results = (data.d && data.d.results) ? data.d.results : (data.value || []);
+    sampleJson.textContent = JSON.stringify(results, null, 2);
+    docsLog(`✔ ${entityName}: ${results.length} registros`, 'l-ok');
+    return 'ok';
+  } catch (e) {
+    const msg = e.message || '';
+    if (msg.includes('501') || msg.toLowerCase().includes('not implemented')) {
+      sampleJson.textContent = '⚠ Esta entidad no soporta listado (501 – Method not implemented).\n\nSAP habilita sólo operaciones específicas por entidad.';
+      docsLog(`  ⚠ ${entityName}: 501 – no implementado (no listable)`, 'l-warn');
+      return '501';
+    }
+    sampleJson.textContent = '✗ Error: ' + msg;
+    docsLog(`  ✗ ${entityName}: ${msg}`, 'l-err');
+    return 'error';
+  }
+}
+
+// ── Probar todas las entidades (auto-test) ────────────────────
+async function probarTodasEntidades() {
+  const btn = document.getElementById('zipjobs-probar-btn');
+  if (btn) btn.disabled = true;
+  docsLog('🔎 Probando todas las entidades…', 'l-info');
+
+  const entityDivs = document.querySelectorAll('#zipjobs-entities .zipjobs-entity-row');
+  for (const div of entityDivs) {
+    const nameEl = div.querySelector('[data-entity-name]');
+    if (!nameEl) continue;
+    const name   = nameEl.getAttribute('data-entity-name');
+    const badge  = div.querySelector('.entity-status-badge');
+    if (badge) badge.textContent = '…';
+    const status = await fetchEntitySample(name);
+    if (badge) {
+      badge.textContent = status === 'ok' ? '✔ OK' : status === '501' ? '⚠ 501' : '✗ Error';
+      badge.style.color = status === 'ok' ? 'var(--green)' : status === '501' ? '#f59e0b' : 'var(--red)';
+    }
+  }
+
+  docsLog('✔ Prueba completa', 'l-ok');
+  if (btn) btn.disabled = false;
+}
+
+// ── ZIP+Jobs mode drop zone ──────────────────────────────────
+let zipjobsFiles = [];   // [{name, data: ArrayBuffer}]
+
+function initZipjobsDropZone() {
+  const dz = document.getElementById('zipjobs-dz');
+  if (!dz) return;
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+  dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag-over'); addZipjobsFiles([...e.dataTransfer.files]); });
+  document.getElementById('zipjobs-fi').addEventListener('change', e => addZipjobsFiles([...e.target.files]));
+}
+
+function addZipjobsFiles(list) {
+  list.filter(f => f.name.endsWith('.zip')).forEach(f => {
+    if (zipjobsFiles.find(x => x.name === f.name)) return;
+    const r = new FileReader();
+    r.onload = ev => { zipjobsFiles.push({ name: f.name, data: ev.target.result }); renderZipjobsFiles(); };
+    r.readAsArrayBuffer(f);
+  });
+}
+
+function removeZipjobsFile(i) { zipjobsFiles.splice(i, 1); renderZipjobsFiles(); }
+
+function renderZipjobsFiles() {
+  document.getElementById('zipjobs-file-list').innerHTML = zipjobsFiles.map((f, i) => `
+    <div class="file-tag">
+      <span class="ico">📦</span>
+      <span class="name">${escH(f.name)}</span>
+      <span class="size">${(f.data.byteLength/1024).toFixed(0)} KB</span>
+      <button class="rm" onclick="removeZipjobsFile(${i})">✕</button>
+    </div>`).join('');
+  const btn = document.getElementById('zipjobs-gen-btn');
+  if (btn) btn.disabled = zipjobsFiles.length === 0;
+}
+
+function setZjP(p) {
+  document.getElementById('zipjobs-pw').style.display = 'block';
+  document.getElementById('zipjobs-pb').style.width = p + '%';
+}
+
+// ════════════════════════════════════════════════════════════
+//  GENERATE — ZIP + Jobs mode
+//  1. Scan ZIPs (same logic as ZIP mode)
+//  2. Fetch JobTemplateSet + JobTemplateSequenceSet from IBP
+//  3. Auto-match parsed.jobName → step.JobSequenceText
+//  4. Enrich paramRow with ibpJobName, ibpStepName, ibpStepPos
+//  5. renderSelList() — same selection panel as ZIP mode
+// ════════════════════════════════════════════════════════════
+async function generateZipJobs() {
+  docsLogEl.innerHTML = '';
+  docsLogEl.style.display = 'block';
+  docsLogHint.style.display = 'none';
+  document.getElementById('stats-card').style.display = 'none';
+  document.getElementById('sel-card').style.display = 'none';
+  document.getElementById('zipjobs-gen-btn').disabled = true;
+  xlsBuf = null;
+  parsedIntegrations = [];
+
+  docsLog('📦 Escaneando ZIPs…', 'l-info');
+  setZjP(2);
+
+  const usedNames = new Set();
+  function uniq(base) {
+    let clean = base.replace(/[:\\\/\?\*\[\]]/g, '_').substring(0, 28);
+    let n = clean, k = 0;
+    while (usedNames.has(n)) n = clean.substring(0, 25) + '_' + (++k);
+    usedNames.add(n); return n;
+  }
+
+  // ── Phase 1: scan ZIPs ──────────────────────────────────
+  let done = 0;
+  for (const zf of zipjobsFiles) {
+    docsLog(`📦 ${zf.name}`, 'l-info');
+    let zip;
+    try { zip = await JSZip.loadAsync(zf.data); }
+    catch (e) { docsLog(`  ✗ ${e.message}`, 'l-err'); continue; }
+
+    const batchMap = await parseBatchCsv(zip);
+    docsLog(`  ✔ batch.csv: ${Object.keys(batchMap).length} entradas`, 'l-ok');
+
+    const xmlNames = Object.keys(zip.files).filter(n => n.endsWith('.xml') && !n.includes('/'));
+    docsLog(`  📄 ${xmlNames.length} XMLs`, 'l-line');
+
+    for (let xi = 0; xi < xmlNames.length; xi++) {
+      const fname = xmlNames[xi];
+      setZjP(2 + Math.round(45 * (done + (xi + 1) / xmlNames.length) / zipjobsFiles.length));
+
+      let xmlStr;
+      try { xmlStr = await zip.file(fname).async('string'); }
+      catch (e) { docsLog(`  ✗ ${fname}: ${e.message}`, 'l-err'); continue; }
+
+      let dfResults;
+      try { dfResults = parseIntegration(xmlStr, batchMap[fname] || {}); }
+      catch (e) { docsLog(`  ✗ Parse ${fname}: ${e.message}`, 'l-err'); continue; }
+      if (!dfResults || !dfResults.length) { docsLog(`  ⚠ Sin DataFlows: ${fname}`, 'l-warn'); continue; }
+
+      const multiDF = dfResults.length > 1;
+      for (const parsed of dfResults) {
+        const { jobName, jobDesc, srcDSName, dstDSName, targetTable } = parsed;
+        const baseName  = jobName || fname.replace('.xml', '');
+        const sheetName = multiDF ? uniq(baseName + '_' + targetTable) : uniq(baseName);
+        const paramRow  = {
+          jobName, jobDesc,
+          tipoIntegracion: parsed.tipoIntegracion,
+          dataflowName:    parsed.dataflowName,
+          srcDS: srcDSName, dstDS: dstDSName,
+          targetTable, sheetName,
+          // IBP enrichment (filled in phase 2)
+          ibpJobName: '', ibpStepName: '', ibpStepType: '', atlGroup: ''
+        };
+        parsedIntegrations.push({ sheetName, pkg: zf.name, parsed, paramRow });
+        docsLog(`  ✔ ${sheetName}  (${parsed.mappings.length} mapeos · ${parsed.filters.length} filtros)`, 'l-ok');
+      }
+    }
+    done++;
+  }
+
+  docsLog(`✔ ${parsedIntegrations.length} integraciones encontradas`, 'l-ok');
+  setZjP(50);
+
+  // ── Phase 2: fetch IBP job steps and auto-match ──────────
+  if (CFG && CFG.url && CFG.user && CFG.pass && parsedIntegrations.length) {
+    docsLog('🔍 Obteniendo JobTemplateSet desde IBP…', 'l-info');
+    let allTemplates = [], allSteps = [];
+    try {
+      allTemplates = await fetchAllPages(CFG.url + SVC_APPJOB + '/JobTemplateSet', docsLogEl);
+      docsLog(`  ✔ ${allTemplates.length} job templates`, 'l-ok');
+    } catch (e) {
+      docsLog('  ⚠ No se pudo obtener JobTemplateSet: ' + e.message, 'l-warn');
+    }
+    setZjP(65);
+
+    try {
+      docsLog('🔍 Obteniendo JobTemplateSequenceSet…', 'l-info');
+      allSteps = await fetchAllPages(CFG.url + SVC_APPJOB + '/JobTemplateSequenceSet', docsLogEl);
+      docsLog(`  ✔ ${allSteps.length} steps`, 'l-ok');
+    } catch (e) {
+      docsLog('  ⚠ No se pudo obtener JobTemplateSequenceSet: ' + e.message, 'l-warn');
+    }
+    setZjP(80);
+
+    // Build lookup: JobTemplateName → JobTemplateText
+    const templateText = {};
+    allTemplates.forEach(t => {
+      templateText[t.JobTemplateName] = t.JobTemplateText || t.Text || t.JobTemplateName;
+    });
+
+    // Build lookup: JobSequenceText.toUpperCase() → step info
+    const stepByName = {};
+    allSteps.forEach(s => {
+      const key = (s.JobSequenceText || '').toUpperCase().trim();
+      if (key) stepByName[key] = {
+        jobTemplateName: s.JobTemplateName,
+        jobTemplateText: templateText[s.JobTemplateName] || s.JobTemplateName,
+        stepName:        s.JobSequenceText || '',
+        stepPos:         s.JobSequencePosition || 0,
+        jceText:         s.JceText || ''
+      };
+    });
+
+    // Match each integration
+    let matched = 0, unmatched = 0;
+    for (const item of parsedIntegrations) {
+      const key = (item.parsed.jobName || '').toUpperCase().trim();
+      const hit = stepByName[key];
+      if (hit) {
+        item.paramRow.ibpJobName  = hit.jobTemplateText;
+        item.paramRow.ibpStepName = hit.stepName;
+        item.paramRow.ibpStepType = hit.jceText;
+        matched++;
+        docsLog(`  📌 "${item.parsed.jobName}" → Job: "${hit.jobTemplateText}" (pos ${hit.stepPos})`, 'l-ok');
+      } else {
+        unmatched++;
+        docsLog(`  ⚠ "${item.parsed.jobName}" sin match en IBP`, 'l-warn');
+      }
+    }
+    docsLog(`✔ Match: ${matched} encontrados · ${unmatched} sin match`, matched > 0 ? 'l-ok' : 'l-warn');
+  } else {
+    docsLog('ℹ Sin conexión a IBP — las columnas Job/Step quedarán vacías.', 'l-info');
+  }
+
+  setZjP(100);
+  document.getElementById('zipjobs-gen-btn').disabled = false;
+  renderSelList();
 }
 
 // ── ATL file handling ────────────────────────────────────────
@@ -2015,6 +2360,7 @@ async function generateFromJobs() {
 document.addEventListener('DOMContentLoaded', () => {
   initAtlDropZone();
   initJobsZipDropZone();
+  initZipjobsDropZone();
 });
 
 // ════════════════════════════════════════════════════════════

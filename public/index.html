@@ -1244,6 +1244,7 @@
     <div class="docs-mode-toggle">
       <button class="mode-btn active" id="mode-zip" onclick="switchDocsMode('zip')">📦 Desde archivos ZIP</button>
       <button class="mode-btn" id="mode-jobs" onclick="switchDocsMode('jobs')">🔄 Desde Application Jobs</button>
+      <button class="mode-btn" id="mode-zipjobs" onclick="switchDocsMode('zipjobs')">🔗 ZIP + Jobs</button>
     </div>
 
     <!-- PRO TIP BANNER -->
@@ -1360,6 +1361,69 @@
       </div>
 
     </div><!-- /docs-jobs-panels -->
+
+    <!-- ═══ ZIP + JOBS MODE PANELS ═══ -->
+    <div id="docs-zipjobs-panels" style="display:none">
+
+      <!-- API Explorer -->
+      <div class="panel">
+        <div class="panel-title">🔍 Explorador de API — BC_EXT_APPJOB_MANAGEMENT</div>
+        <p class="panel-desc">
+          Consulta las entidades disponibles en el servicio de Application Jobs para explorar qué campos trae cada una.
+          Requiere conexión activa a SAP IBP con <b>SAP_COM_0326</b>.
+        </p>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="zipjobs-explore-btn" onclick="exploreJobsApi()">🔎 Explorar entidades</button>
+        </div>
+        <div id="zipjobs-entity-list" style="margin-top:14px;display:none">
+          <div class="panel-title" style="font-size:0.95rem;margin-bottom:8px;">Entidades encontradas</div>
+          <div id="zipjobs-entities"></div>
+        </div>
+        <div id="zipjobs-sample-area" style="margin-top:14px;display:none">
+          <div class="panel-title" style="font-size:0.95rem;margin-bottom:4px;">
+            Muestra: <span id="zipjobs-sample-entity-name"></span>
+          </div>
+          <pre id="zipjobs-sample-json" style="
+            background:#0d1a2e;
+            color:#a5f3fc;
+            border-radius:8px;
+            padding:14px;
+            font-size:0.78rem;
+            overflow:auto;
+            max-height:420px;
+            white-space:pre-wrap;
+            word-break:break-all;
+            border:1px solid #1e3a5f;
+          "></pre>
+        </div>
+      </div>
+
+      <!-- ZIP Upload (zip+jobs mode) -->
+      <div class="panel" id="zipjobs-zip-panel" style="display:none">
+        <div class="panel-title">📦 Archivos ZIP de integraciones CI-DS</div>
+        <p class="panel-desc">
+          Sube los mismos ZIPs de CI-DS que usarías en el modo ZIP. El sistema los analiza y
+          <b>enriquece automáticamente</b> con los Jobs y Steps de SAP IBP usando
+          <code>JobTemplateSequenceSet</code>.
+        </p>
+        <div class="drop-zone" id="zipjobs-dz">
+          <input type="file" id="zipjobs-fi" accept=".zip" multiple>
+          <span class="drop-icon">🗂️</span>
+          <p class="drop-title">Arrastra los ZIP aquí</p>
+          <p class="drop-hint">o haz click para seleccionar &nbsp;·&nbsp; <b>Múltiples archivos</b> permitidos</p>
+        </div>
+        <div id="zipjobs-file-list"></div>
+        <div class="progress-wrap" id="zipjobs-pw">
+          <div class="progress-bar" id="zipjobs-pb"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="zipjobs-gen-btn" disabled onclick="generateZipJobs()">
+            ⚙️ Analizar ZIPs + Enriquecer con Jobs IBP
+          </button>
+        </div>
+      </div>
+
+    </div><!-- /docs-zipjobs-panels -->
 
     <!-- SELECTION PANEL -->
     <div class="panel" id="sel-card" style="display:none">
