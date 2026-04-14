@@ -856,3 +856,23 @@
     // Default tab on load
     switchTab('bom');
 
+  /* ── Excel Guide Panel accordion ── */
+  function guideToggle(header) {
+    var body = header.nextElementSibling;
+    var arr  = header.querySelector('.guide-arr');
+    if (!body) return;
+    var opening = body.classList.contains('hidden');
+    body.classList.toggle('hidden', !opening);
+    if (arr) arr.classList.toggle('open', opening);
+  }
+  window.guideToggle = guideToggle;
+
+  /* ── Guide Panel minimize/expand ── */
+  function guideMinimize(panelId, btn) {
+    var body = document.getElementById(panelId + 'Body');
+    if (!body) return;
+    var minimized = body.classList.toggle('hidden');
+    btn.textContent = minimized ? '▼ Expandir' : '▲ Minimizar';
+  }
+  window.guideMinimize = guideMinimize;
+

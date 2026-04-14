@@ -381,7 +381,7 @@
     <div class="panel hidden" id="panelMDT">
       <div class="panel-title" onclick="toggleMappingBody('bodyMDT', 'arrMDT')"
         style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
-        <span>② Mapeo de entidades (Master Data Types)</span>
+        <span>MAPEO DE ENTIDADES</span>
         <span id="arrMDT" style="font-size:11px;">▼</span>
       </div>
       <div id="bodyMDT">
@@ -515,11 +515,218 @@
       </button>
     </div>
 
+    <!-- ═══ SUPPLY NETWORK: EXCEL GUIDE ═══ -->
+    <div class="panel guide-panel" id="panelSNGuide">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div class="panel-title" style="margin-bottom:0;">📄 ¿Qué contiene el archivo de salida?</div>
+        <button onclick="guideMinimize('panelSNGuide',this)"
+          style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:11px;cursor:pointer;padding:2px 10px;line-height:1.6;">▲ Minimizar</button>
+      </div>
+      <div class="guide-panel-body" id="panelSNGuideBody">
+      <p style="font-size:12px;color:var(--text2);margin:0 0 14px;">El Excel generado contiene <strong style="color:var(--text);">6 hojas</strong>. Expande cada una para ver el detalle de sus columnas.</p>
+
+      <div class="guide-accordion">
+
+        <!-- Resumen -->
+        <div class="guide-item">
+          <div class="guide-item-header" onclick="guideToggle(this)">
+            <span>📊 Resumen</span><span class="guide-arr">▶</span>
+          </div>
+          <div class="guide-item-body hidden">
+            <p>Una fila por cada hoja analizada. Permite ver de un vistazo la calidad global de los datos.</p>
+            <ul>
+              <li><strong>#</strong> — Número de hoja.</li>
+              <li><strong>Hoja</strong> — Nombre de la hoja a la que corresponde la fila.</li>
+              <li><strong>Total registros</strong> — Cantidad de filas analizadas en esa hoja.</li>
+              <li><strong>Alertas 🔴</strong> — Registros con problema crítico que requiere corrección.</li>
+              <li><strong>Advertencias 🟡</strong> — Registros con dato para revisar, no necesariamente incorrecto.</li>
+              <li><strong>OK ✅</strong> — Registros sin observaciones.</li>
+              <li><strong>% Consistencia</strong> — <code>OK / Total × 100</code>. Indica qué proporción del maestro está limpio.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Product -->
+        <div class="guide-item">
+          <div class="guide-item-header" onclick="guideToggle(this)">
+            <span>📦 Product</span><span class="guide-arr">▶</span>
+          </div>
+          <div class="guide-item-body hidden">
+            <p>Un producto por fila. Cruza cada material contra las tablas operativas y analiza su red logística de extremo a extremo.</p>
+            <ul>
+              <li><strong>Estado</strong> — Color de la fila (🔴 crítico / 🟡 advertencia / sin color OK).</li>
+              <li><strong>PRDID</strong> — Código del producto.</li>
+              <li><strong>PRDDESCR</strong> — Descripción del producto.</li>
+              <li><strong>MATTYPEID</strong> — Tipo de material (Material Type).</li>
+              <li><strong>En PSH?</strong> — ¿Tiene al menos una fuente de producción definida?</li>
+              <li><strong>En PSI?</strong> — ¿Aparece como componente en algún BOM?</li>
+              <li><strong>En Location Source?</strong> — ¿Tiene arcos de transferencia entre ubicaciones?</li>
+              <li><strong>En Customer Source?</strong> — ¿Tiene entregas configuradas a algún cliente?</li>
+              <li><strong>En Location Product?</strong> — ¿Está habilitado como manejable en alguna ubicación?</li>
+              <li><strong>En Customer Product?</strong> — ¿Está habilitado como recibible por algún cliente?</li>
+              <li><strong>Solo en maestro?</strong> — Existe en Product Master pero no se usa en ninguna tabla operativa: el producto no está activo en la planificación.</li>
+              <li><strong>Estado de la Red</strong> — Clasificación topológica de la red del producto (Red Completa / Sin Entrega a Cliente / Sin Distribución / etc.).</li>
+              <li><strong>Plants</strong> — Cantidad de plantas productoras en la red del producto.</li>
+              <li><strong>DCs</strong> — Cantidad de centros de distribución (ubicaciones intermedias).</li>
+              <li><strong>Customers</strong> — Cantidad de clientes finales alcanzables.</li>
+              <li><strong>Paths</strong> — Rutas completas planta→cliente encontradas por DFS (límite: 50 000 rutas, profundidad máxima 12 saltos).</li>
+              <li><strong>Longest Path</strong> — Mayor número de saltos en una ruta planta→cliente.</li>
+              <li><strong>Ghost Nodes</strong> — Ubicaciones alimentadas desde producción que nunca logran alcanzar a ningún cliente.</li>
+              <li><strong>Dead Ends</strong> — Ubicaciones con arcos entrantes pero sin ningún arco de salida.</li>
+              <li><strong>Health Score</strong> — Puntuación 0–100 de salud de la red logística del producto.</li>
+              <li><strong>Health Category</strong> — Categoría: Healthy · Acceptable · Weak · Critical.</li>
+              <li><strong>Observaciones</strong> — Resumen de todos los hallazgos detectados para ese producto.</li>
+            </ul>
+            <div class="guide-score-block">
+              <div class="gs-title">⚡ Health Score — ¿cómo se calcula?</div>
+              <p style="margin:0 0 8px;font-size:11px;color:var(--text2);">Parte de <strong style="color:var(--text);">0</strong> y acumula o descuenta según condiciones:</p>
+              <div class="guide-score-rows">
+                <div class="guide-score-row"><span class="chip chip-plus">+30</span><span class="gs-desc">Al menos 1 ruta completa planta → cliente</span></div>
+                <div class="guide-score-row"><span class="chip chip-plus">+10</span><span class="gs-desc">Más de 1 cliente alcanzable</span></div>
+                <div class="guide-score-row"><span class="chip chip-plus">+10</span><span class="gs-desc">Más de 1 ruta disponible</span></div>
+                <div class="guide-score-row"><span class="chip chip-plus">+10</span><span class="gs-desc">Más de 1 planta productora</span></div>
+                <div class="guide-score-row"><span class="chip chip-minus">−20</span><span class="gs-desc">Existen Ghost Nodes</span></div>
+                <div class="guide-score-row"><span class="chip chip-minus">−15</span><span class="gs-desc">Existen Dead Ends</span></div>
+                <div class="guide-score-row"><span class="chip chip-minus">−20</span><span class="gs-desc">Algún cliente tiene una sola ruta (Single Path)</span></div>
+                <div class="guide-score-row"><span class="chip chip-minus">−15</span><span class="gs-desc">Solo 1 planta productora en toda la red</span></div>
+              </div>
+              <p style="margin:10px 0 6px;font-size:11px;color:var(--text2);">Resultado acotado entre 0 y 100. Categorías:</p>
+              <div class="guide-cats">
+                <span class="guide-cat guide-cat-healthy">80–100 · Healthy</span>
+                <span class="guide-cat guide-cat-acceptable">60–79 · Acceptable</span>
+                <span class="guide-cat guide-cat-weak">40–59 · Weak</span>
+                <span class="guide-cat guide-cat-critical">0–39 · Critical</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Location -->
+        <div class="guide-item">
+          <div class="guide-item-header" onclick="guideToggle(this)">
+            <span>📍 Location</span><span class="guide-arr">▶</span>
+          </div>
+          <div class="guide-item-body hidden">
+            <p>Una ubicación por fila. Analiza el rol de cada nodo en la red logística y su nivel de criticidad.</p>
+            <ul>
+              <li><strong>Estado</strong> — Color de alerta.</li>
+              <li><strong>LOCID</strong> — Código de ubicación.</li>
+              <li><strong>LOCDESCR</strong> — Descripción de la ubicación.</li>
+              <li><strong>LOCTYPE</strong> — Tipo de ubicación (planta, DC, etc.).</li>
+              <li><strong>En PSH?</strong> — ¿Aparece como planta en alguna fuente de producción?</li>
+              <li><strong>En Location Source?</strong> — ¿Participa en arcos de transferencia (como origen o destino)?</li>
+              <li><strong>En Customer Source?</strong> — ¿Entrega directamente a algún cliente?</li>
+              <li><strong>En Location Product?</strong> — ¿Tiene productos habilitados?</li>
+              <li><strong>Solo en maestro?</strong> — Ubicación definida pero sin uso operativo.</li>
+              <li><strong># Productos manejados</strong> — Productos únicos habilitados en esta ubicación.</li>
+              <li><strong># Como origen (LOCFR)</strong> — Arcos de transferencia donde esta ubicación es el origen.</li>
+              <li><strong># Como destino (LOCID)</strong> — Arcos de transferencia donde esta ubicación es el destino.</li>
+              <li><strong># Clientes servidos</strong> — Clientes únicos alcanzables desde esta ubicación.</li>
+              <li><strong>Es nodo crítico?</strong> — Sí si aparece en ≥50% de las rutas de algún par producto-cliente.</li>
+              <li><strong># Productos impactados</strong> — Cantidad de productos cuyas rutas pasan por este nodo.</li>
+              <li><strong># Clientes impactados</strong> — Clientes cuyo suministro dependería de esta ubicación.</li>
+              <li><strong>Nivel de riesgo</strong> — <span style="color:#ff6b6b;">Critical</span> (≥4 prod.) · <span style="color:#F7A800;">High</span> (2–3) · <span style="color:#29ABE2;">Medium</span> (1).</li>
+              <li><strong>Observaciones</strong> — Ghost node / Dead end / Planta sin ruta a cliente / etc.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Customer -->
+        <div class="guide-item">
+          <div class="guide-item-header" onclick="guideToggle(this)">
+            <span>🏪 Customer</span><span class="guide-arr">▶</span>
+          </div>
+          <div class="guide-item-body hidden">
+            <p>Un cliente por fila. Evalúa qué tan seguro y diversificado es el abastecimiento hacia cada cliente.</p>
+            <ul>
+              <li><strong>Estado</strong> — Color de alerta.</li>
+              <li><strong>CUSTID</strong> — Código de cliente.</li>
+              <li><strong>CUSTDESCR</strong> — Descripción del cliente.</li>
+              <li><strong>En Customer Source?</strong> — ¿Tiene entregas configuradas desde alguna ubicación?</li>
+              <li><strong>En Customer Product?</strong> — ¿Tiene productos habilitados como recibibles?</li>
+              <li><strong>Solo en maestro?</strong> — Cliente definido pero sin arcos de entrega configurados.</li>
+              <li><strong># Productos recibidos</strong> — Productos únicos configurados para este cliente.</li>
+              <li><strong># Ubicaciones proveedoras</strong> — Ubicaciones que entregan directamente a este cliente.</li>
+              <li><strong># Paths que llegan</strong> — Total de rutas planta→cliente encontradas por DFS.</li>
+              <li><strong>Resiliencia predominante</strong> —
+                <span style="color:#ff6b6b;">Single Path</span> (1 ruta, sin alternativa) ·
+                <span style="color:#F7A800;">Single Node Dependency</span> (múltiples rutas pero todas pasan por el mismo nodo) ·
+                <span style="color:#34d399;">Resilient</span> (rutas independientes).
+              </li>
+              <li><strong>Observaciones</strong> — Resumen de hallazgos para este cliente.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Location Source -->
+        <div class="guide-item">
+          <div class="guide-item-header" onclick="guideToggle(this)">
+            <span>🔀 Location Source</span><span class="guide-arr">▶</span>
+          </div>
+          <div class="guide-item-body hidden">
+            <p>Un arco de transferencia <code>LOCFR → LOCID</code> por producto. Valida cada movimiento de materiales entre ubicaciones.</p>
+            <ul>
+              <li><strong>Estado</strong> — Color de alerta.</li>
+              <li><strong>PRDID</strong> — Producto que se transfiere.</li>
+              <li><strong>PRDDESCR</strong> — Descripción del producto.</li>
+              <li><strong>LOCFR</strong> — Ubicación de origen.</li>
+              <li><strong>LOCFR Descripción</strong> — Nombre de la ubicación de origen.</li>
+              <li><strong>LOCID</strong> — Ubicación de destino.</li>
+              <li><strong>LOCID Descripción</strong> — Nombre de la ubicación de destino.</li>
+              <li><strong>TLEADTIME</strong> — Lead time de transferencia en días.</li>
+              <li><strong>LOCFR+PRDID en Location Product?</strong> — ¿El par producto-origen existe en Location Product? Si no, la ubicación de origen no tiene ese producto habilitado.</li>
+              <li><strong>LOCID+PRDID en Location Product?</strong> — ¿El par producto-destino existe en Location Product? Si no, la ubicación de destino no tiene ese producto habilitado.</li>
+              <li><strong>PRDID en PSH?</strong> — ¿El producto tiene fuente de producción definida?</li>
+              <li><strong>Arco en ruta completa?</strong> — ¿Este arco forma parte de al menos una ruta planta→cliente? Si es No, el arco está configurado pero no aporta flujo real.</li>
+              <li><strong>Arco inverso?</strong> — Existe el arco en dirección contraria (<code>LOCID → LOCFR</code>) para el mismo producto. Puede indicar un ciclo o flujo bidireccional no intencional.</li>
+              <li><strong>Lead Time Status</strong> — <em>Missing</em> (vacío) · <em>Zero</em> (= 0) · <em>OK</em>.</li>
+              <li><strong>Observaciones</strong> — Detalle de todos los hallazgos del arco.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Customer Source -->
+        <div class="guide-item">
+          <div class="guide-item-header" onclick="guideToggle(this)">
+            <span>🚚 Customer Source</span><span class="guide-arr">▶</span>
+          </div>
+          <div class="guide-item-body hidden">
+            <p>Un arco de entrega <code>ubicación → cliente</code> por producto. Valida el último tramo de la cadena logística.</p>
+            <ul>
+              <li><strong>Estado</strong> — Color de alerta.</li>
+              <li><strong>PRDID</strong> — Producto entregado.</li>
+              <li><strong>PRDDESCR</strong> — Descripción del producto.</li>
+              <li><strong>LOCID</strong> — Ubicación que entrega al cliente.</li>
+              <li><strong>LOCID Descripción</strong> — Nombre de la ubicación.</li>
+              <li><strong>CUSTID</strong> — Cliente receptor.</li>
+              <li><strong>CUSTID Descripción</strong> — Nombre del cliente.</li>
+              <li><strong>CLEADTIME</strong> — Lead time de entrega al cliente en días.</li>
+              <li><strong>LOCID+PRDID en Location Product?</strong> — ¿El par producto-ubicación existe en Location Product?</li>
+              <li><strong>CUSTID+PRDID en Customer Product?</strong> — ¿El par producto-cliente existe en Customer Product?</li>
+              <li><strong>PRDID en PSH?</strong> — ¿El producto tiene fuente de producción definida?</li>
+              <li><strong>Entrega alcanzable desde producción?</strong> — ¿Existe alguna ruta DFS desde una planta productora hasta este par ubicación-cliente? Si es No, el arco es inalcanzable desde producción.</li>
+              <li><strong>Lead Time Status</strong> — <em>Missing</em> (vacío) · <em>Zero</em> (= 0) · <em>OK</em>.</li>
+              <li><strong>Observaciones</strong> — Detalle de todos los hallazgos del arco.</li>
+            </ul>
+          </div>
+        </div>
+
+      </div><!-- /guide-accordion -->
+
+      <div class="guide-color-legend">
+        🎨 <strong style="color:var(--text);">Colores de fila en el Excel:</strong>&nbsp;
+        <span style="color:#ff6b6b;">🔴 Rojo claro</span> = problema crítico que requiere corrección &nbsp;|&nbsp;
+        <span style="color:#F7A800;">🟡 Amarillo</span> = advertencia o dato para revisar &nbsp;|&nbsp;
+        <span style="color:var(--green);">Sin color</span> = registro consistente ✅
+      </div>
+      </div><!-- /guide-panel-body -->
+    </div><!-- /panelSNGuide -->
+
     <!-- ═══ SUPPLY NETWORK: MDT MAPPING ═══ -->
     <div class="panel hidden" id="panelSNMDT">
       <div class="panel-title" onclick="toggleMappingBody('bodySNMDT', 'arrSNMDT')"
         style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
-        <span>② Mapeo de entidades — Supply Network</span>
+        <span>MAPEO DE ENTIDADES</span>
         <span id="arrSNMDT" style="font-size:11px;">▼</span>
       </div>
       <div id="bodySNMDT">
@@ -712,7 +919,7 @@
     <div class="panel" id="panelVizMDT" style="display:none;">
       <div class="panel-title" onclick="toggleMappingBody('bodyVizMDT', 'arrVizMDT')"
         style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
-        <span>② Mapeo de entidades — Visualizer</span>
+        <span>MAPEO DE ENTIDADES</span>
         <span id="arrVizMDT" style="font-size:11px;">▼</span>
       </div>
       <div id="bodyVizMDT">
@@ -832,25 +1039,21 @@
 
     <!-- Controls bar (hidden until products are loaded) -->
     <div id="vizControlsBar"
-      style="display:none;background:var(--bg2);border-bottom:1px solid var(--border);padding:10px 24px;align-items:center;gap:12px;flex-wrap:wrap;">
-      <div class="prod-search-group">
-        <label style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);">Material</label>
-        <div class="ss-wrap" style="width:320px;">
+      style="display:none;background:var(--bg2);border-bottom:1px solid var(--border);padding:8px 24px;">
+      <!-- Row única: buscador + botones + estado -->
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);white-space:nowrap;">Material</span>
+        <div class="ss-wrap" style="width:260px;flex-shrink:0;">
           <input class="ss-input-vis" id="vizPrdInput" type="text" placeholder="Buscar material..." autocomplete="off">
           <div class="ss-list" id="vizPrdList"></div>
         </div>
-      </div>
-      <div style="display:flex;gap:6px;align-items:center;margin-top:14px;flex-wrap:wrap;">
         <button class="btn btn-primary btn-small" id="btnVizLoadNet" onclick="vizLoadNetwork()" disabled
-          style="opacity:.5;">Cargar red logística</button>
+          style="opacity:.5;white-space:nowrap;">Cargar red logística</button>
         <button class="btn btn-secondary btn-small" onclick="vizFitGraph()">⊞ Ajustar</button>
         <button class="btn btn-secondary btn-small" onclick="vizCompact()">⊟ Compactar</button>
-        <button class="btn btn-secondary btn-small" id="btnVizFilter" onclick="vizOpenFilter()" style="display:none;">▼
-          Filtros</button>
-        <button class="btn btn-secondary btn-small" id="btnVizFullscreen" onclick="vizOpenFullscreen()"
-          style="display:none;">⛶ Pantalla completa</button>
-      </div>
-      <div id="vizStatus" style="font-size:12px;color:var(--text2);margin-left:4px;margin-top:14px;flex-basis:100%;">
+        <button class="btn btn-secondary btn-small" id="btnVizFilter" onclick="vizOpenFilter()" style="display:none;">▼ Filtros</button>
+        <button class="btn btn-secondary btn-small" id="btnVizFullscreen" onclick="vizOpenFullscreen()" style="display:none;">⛶ Pantalla completa</button>
+        <span id="vizStatus" style="font-size:11px;color:var(--text2);margin-left:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px;"></span>
       </div>
     </div>
 
@@ -1065,11 +1268,178 @@
       </button>
     </div>
 
+    <!-- ═══ PA: EXCEL GUIDE ═══ -->
+    <div class="panel guide-panel" id="panelPAGuide">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div class="panel-title" style="margin-bottom:0;">📄 ¿Qué contiene el archivo de salida?</div>
+        <button onclick="guideMinimize('panelPAGuide',this)"
+          style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:11px;cursor:pointer;padding:2px 10px;line-height:1.6;">▲ Minimizar</button>
+      </div>
+      <div class="guide-panel-body" id="panelPAGuideBody">
+      <p style="font-size:12px;color:var(--text2);margin:0 0 14px;">El Excel generado contiene <strong style="color:var(--text);">7 hojas</strong>. Expande cada una para ver el detalle de sus columnas.</p>
+
+      <div class="guide-accordion">
+
+        <!-- Resumen -->
+        <div class="guide-item">
+          <div class="guide-item-header" onclick="guideToggle(this)">
+            <span>📊 Resumen</span><span class="guide-arr">▶</span>
+          </div>
+          <div class="guide-item-body hidden">
+            <p>Una fila por cada hoja analizada. Permite ver de un vistazo la calidad global de los datos de producción.</p>
+            <ul>
+              <li><strong>#</strong> — Número de hoja.</li>
+              <li><strong>Hoja</strong> — Nombre de la hoja a la que corresponde la fila.</li>
+              <li><strong>Total registros</strong> — Cantidad de filas analizadas en esa hoja.</li>
+              <li><strong>Alertas 🔴</strong> — Registros con problema crítico que requiere corrección.</li>
+              <li><strong>Advertencias 🟡</strong> — Registros con dato para revisar.</li>
+              <li><strong>OK ✅</strong> — Registros sin observaciones.</li>
+              <li><strong>% Consistencia</strong> — <code>OK / Total × 100</code>.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Product -->
+        <div class="guide-item">
+          <div class="guide-item-header" onclick="guideToggle(this)">
+            <span>📦 Product</span><span class="guide-arr">▶</span>
+          </div>
+          <div class="guide-item-body hidden">
+            <p>Un producto por fila. Verifica que cada material del maestro esté correctamente integrado en la cadena de producción.</p>
+            <ul>
+              <li><strong>Estado</strong> — Color de alerta.</li>
+              <li><strong>PRDID</strong> — Código del producto.</li>
+              <li><strong>PRDDESCR</strong> — Descripción del producto.</li>
+              <li><strong>MATTYPEID</strong> — Tipo de material.</li>
+              <li><strong>En PSH (output)?</strong> — ¿El producto es el output de alguna fuente de producción?</li>
+              <li><strong>En PSI (componente)?</strong> — ¿El producto aparece como componente en algún BOM?</li>
+              <li><strong>En Location Product?</strong> — ¿Está habilitado como manejable en alguna ubicación?</li>
+              <li><strong>En Location Source?</strong> — ¿Tiene arcos de transferencia entre ubicaciones?</li>
+              <li><strong>Observacion</strong> — Resumen de hallazgos: producto solo en maestro, sin PSH ni PSI, etc.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Resource -->
+        <div class="guide-item">
+          <div class="guide-item-header" onclick="guideToggle(this)">
+            <span>🔧 Resource</span><span class="guide-arr">▶</span>
+          </div>
+          <div class="guide-item-body hidden">
+            <p>Un recurso productivo (puesto de trabajo o máquina) por fila. Verifica que cada recurso declarado esté asignado a procesos de producción y tenga ubicación configurada.</p>
+            <ul>
+              <li><strong>Estado</strong> — Color de alerta.</li>
+              <li><strong>RESID</strong> — Código del recurso.</li>
+              <li><strong>RESDESCR</strong> — Descripción del recurso.</li>
+              <li><strong>En PSR?</strong> — ¿El recurso está asignado a al menos una fuente de producción (Production Source Resource)?</li>
+              <li><strong>En Resource Location?</strong> — ¿Tiene una ubicación física configurada?</li>
+              <li><strong>Observacion</strong> — Un recurso 🔴 sin PSR ni Resource Location existe en el maestro pero no aporta a ningún proceso productivo.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Resource Location -->
+        <div class="guide-item">
+          <div class="guide-item-header" onclick="guideToggle(this)">
+            <span>📍 Resource Location</span><span class="guide-arr">▶</span>
+          </div>
+          <div class="guide-item-body hidden">
+            <p>Un par <code>RESID + LOCID</code> por fila. Valida que cada combinación recurso-ubicación tenga uso real en alguna receta de producción.</p>
+            <ul>
+              <li><strong>Estado</strong> — Color de alerta.</li>
+              <li><strong>RESID</strong> — Código del recurso.</li>
+              <li><strong>LOCID</strong> — Código de la ubicación (planta) donde está el recurso.</li>
+              <li><strong>RESID+LOCID usado en PSR?</strong> — ¿Esta combinación recurso-planta está asignada a al menos una fuente de producción? Si es No, el recurso está ubicado en esa planta en el maestro pero no se asignó a ninguna receta productiva.</li>
+              <li><strong>Observacion</strong> — Detalle del hallazgo.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- PSH -->
+        <div class="guide-item">
+          <div class="guide-item-header" onclick="guideToggle(this)">
+            <span>🏭 Prod Source Header (PSH)</span><span class="guide-arr">▶</span>
+          </div>
+          <div class="guide-item-body hidden">
+            <p>Un <code>SOURCEID</code> (fuente de producción) por fila. Analiza la consistencia de cada receta de producción registrada en SAP IBP.</p>
+            <ul>
+              <li><strong>Estado</strong> — Color de alerta.</li>
+              <li><strong>SOURCEID</strong> — Identificador único de la fuente de producción.</li>
+              <li><strong>PRDID output</strong> — Producto terminado que produce esta fuente.</li>
+              <li><strong>LOCID planta</strong> — Planta donde se ejecuta la producción.</li>
+              <li><strong>SOURCETYPE(s)</strong> — <code>P</code> = producción primaria · <code>C</code> = co-producto.</li>
+              <li><strong>PLEADTIME</strong> — Lead time de producción en días. Se alerta si está vacío o en cero.</li>
+              <li><strong>OUTPUTCOEFFICIENT</strong> — Unidades del producto terminado generadas por corrida de producción.</li>
+              <li><strong>PRDID+LOCID en Location Product?</strong> — ¿El producto está habilitado en esa planta en Location Product?</li>
+              <li><strong>Tiene items PSI (BOM)?</strong> — ¿Hay componentes definidos para esta fuente? Si es No, la fuente existe pero sin BOM: no se puede planificar el consumo de materiales.</li>
+              <li><strong>Tiene recursos PSR?</strong> — ¿Hay recursos asignados a esta fuente?</li>
+              <li><strong>Observacion</strong> — Detalle de hallazgos: PLEADTIME cero, sin BOM, sin recursos, etc.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- PSI -->
+        <div class="guide-item">
+          <div class="guide-item-header" onclick="guideToggle(this)">
+            <span>🔩 Prod Source Item (PSI)</span><span class="guide-arr">▶</span>
+          </div>
+          <div class="guide-item-body hidden">
+            <p>Un componente del BOM por fila. Valida la consistencia de cada ítem de la lista de materiales.</p>
+            <ul>
+              <li><strong>Estado</strong> — Color de alerta.</li>
+              <li><strong>SOURCEID</strong> — Fuente de producción a la que pertenece este componente.</li>
+              <li><strong>PRDID output</strong> — Producto terminado que se fabrica con este BOM.</li>
+              <li><strong>LOCID planta</strong> — Planta donde se fabrica.</li>
+              <li><strong>PRDID componente</strong> — Material que se consume como insumo.</li>
+              <li><strong>COMPONENTCOEFFICIENT</strong> — Unidades del componente consumidas por unidad producida. Si está en cero, la planificación de demanda del insumo será incorrecta.</li>
+              <li><strong>Tipo componente</strong> — Principal o alternativo (sustituto).</li>
+              <li><strong>PRDID comp+LOCID en Location Product?</strong> — ¿El componente está habilitado en la planta de producción?</li>
+              <li><strong>En Location Source (insumo)?</strong> — ¿El componente tiene arcos de transferencia que podrían abastecerlo?</li>
+              <li><strong>LOCFR origen</strong> — Ubicación de origen desde donde se transfiere el insumo (si existe).</li>
+              <li><strong>LOCTYPE origen</strong> — Tipo de la ubicación de origen.</li>
+              <li><strong>LOCFR+PRDID en Location Product?</strong> — ¿El insumo está habilitado en la ubicación de origen?</li>
+              <li><strong>Material de reemplazo (ISALTITEM)?</strong> — ¿Este componente es un sustituto alternativo?</li>
+              <li><strong>Reemplaza a</strong> — Código del componente principal al que reemplaza (si aplica).</li>
+              <li><strong>Observacion</strong> — Coeficiente cero, sin Location Product, cadena de sustitución incompleta, etc.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- PSR -->
+        <div class="guide-item">
+          <div class="guide-item-header" onclick="guideToggle(this)">
+            <span>⚙️ Prod Source Resource (PSR)</span><span class="guide-arr">▶</span>
+          </div>
+          <div class="guide-item-body hidden">
+            <p>Asignaciones recurso → fuente de producción. Un par <code>RESID + SOURCEID</code> por fila.</p>
+            <ul>
+              <li><strong>Estado</strong> — Color de alerta.</li>
+              <li><strong>SOURCEID</strong> — Fuente de producción a la que se asigna el recurso.</li>
+              <li><strong>PRDID output</strong> — Producto que fabrica esa fuente.</li>
+              <li><strong>LOCID planta</strong> — Planta donde opera la fuente.</li>
+              <li><strong>RESID</strong> — Recurso asignado a esta fuente.</li>
+              <li><strong>RESID+LOCID en Resource Location?</strong> — ¿La combinación recurso-planta está configurada en Resource Location? Si es No, el recurso no tiene ubicación en esa planta.</li>
+              <li><strong>Observacion</strong> — Registros 🔴 indican asignaciones huérfanas: el recurso o la fuente no existen en sus respectivos maestros, lo que puede causar errores en el motor de planificación.</li>
+            </ul>
+          </div>
+        </div>
+
+      </div><!-- /guide-accordion -->
+
+      <div class="guide-color-legend">
+        🎨 <strong style="color:var(--text);">Colores de fila en el Excel:</strong>&nbsp;
+        <span style="color:#ff6b6b;">🔴 Rojo claro</span> = problema crítico que requiere corrección &nbsp;|&nbsp;
+        <span style="color:#F7A800;">🟡 Amarillo</span> = advertencia o dato para revisar &nbsp;|&nbsp;
+        <span style="color:var(--green);">Sin color</span> = registro consistente ✅
+      </div>
+      </div><!-- /guide-panel-body -->
+    </div><!-- /panelPAGuide -->
+
     <!-- ═══ PA: MDT MAPPING ═══ -->
     <div class="panel hidden" id="panelPAMDT">
       <div class="panel-title" onclick="toggleMappingBody('bodyPAMDT', 'arrPAMDT')"
         style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
-        <span>② Mapeo de entidades — Production Hierarchy Analyzer</span>
+        <span>MAPEO DE ENTIDADES</span>
         <span id="arrPAMDT" style="font-size:11px;">▼</span>
       </div>
       <div id="bodyPAMDT">

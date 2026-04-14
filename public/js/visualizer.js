@@ -65,9 +65,15 @@
       inp.addEventListener('input', function () {
         var q = inp.value.trim().toLowerCase();
         if (!q) { list.classList.remove('open'); return; }
-        vizRenderSugList(vizSuggestions.filter(function (s) {
-          return s.prdid.toLowerCase().includes(q) || s.prddescr.toLowerCase().includes(q);
-        }).slice(0, 40));
+        var t1 = [], t2 = [], t3 = [];
+        vizSuggestions.forEach(function (s) {
+          var pid = s.prdid.toLowerCase();
+          var pdesc = s.prddescr.toLowerCase();
+          if (pid.startsWith(q))            { t1.push(s); }
+          else if (pdesc.startsWith(q))     { t2.push(s); }
+          else if (pid.includes(q) || pdesc.includes(q)) { t3.push(s); }
+        });
+        vizRenderSugList(t1.concat(t2).concat(t3).slice(0, 40));
       });
       document.addEventListener('click', function (e) {
         if (!inp.contains(e.target) && !list.contains(e.target)) list.classList.remove('open');
@@ -133,9 +139,11 @@
       statusBar.style.display = 'flex';
       statusText.textContent = 'Procesando red de ' + prdid + '…';
       btnLoad.disabled = true;
+      btnLoad.textContent = '⏳ Cargando...';
+      btnLoad.style.opacity = '0.7';
       document.getElementById('vizDetail').style.display = 'none';
       document.getElementById('vizEmpty').style.display = 'none';
-      document.getElementById('vizStatus').textContent = 'Procesando…';
+      document.getElementById('vizStatus').textContent = '⏳ Cargando ' + prdid + '…';
       document.getElementById('btnVizFullscreen').style.display = 'none';
 
       var paBase = CFG.pa
@@ -269,7 +277,7 @@
         log(logEl, 'err', '✕ Error: ' + e.message);
       } finally {
         var b = document.getElementById('btnVizLoadNet');
-        if (b) { b.disabled = false; b.style.opacity = '1'; }
+        if (b) { b.disabled = false; b.style.opacity = '1'; b.textContent = 'Cargar red logística'; }
       }
     }
 
@@ -373,17 +381,36 @@
         var plantLocSet = {};
         data.plantRows.forEach(function (r) { var l = str(r.LOCID); if (l) plantLocSet[l] = true; });
 
+        // psiByPlant: plant LOCID → { compPRDID: true } — only components in that plant's BOM
+        var psiByPlant = {};
+        if (data.plantRows && data.psiRows && data.psiRows.length) {
+          var srcToPlant = {};
+          data.plantRows.forEach(function (r) {
+            var sid = str(r.SOURCEID), loc = str(r.LOCID);
+            if (sid && loc) srcToPlant[sid] = loc;
+          });
+          data.psiRows.forEach(function (r) {
+            var sid = str(r.SOURCEID), comp = str(r.PRDID);
+            var plant = srcToPlant[sid];
+            if (!plant || !comp) return;
+            if (!psiByPlant[plant]) psiByPlant[plant] = {};
+            psiByPlant[plant][comp] = true;
+          });
+        }
+
         var suppEdgeMap = {};
         data.supplierLocRows.forEach(function (r) {
           var supp = str(r.LOCFR), dest = str(r.LOCID);
+          var compId = str(r.PRDID || '');
           if (!supp || !dest) return;
           var lm = locMap[supp] || {};
           if (str(lm.LOCTYPE) !== 'V') return;   // only supplier-type locations
           if (!plantLocSet[dest]) return;          // only arcs targeting a production plant
+          // only if component is actually in the BOM of that specific plant
+          if (compId && psiByPlant[dest] && !psiByPlant[dest][compId]) return;
           if (VIZ_VISIBLE.supplier === false) return;
           var key = supp + '||' + dest;
           if (!suppEdgeMap[key]) suppEdgeMap[key] = { supp: supp, dest: dest, lm: lm, comps: [] };
-          var compId = str(r.PRDID || '');
           var tlt    = str(r.TLEADTIME || '');
           suppEdgeMap[key].comps.push(compId + (tlt ? ' [LT:' + tlt + ']' : ''));
         });
