@@ -65,9 +65,15 @@
       inp.addEventListener('input', function () {
         var q = inp.value.trim().toLowerCase();
         if (!q) { list.classList.remove('open'); return; }
-        vizRenderSugList(vizSuggestions.filter(function (s) {
-          return s.prdid.toLowerCase().includes(q) || s.prddescr.toLowerCase().includes(q);
-        }).slice(0, 40));
+        var t1 = [], t2 = [], t3 = [];
+        vizSuggestions.forEach(function (s) {
+          var pid = s.prdid.toLowerCase();
+          var pdesc = s.prddescr.toLowerCase();
+          if (pid.startsWith(q))            { t1.push(s); }
+          else if (pdesc.startsWith(q))     { t2.push(s); }
+          else if (pid.includes(q) || pdesc.includes(q)) { t3.push(s); }
+        });
+        vizRenderSugList(t1.concat(t2).concat(t3).slice(0, 40));
       });
       document.addEventListener('click', function (e) {
         if (!inp.contains(e.target) && !list.contains(e.target)) list.classList.remove('open');
