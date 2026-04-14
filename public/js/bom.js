@@ -3,7 +3,9 @@
        Populates the small in-memory BOM indexes for ONE selected product.
        Traverses the full tree: co-products and multi-level components.
        ═══════════════════════════════════════════════════════════════ */
-    async function loadBomSubtree(prdid) {
+    /* onProgress(phase, count) — callback opcional para mostrar progreso al usuario.
+       phase: número de nivel BFS, 'prd' al cargar maestro, 'loc' al cargar ubicaciones. */
+    async function loadBomSubtree(prdid, onProgress) {
       // Reset BOM indexes — will hold only this product's subtree
       HDR_BY_PRD = {}; HDR_BY_SID = {}; ITM_BY_SID = {};
       RES_BY_SID = {}; CPR_BY_SID = {}; PSISUB_BY_SID = {};
@@ -12,97 +14,112 @@
       var visitedPrds = {}; visitedPrds[prdid] = true;
       var visitedSids = {};
       var queue = [prdid];
+      var bfsLevel = 0;
 
       while (queue.length > 0) {
+        bfsLevel++;
+        if (onProgress) onProgress(bfsLevel, Object.keys(visitedPrds).length);
+
+        // ── Fase A: PSH by_prdid para todos los productos del nivel — en paralelo ──
+        var hdrsByPrd = await Promise.all(
+          queue.map(function (pid) { return idbGetByIndex('bom_psh', 'by_prdid', pid); })
+        );
+
+        // Recopilar SIDs nuevos del nivel
+        var newSids = [];
+        hdrsByPrd.forEach(function (hdrsForPrd) {
+          hdrsForPrd.forEach(function (hdr) {
+            var sid = str(hdr.SOURCEID);
+            if (sid && !visitedSids[sid]) { visitedSids[sid] = true; newSids.push(sid); }
+          });
+        });
+
+        if (!newSids.length) { queue = []; break; }
+
+        // ── Fase B: para cada SID nuevo, leer las 4 tablas simultáneamente ──
+        var sidData = await Promise.all(
+          newSids.map(function (sid) {
+            return Promise.all([
+              idbGetByIndex('bom_psh',    'by_sourceid', sid),  // [0] allHdrs
+              idbGetByIndex('bom_psi',    'by_sourceid', sid),  // [1] items
+              idbGetByIndex('bom_psr',    'by_sourceid', sid),  // [2] resources
+              idbGetByIndex('bom_psisub', 'by_sourceid', sid)   // [3] subs
+            ]);
+          })
+        );
+
+        // ── Fase C: procesar resultados y construir índices ──
         var nextQueue = [];
+        newSids.forEach(function (sid, si) {
+          var allHdrs   = sidData[si][0];
+          var items     = sidData[si][1];
+          var resources = sidData[si][2];
+          var subs      = sidData[si][3];
 
-        for (var i = 0; i < queue.length; i++) {
-          var pid = queue[i];
+          // PSH: cabeceras de producción
+          allHdrs.forEach(function (h) {
+            var spid = str(h.PRDID);
+            var st = str(h.SOURCETYPE || 'P');
+            if (!HDR_BY_SID[sid] || st !== 'C') HDR_BY_SID[sid] = h;
+            if (st === 'C') {
+              if (!CPR_BY_SID[sid]) CPR_BY_SID[sid] = [];
+              CPR_BY_SID[sid].push({
+                prdid: spid, coefficient: h.OUTPUTCOEFFICIENT || '',
+                prddescr: '', mattypeid: '', uomid: '', sourcetype: st
+              });
+            }
+            if (!HDR_BY_PRD[spid]) HDR_BY_PRD[spid] = [];
+            HDR_BY_PRD[spid].push(h);
+            if (!visitedPrds[spid]) { visitedPrds[spid] = true; nextQueue.push(spid); }
+          });
 
-          // 1. Get all PSH rows where PRDID = pid
-          var hdrsForPrd = await idbGetByIndex('bom_psh', 'by_prdid', pid);
+          // PSI: componentes (HDR_BY_SID[sid] ya fue poblado arriba)
+          items.forEach(function (item) {
+            var isid = str(item.SOURCEID);
+            var compPrd = str(item.PRDID);
+            if (!ITM_BY_SID[isid]) ITM_BY_SID[isid] = [];
+            ITM_BY_SID[isid].push(item);
+            var parentHdr = HDR_BY_SID[isid];
+            if (compPrd && parentHdr) {
+              isCompAtLoc[str(parentHdr.LOCID) + '|' + compPrd] = true;
+            }
+            if (compPrd && !visitedPrds[compPrd]) { visitedPrds[compPrd] = true; nextQueue.push(compPrd); }
+          });
 
-          for (var j = 0; j < hdrsForPrd.length; j++) {
-            var sid = str(hdrsForPrd[j].SOURCEID);
-            if (!sid || visitedSids[sid]) continue;
-            visitedSids[sid] = true;
+          // PSR: recursos productivos
+          resources.forEach(function (r) {
+            var rsid = str(r.SOURCEID), rid = str(r.RESID);
+            if (!RES_BY_SID[rsid]) RES_BY_SID[rsid] = [];
+            if (RES_BY_SID[rsid].indexOf(rid) < 0) RES_BY_SID[rsid].push(rid);
+          });
 
-            // 2. Get ALL PSH rows for this SOURCEID (finds co-products of the same source)
-            var allHdrs = await idbGetByIndex('bom_psh', 'by_sourceid', sid);
-            allHdrs.forEach(function (h) {
-              var spid = str(h.PRDID);
-              var st = str(h.SOURCETYPE || 'P');
-              // HDR_BY_SID: prefer P-type row
-              if (!HDR_BY_SID[sid] || st !== 'C') HDR_BY_SID[sid] = h;
-              // CPR_BY_SID: C-type co-products
-              if (st === 'C') {
-                if (!CPR_BY_SID[sid]) CPR_BY_SID[sid] = [];
-                CPR_BY_SID[sid].push({
-                  prdid: spid, coefficient: h.OUTPUTCOEFFICIENT || '',
-                  prddescr: '', mattypeid: '', uomid: '', sourcetype: st
-                });
-              }
-              // HDR_BY_PRD: all types needed for traversal
-              if (!HDR_BY_PRD[spid]) HDR_BY_PRD[spid] = [];
-              HDR_BY_PRD[spid].push(h);
-              // Queue new products for traversal (co-products and the main product at each level)
-              if (!visitedPrds[spid]) { visitedPrds[spid] = true; nextQueue.push(spid); }
-            });
-
-            // 3. Get PSI rows for this SOURCEID (component items)
-            var items = await idbGetByIndex('bom_psi', 'by_sourceid', sid);
-            items.forEach(function (item) {
-              var isid = str(item.SOURCEID);
-              var compPrd = str(item.PRDID);
-              if (!ITM_BY_SID[isid]) ITM_BY_SID[isid] = [];
-              ITM_BY_SID[isid].push(item);
-              // isCompAtLoc: HDR_BY_SID[sid] was just built above
-              var parentHdr = HDR_BY_SID[isid];
-              if (compPrd && parentHdr) {
-                isCompAtLoc[str(parentHdr.LOCID) + '|' + compPrd] = true;
-              }
-              // Queue component products
-              if (compPrd && !visitedPrds[compPrd]) { visitedPrds[compPrd] = true; nextQueue.push(compPrd); }
-            });
-
-            // 4. Get PSR rows for this SOURCEID (resources)
-            var resources = await idbGetByIndex('bom_psr', 'by_sourceid', sid);
-            resources.forEach(function (r) {
-              var rsid = str(r.SOURCEID), rid = str(r.RESID);
-              if (!RES_BY_SID[rsid]) RES_BY_SID[rsid] = [];
-              if (RES_BY_SID[rsid].indexOf(rid) < 0) RES_BY_SID[rsid].push(rid);
-            });
-
-            // 5. Get PSI Sub rows for this SOURCEID (item substitutions)
-            var subs = await idbGetByIndex('bom_psisub', 'by_sourceid', sid);
-            subs.forEach(function (sub) {
-              var ssid = str(sub.SOURCEID);
-              if (!PSISUB_BY_SID[ssid]) PSISUB_BY_SID[ssid] = [];
-              PSISUB_BY_SID[ssid].push(sub);
-            });
-          }
-        }
+          // PSISUB: sustituciones de ítems
+          subs.forEach(function (sub) {
+            var ssid = str(sub.SOURCEID);
+            if (!PSISUB_BY_SID[ssid]) PSISUB_BY_SID[ssid] = [];
+            PSISUB_BY_SID[ssid].push(sub);
+          });
+        });
 
         queue = nextQueue;
       }
 
-      // 5. Load product master for all visited products
+      // Maestro de productos — todos en paralelo
       var allPids = Object.keys(visitedPrds);
-      for (var k = 0; k < allPids.length; k++) {
-        var p = await idbGet('bom_prd', allPids[k]);
-        if (p) prdIndex[allPids[k]] = p;
-      }
+      if (onProgress) onProgress('prd', allPids.length);
+      var prdResults = await Promise.all(allPids.map(function (p) { return idbGet('bom_prd', p); }));
+      prdResults.forEach(function (p, i) { if (p) prdIndex[allPids[i]] = p; });
 
-      // 6. Load Location master for all LOCIDs seen in PSH headers
+      // Maestro de ubicaciones — todos en paralelo
       var seenLocs = {};
       Object.keys(HDR_BY_SID).forEach(function (sid) {
         var locid = str(HDR_BY_SID[sid].LOCID);
         if (locid) seenLocs[locid] = true;
       });
       var allLocids = Object.keys(seenLocs);
-      for (var li = 0; li < allLocids.length; li++) {
-        var locRec = await idbGet('bom_loc', allLocids[li]);
-        if (locRec) LOC_BY_ID[allLocids[li]] = locRec;
+      if (allLocids.length) {
+        var locResults = await Promise.all(allLocids.map(function (lid) { return idbGet('bom_loc', lid); }));
+        locResults.forEach(function (r, i) { if (r) LOC_BY_ID[allLocids[i]] = r; });
       }
     }
 
@@ -439,6 +456,11 @@
           'Busca un producto en el campo superior para visualizar su jerarquía BOM.<br>' +
           '<span style="font-size:11px;color:var(--text3)">Se mostrarán todos los SourceID del producto en cada planta y opción de producción.</span>' +
         '</div>' +
+        '<div class="bom-loading hidden">' +
+          '<div class="bom-loading-spinner"></div>' +
+          '<div class="bom-loading-prd"></div>' +
+          '<div class="bom-loading-msg">Iniciando...</div>' +
+        '</div>' +
         '<div class="table-wrap hidden bom-table-wrap">' +
           '<table><thead><tr>' +
             '<th class="col-exp"></th>' +
@@ -491,6 +513,36 @@
           }
         }
       });
+    }
+
+    /* ── Loading state helpers ── */
+    function bomShowLoading(tabId, prdid) {
+      var pane = bomGetPane(tabId);
+      if (!pane) return;
+      pane.querySelector('.bom-prompt').style.display = 'none';
+      pane.querySelector('.bom-table-wrap').classList.add('hidden');
+      var el = pane.querySelector('.bom-loading');
+      el.querySelector('.bom-loading-prd').textContent = prdid;
+      el.querySelector('.bom-loading-msg').textContent = 'Iniciando...';
+      el.classList.remove('hidden');
+    }
+
+    function bomUpdateLoadingProgress(tabId, phase, count) {
+      var pane = bomGetPane(tabId);
+      if (!pane) return;
+      var msg = pane.querySelector('.bom-loading-msg');
+      if (!msg) return;
+      if (phase === 'prd') {
+        msg.textContent = 'Cargando maestro de materiales (' + count + ')...';
+      } else {
+        msg.textContent = 'Escaneando nivel ' + phase + ' — ' + count + ' materiales encontrados...';
+      }
+    }
+
+    function bomHideLoading(tabId) {
+      var pane = bomGetPane(tabId);
+      if (!pane) return;
+      pane.querySelector('.bom-loading').classList.add('hidden');
     }
 
     function bomGetTab(tabId) {
@@ -592,13 +644,25 @@
       var tab = bomGetTab(tabId);
       var pane = bomGetPane(tabId);
       if (!tab || !pane) return;
+
+      // Cerrar sugerencias y mostrar spinner antes de arrancar el BFS
+      pane.querySelector('.bom-sugg-list').classList.remove('open');
+      bomShowLoading(tabId, prdid);
       setStatus('info', 'Cargando BOM para ' + prdid + '...');
+
+      // Ceder al browser para que repinte el spinner antes del trabajo pesado
+      await new Promise(function (r) { setTimeout(r, 0); });
+
       try {
-        await loadBomSubtree(prdid);
+        await loadBomSubtree(prdid, function (phase, count) {
+          bomUpdateLoadingProgress(tabId, phase, count);
+        });
       } catch (e) {
+        bomHideLoading(tabId);
         setStatus('err', 'Error cargando BOM: ' + e.message);
         return;
       }
+      bomHideLoading(tabId);
       currentLoc = '';
       finalizeHierarchy();
       // Captura snapshot de índices ANTES de que otra pestaña los reemplace.
