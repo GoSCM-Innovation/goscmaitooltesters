@@ -317,7 +317,8 @@
           children: [],
           _canExpand: false,
           _visitedSids: newVis,
-          _rootLocid: curRootLocid
+          _rootLocid: curRootLocid,
+          _parentSid: sid   // SOURCEID del padre — necesario para lookup exacto en PSISUB
         };
 
         if (uniqueCompHdrs.length > 0) {
@@ -329,6 +330,7 @@
               childNode.uomid = compUom;
               childNode.type = 'COMPONENT';
               childNode.isAltItem = str(it.ISALTITEM);
+              childNode._parentSid = sid;   // SOURCEID del padre
               children.push(childNode);
               anyAdded = true;
             }
@@ -468,7 +470,7 @@
             '<th class="col-loc">Planta</th>' +
             '<th class="col-src">ID de producción</th>' +
             '<th class="col-prd">Material</th>' +
-            '<th class="col-alt">Alt</th>' +
+            '<th class="col-alt">Reemplazante</th>' +
             '<th class="col-coef">Coeficiente</th>' +
             '<th class="col-mat">Tipo de Material</th>' +
             '<th class="col-type">Tipo</th>' +
@@ -944,16 +946,13 @@
         html += '<td style="font-family:var(--mono);font-size:11px">' + matLabel + '</td>';
         var altHtml = '';
         if (n.isAltItem === 'X') {
-          var parentSid = n.sourceid || '';
-          // Search in parent's SOURCEID context — the node's sourceid links back to parent PSH
-          // For leaf nodes without sourceid, look through all PSISUB entries
           var altSubs = [];
-          // The PSISUB_BY_SID is indexed by the SOURCEID of the parent production source
-          // We need to find entries where SPRDFR matches this node's PRDID
-          Object.keys(tabPsiSub).forEach(function (ssid) {
-            (tabPsiSub[ssid] || []).forEach(function (sub) {
-              if (str(sub.SPRDFR) === n.prdid) altSubs.push(str(sub.PRDFR));
-            });
+          // Buscar solo en PSISUB del SOURCEID padre del nodo (_parentSid).
+          // Esto evita falsos positivos de otras fuentes de producción que
+          // compartan el mismo material pero no sean el contexto del componente.
+          var psubEntries = n._parentSid ? (tabPsiSub[n._parentSid] || []) : [];
+          psubEntries.forEach(function (sub) {
+            if (str(sub.SPRDFR) === n.prdid) altSubs.push(str(sub.PRDFR));
           });
           var altTitle = altSubs.length > 0 ? 'Reemplaza a: ' + altSubs.join(', ') : 'Material de reemplazo';
           altHtml = '<span class="badge badge-alt" title="' + escH(altTitle) + '">X</span>';
