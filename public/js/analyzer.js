@@ -284,10 +284,258 @@
     }
 
 
+    /* ══════════════════════════════════════════════════════════════════
+       StreamingXlsx — builder XLSX mínimo para browser sin modelo en memoria.
+       Genera XML fila a fila (inlineStr); soporta 3 fills + estilo cabecera.
+       Requiere JSZip (ya cargado). API compatible con el subconjunto de ExcelJS
+       que usa analyzeAndStreamExcel: addWorksheet / addRow / getRow / columns.
+       ══════════════════════════════════════════════════════════════════ */
+    (function () {
+      'use strict';
+
+      function _col(n) {
+        var s = '';
+        while (n > 0) { var r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); }
+        return s;
+      }
+
+      function _xe(v) {
+        if (v == null) return '';
+        return String(v)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;').replace(/'/g, '&apos;')
+          .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+      }
+
+      // cellXfs indices (ver _styles): 0=normal 1=cabecera 2=rojo 3=amarillo
+      var _NORM = 0, _HDR = 1, _RED = 2, _YEL = 3;
+      function _si(argb) {
+        if (!argb) return _NORM;
+        if (argb === 'FFFFCCCC') return _RED;
+        if (argb === 'FFFFFFCC') return _YEL;
+        return _NORM;
+      }
+
+      function _rowXml(data, rn, si, ht) {
+        var p = ['<row r="', rn, '"'];
+        if (ht) p.push(' ht="', ht, '" customHeight="1"');
+        p.push('>');
+        for (var ci = 0; ci < data.length; ci++) {
+          var v = data[ci], ref = _col(ci + 1) + rn;
+          var sa = si ? ' s="' + si + '"' : '';
+          if (typeof v === 'number' && isFinite(v))
+            p.push('<c r="', ref, '" t="n"', sa, '><v>', v, '</v></c>');
+          else
+            p.push('<c r="', ref, '" t="inlineStr"', sa, '><is><t>', _xe(v), '</t></is></c>');
+        }
+        p.push('</row>');
+        return p.join('');
+      }
+
+      /* ── Row proxy: acumula estilos hasta el flush ── */
+      function _Row(data, rn, isHdr) {
+        this.data = data; this.rowNum = rn; this._h = isHdr; this._fill = null; this._ht = isHdr ? 20 : 0;
+      }
+      _Row.prototype.eachCell = function (cb) {
+        var self = this;
+        this.data.forEach(function () {
+          cb({ set fill(f) { if (f && f.fgColor) self._fill = f.fgColor.argb; },
+               set font(_) {}, set alignment(_) {}, set border(_) {} });
+        });
+      };
+      Object.defineProperty(_Row.prototype, 'height', { set: function (v) { this._ht = v; } });
+
+      /* ── Sheet: buffer de 1 fila, escribe XML en cuanto llega la siguiente ── */
+      function _Sheet(name, opts) {
+        opts = opts || {};
+        var vw = (opts.views || [{}])[0] || {};
+        var pr = opts.properties || {};
+        this.name    = name;
+        this._tab    = pr.tabColor ? pr.tabColor.argb : null;
+        this._freeze = vw.ySplit || 0;
+        this._chunks = [];
+        this._colW   = [];
+        this._nCols  = 0;
+        this._rn     = 0;
+        this._pend   = null;
+      }
+
+      _Sheet.prototype._flush = function () {
+        if (!this._pend) return;
+        var p = this._pend; this._pend = null;
+        var si = p._h ? _HDR : _si(p._fill);
+        this._chunks.push(_rowXml(p.data, p.rowNum, si, p._ht));
+        var cw = this._colW, nc = this._nCols;
+        p.data.forEach(function (v, ci) {
+          var l = v != null ? String(v).length : 0;
+          if (ci >= nc) nc = ci + 1;
+          if (l > (cw[ci] || 0)) cw[ci] = l;
+        });
+        this._nCols = nc;
+      };
+
+      _Sheet.prototype.addRow = function (data) {
+        this._flush();
+        this._rn++;
+        this._pend = new _Row(data, this._rn, this._rn === 1);
+        return this._pend;
+      };
+
+      _Sheet.prototype.getRow = function (n) {
+        if (this._pend && this._pend.rowNum === n) return this._pend;
+        return new _Row([], n, false);
+      };
+
+      Object.defineProperty(_Sheet.prototype, 'columns', {
+        get: function () {
+          this._flush();
+          var self = this, arr = [];
+          for (var i = 0; i < this._nCols; i++) {
+            (function (ci) {
+              arr.push({ get width() { return (self._colW[ci] || 10) + 2; },
+                         set width(w) { self._colW[ci] = Math.max(0, w - 2); } });
+            })(i);
+          }
+          return arr;
+        }
+      });
+
+      _Sheet.prototype._toXml = function () {
+        this._flush();
+        var hdr = [
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+          '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"' +
+          ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        ];
+        if (this._tab)
+          hdr.push('<sheetPr><tabColor rgb="' + this._tab + '"/></sheetPr>');
+        if (this._rn > 0 && this._nCols > 0)
+          hdr.push('<dimension ref="A1:' + _col(this._nCols) + this._rn + '"/>');
+        if (this._freeze)
+          hdr.push('<sheetViews><sheetView workbookViewId="0"><pane ySplit="' + this._freeze +
+            '" topLeftCell="A' + (this._freeze + 1) +
+            '" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>');
+        hdr.push('<sheetFormatPr defaultRowHeight="15"/>');
+        if (this._nCols > 0) {
+          hdr.push('<cols>');
+          for (var ci = 0; ci < this._nCols; ci++) {
+            var w = Math.min(Math.max((this._colW[ci] || 10) + 2, 10), 60);
+            hdr.push('<col min="' + (ci + 1) + '" max="' + (ci + 1) + '" width="' + w + '" customWidth="1"/>');
+          }
+          hdr.push('</cols>');
+        }
+        hdr.push('<sheetData>');
+        var chunks = this._chunks || [];
+        this._chunks = null;   // libera refs → GC puede reclamar los strings de filas
+        return new Blob(hdr.concat(chunks, ['</sheetData></worksheet>']),
+                        { type: 'application/xml' });
+      };
+
+      /* ── Workbook ── */
+      function StreamingXlsx() {
+        this._sheets = [];
+        var self = this;
+        this.xlsx = { writeBuffer: async function () { return self.toBlob(); } };
+      }
+
+      StreamingXlsx.prototype.addWorksheet = function (name, opts) {
+        var sh = new _Sheet(name, opts || {});
+        this._sheets.push(sh);
+        return sh;
+      };
+
+      StreamingXlsx.prototype._styles = function () {
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+          '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+          '<fonts count="2">' +
+            '<font><sz val="10"/><name val="DM Sans"/></font>' +
+            '<font><b/><sz val="10"/><name val="DM Sans"/><color rgb="FF0B1120"/></font>' +
+          '</fonts>' +
+          '<fills count="6">' +
+            '<fill><patternFill patternType="none"/></fill>' +
+            '<fill><patternFill patternType="gray125"/></fill>' +
+            '<fill><patternFill patternType="solid"><fgColor rgb="FFF7A800"/></patternFill></fill>' +
+            '<fill><patternFill patternType="none"/></fill>' +
+            '<fill><patternFill patternType="solid"><fgColor rgb="FFFFCCCC"/></patternFill></fill>' +
+            '<fill><patternFill patternType="solid"><fgColor rgb="FFFFFFCC"/></patternFill></fill>' +
+          '</fills>' +
+          '<borders count="2">' +
+            '<border><left/><right/><top/><bottom/><diagonal/></border>' +
+            '<border><left/><right/><top/><bottom style="medium"><color rgb="FFE8622A"/></bottom><diagonal/></border>' +
+          '</borders>' +
+          '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+          '<cellXfs count="4">' +
+            '<xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="0"/>' +
+            '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0"><alignment horizontal="center" vertical="middle"/></xf>' +
+            '<xf numFmtId="0" fontId="0" fillId="4" borderId="0" xfId="0"/>' +
+            '<xf numFmtId="0" fontId="0" fillId="5" borderId="0" xfId="0"/>' +
+          '</cellXfs>' +
+          '</styleSheet>';
+      };
+
+      StreamingXlsx.prototype.toBlob = async function () {
+        var sheets = this._sheets, n = sheets.length, zip = new JSZip();
+
+        var ct = [
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+          '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">',
+          '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>',
+          '<Default Extension="xml" ContentType="application/xml"/>',
+          '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>',
+          '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+        ];
+        for (var i = 0; i < n; i++)
+          ct.push('<Override PartName="/xl/worksheets/sheet', (i + 1), '.xml"',
+            ' ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>');
+        ct.push('</Types>');
+        zip.file('[Content_Types].xml', ct.join(''));
+
+        zip.file('_rels/.rels',
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+          '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+          '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"' +
+          ' Target="xl/workbook.xml"/></Relationships>');
+
+        var wbx = [
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+          '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"',
+          ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'
+        ];
+        for (var i = 0; i < n; i++)
+          wbx.push('<sheet name="', _xe(sheets[i].name), '" sheetId="', (i + 1), '" r:id="rId', (i + 2), '"/>');
+        wbx.push('</sheets></workbook>');
+        zip.file('xl/workbook.xml', wbx.join(''));
+
+        var wr = [
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+          '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+          '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+        ];
+        for (var i = 0; i < n; i++)
+          wr.push('<Relationship Id="rId', (i + 2),
+            '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"',
+            ' Target="worksheets/sheet', (i + 1), '.xml"/>');
+        wr.push('</Relationships>');
+        zip.file('xl/_rels/workbook.xml.rels', wr.join(''));
+
+        zip.file('xl/styles.xml', this._styles());
+
+        // Serializar una hoja a la vez — libera _chunks antes de pasar a la siguiente
+        for (var i = 0; i < n; i++) {
+          zip.file('xl/worksheets/sheet' + (i + 1) + '.xml', sheets[i]._toXml());
+          await new Promise(function (r) { setTimeout(r, 0); }); // yield al GC
+        }
+
+        return zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+      };
+
+      window.StreamingXlsx = StreamingXlsx;
+    })();
+
     /* ═══════════════════════════════════════════════════════════════
        SUPPLY NETWORK — ANÁLISIS + EXPORTACIÓN STREAMING
        7 grupos de hojas orientados a entidad (con auto-split >900k).
-       Las filas se escriben directo a ExcelJS — sin arrays intermedios.
+       Las filas se escriben como XML directo — sin modelo de objetos.
        ═══════════════════════════════════════════════════════════════ */
     async function analyzeAndStreamExcel(onProgress, onStatus, timer, logEl, mode) {
       var isCSV = (mode === 'light');
@@ -326,7 +574,7 @@
       }
 
       /* ── Workbook (modo Heavy) ── */
-      var wb    = isCSV ? null : new ExcelJS.Workbook();
+      var wb    = isCSV ? null : new StreamingXlsx();
       var today = new Date().toISOString().slice(0, 10);
       var GOLD  = 'FFF7A800', ORANGE = 'FFE8622A', NAVY = 'FF0B1120';
       var C_RED = 'FFFFCCCC', C_YEL  = 'FFFFFFCC';
