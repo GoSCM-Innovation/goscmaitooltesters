@@ -1414,6 +1414,82 @@ async function fetchEntitySample(entityName) {
   }
 }
 
+// ── Test Opción C: JobTemplateParameterValueDataSet con $filter por template ──
+// Prueba si la entidad acepta GET con filtro (aunque 501 sin filtro).
+// Si funciona, podríamos obtener todos los P_TSKID de un template en una sola call.
+async function testParamValuesDirect() {
+  const name = (document.getElementById('zipjobs-jobname-input').value || '').trim();
+  const area = document.getElementById('zipjobs-inspect-area');
+  const pre  = document.getElementById('zipjobs-inspect-json');
+
+  if (!name) { pre.textContent = '⚠ Ingresa un nombre de job primero.'; area.style.display = ''; return; }
+  if (!CFG || !CFG.url || !CFG.user || !CFG.pass) {
+    pre.textContent = '⚠ Debes estar conectado a SAP IBP.'; area.style.display = ''; return;
+  }
+
+  pre.textContent = 'Buscando template y probando consulta directa…';
+  area.style.display = '';
+
+  const base = CFG.url + SVC_APPJOB;
+
+  // Resolver JobTemplateName técnico (mismo método que inspectJob)
+  let allTemplates = [];
+  try { allTemplates = await fetchAllPages(base + '/JobTemplateSet', null); }
+  catch (e) { pre.textContent = '✗ No se pudo obtener templates: ' + e.message; return; }
+
+  const nameLower = name.toLowerCase();
+  let matched = allTemplates.filter(t =>
+    (t.JobTemplateName || '').toLowerCase() === nameLower ||
+    (t.JobTemplateText || '').toLowerCase() === nameLower ||
+    (t.Text || '').toLowerCase() === nameLower
+  );
+  if (!matched.length) matched = allTemplates.filter(t =>
+    (t.JobTemplateName || '').toLowerCase().includes(nameLower) ||
+    (t.JobTemplateText || '').toLowerCase().includes(nameLower)
+  );
+  if (!matched.length) { pre.textContent = `✗ No se encontró template para "${name}"`; return; }
+
+  const jtName = matched[0].JobTemplateName;
+  const jtVer  = matched[0].JobTemplateVersion || '0';
+
+  pre.textContent = `Template: ${jtName}\nConsultando JobTemplateParameterValueDataSet con $filter…`;
+
+  const filter = encodeURIComponent(
+    "JobTemplateName eq '" + jtName.replace(/'/g,"''") + "'" +
+    " and JobTemplateVersion eq '" + jtVer + "'"
+  );
+
+  try {
+    const url  = base + '/JobTemplateParameterValueDataSet?$filter=' + filter + '&$format=json&$top=500';
+    const data = await apiJson(url);
+    const results = (data.d && data.d.results) ? data.d.results : (data.value || []);
+
+    // Filtrar solo los P_TSKID para mostrar lo relevante
+    const tskidRows = results.filter(r => (r.JobTemplateParameterName || '').startsWith('P_TSKID'));
+    const allCount  = results.length;
+
+    pre.textContent = JSON.stringify({
+      _resumen: `✔ ${allCount} registros totales · ${tskidRows.length} P_TSKID encontrados`,
+      _url_consultada: url,
+      P_TSKID_entries: tskidRows.map(r => ({
+        JobTemplateParameterName: r.JobTemplateParameterName,
+        Low: r.Low,
+        Sign: r.Sign,
+        Opt: r.Opt
+      })),
+      primer_registro: results[0] || null
+    }, null, 2);
+  } catch (e) {
+    pre.textContent = JSON.stringify({
+      _resultado: '✗ La consulta directa NO funciona',
+      _error: e.message,
+      _conclusion: 'JobTemplateParameterValueDataSet no acepta $filter — Opción C descartada'
+    }, null, 2);
+  }
+
+  area.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 // ── Inspeccionar un job específico ───────────────────────────
 async function inspectJob() {
   const name  = (document.getElementById('zipjobs-jobname-input').value || '').trim();
@@ -1741,64 +1817,58 @@ async function generateZipJobs() {
     });
 
     // Build lookup: P_TSKID.Low → step info
-    // P_TSKID is a parameter of each DATA INTEGRATION step that holds the actual
-    // CI-DS task name, even when JobSequenceText has been renamed by the user.
-    // We resolve this sequentially (one step at a time) to stay within rate limits.
-    const diSteps = allSteps.filter(s => (s.JceText || '').toUpperCase().includes(JCE_DATA_INT));
-    docsLog(`  🔍 Resolviendo P_TSKID para ${diSteps.length} step(s) DATA INTEGRATION…`, 'l-info');
+    // JobTemplateParameterValueDataSet acepta $filter por template (Opción C):
+    // una sola call por template trae todos los valores, incluyendo todos los P_TSKID.
+    // Extraemos JobSequenceName del nombre del parámetro (P_TSKID + espacio + seqName).
+    const diSteps    = allSteps.filter(s => (s.JceText || '').toUpperCase().includes(JCE_DATA_INT));
+    const appjobBase = CFG.url + SVC_APPJOB;
 
-    const stepByTaskId = {};
-    const appjobBase   = CFG.url + SVC_APPJOB;
-    let diResolved = 0, diFailed = 0;
+    // Unique templates that have DI steps
+    const templateKeys = [...new Set(
+      diSteps.map(s => (s.JobTemplateName || '') + '|' + (s.JobTemplateVersion || '0'))
+    )];
+    docsLog(`  🔍 Obteniendo P_TSKID para ${diSteps.length} steps en ${templateKeys.length} template(s)…`, 'l-info');
 
-    for (const s of diSteps) {
-      const jtName  = s.JobTemplateName  || '';
-      const jtVer   = s.JobTemplateVersion || '0';
-      const seqName = s.JobSequenceName  || '';
-
+    // seqName → taskId (populated from P_TSKID entries)
+    const seqToTaskId = {};
+    for (const tk of templateKeys) {
+      const [jtName, jtVer] = tk.split('|');
       try {
-        // Fetch parameters for this step (filtered by template + sequence)
-        const seqFilter = encodeURIComponent(
-          "JobTemplateName eq '" + jtName.replace(/'/g,"''") + "'" +
-          " and JobTemplateVersion eq '" + jtVer + "'" +
-          " and JobSequenceName eq '" + seqName.replace(/'/g,"''") + "'"
+        const rows = await fetchAllPages(
+          appjobBase + '/JobTemplateParameterValueDataSet', null,
+          "JobTemplateName eq '" + jtName.replace(/'/g,"''") + "' and JobTemplateVersion eq '" + jtVer + "'"
         );
-        const pd = await apiJson(appjobBase + '/JobTemplateParameterSet?$filter=' + seqFilter + '&$format=json');
-        const params = (pd.d && pd.d.results) ? pd.d.results : (pd.value || []);
-
-        // Find P_TSKID parameter
-        const tskidParam = params.find(p => (p.JobTemplateParameterName || '').startsWith('P_TSKID'));
-        if (!tskidParam) { diFailed++; continue; }
-
-        const deferredUri = tskidParam.JobTemplateParameterValueDataSet &&
-                            tskidParam.JobTemplateParameterValueDataSet.__deferred
-          ? tskidParam.JobTemplateParameterValueDataSet.__deferred.uri : null;
-        if (!deferredUri) { diFailed++; continue; }
-
-        // Fetch P_TSKID value via navigation property (uses proxy-next)
-        const vd     = await apiJsonNext(deferredUri + '?$format=json');
-        const vals   = (vd.d && vd.d.results) ? vd.d.results : (vd.value || []);
-        const taskId = vals.length ? (vals[0].Low || '').trim() : '';
-        if (!taskId) { diFailed++; continue; }
-
-        const key = taskId.toUpperCase();
-        if (!stepByTaskId[key]) {
-          stepByTaskId[key] = {
-            jobTemplateName: jtName,
-            jobTemplateText: templateText[jtName] || jtName,
-            stepName:        s.JobSequenceText || '',
-            stepPos:         s.JobSequencePosition || 0,
-            jceText:         s.JceText || '',
-            taskId:          taskId
-          };
-        }
-        diResolved++;
+        rows
+          .filter(r => (r.JobTemplateParameterName || '').startsWith('P_TSKID'))
+          .forEach(r => {
+            const seqName = (r.JobTemplateParameterName || '').replace(/^P_TSKID\s*/, '').trim();
+            const taskId  = (r.Low || '').trim();
+            if (seqName && taskId) seqToTaskId[seqName] = taskId;
+          });
+        docsLog(`  ✔ ${jtName}: valores cargados`, 'l-ok');
       } catch (e) {
-        docsLog(`  ⚠ Error resolviendo step ${seqName}: ${e.message}`, 'l-warn');
-        diFailed++;
+        docsLog(`  ⚠ Error cargando valores de ${jtName}: ${e.message}`, 'l-warn');
       }
     }
-    docsLog(`  ✔ ${diResolved} task IDs resueltos · ${diFailed} sin P_TSKID`, 'l-ok');
+
+    // Build final index: taskId.toUpperCase() → step info
+    const stepByTaskId = {};
+    diSteps.forEach(s => {
+      const taskId = seqToTaskId[s.JobSequenceName || ''];
+      if (!taskId) return;
+      const key = taskId.toUpperCase();
+      if (!stepByTaskId[key]) {
+        stepByTaskId[key] = {
+          jobTemplateName: s.JobTemplateName,
+          jobTemplateText: templateText[s.JobTemplateName] || s.JobTemplateName,
+          stepName:        s.JobSequenceText || '',
+          stepPos:         s.JobSequencePosition || 0,
+          jceText:         s.JceText || '',
+          taskId:          taskId
+        };
+      }
+    });
+    docsLog(`  ✔ ${Object.keys(stepByTaskId).length} task IDs indexados`, 'l-ok');
     setZjP(90);
 
     // Match each integration by actual task ID (P_TSKID.Low)
