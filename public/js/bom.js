@@ -444,7 +444,6 @@
               '<div class="ss-list bom-sugg-list"></div>' +
             '</div>' +
           '</div>' +
-          '<button class="btn btn-secondary btn-small" onclick="bomExpandAll(\'' + tab.id + '\')">⊞ Expandir</button>' +
           '<button class="btn btn-secondary btn-small" onclick="bomCollapseAll(\'' + tab.id + '\')">⊟ Colapsar</button>' +
           '<button class="btn btn-danger btn-small" onclick="bomClearSearch(\'' + tab.id + '\')">✕ Limpiar</button>' +
           '<div class="stats-row">' +
@@ -692,32 +691,6 @@
       expandedIds = {};
       bomRenderTable(tabId);
       bomRenderTabBar();
-    }
-
-    function bomExpandAll(tabId) {
-      var tab = bomGetTab(tabId);
-      if (!tab || !tab.prdid) return;
-      // Construir todo el árbol lazily antes de marcar expandedIds
-      var roots = bomGetRoots(tab);
-      bomBuildAllChildren(roots, tab._indexes);
-      // Calcular profundidad máxima ahora que el árbol está completo
-      if (tab.tree) {
-        tab.tree.locids.forEach(function (loc) {
-          var ns = tab.tree.roots[loc] || [];
-          var maxD = 0;
-          ns.forEach(function (n) { var d = getDepth(n); if (d > maxD) maxD = d; });
-          if (tab.tree.stats[loc]) tab.tree.stats[loc].max_depth = maxD;
-        });
-      }
-      tab.expandedIds = {};
-      function expNode(node) {
-        if (node._canExpand || (node.children && node.children.length > 0)) {
-          tab.expandedIds[node.id] = true;
-          if (node.children) node.children.forEach(expNode);
-        }
-      }
-      roots.forEach(expNode);
-      bomRenderTable(tabId);
     }
 
     function bomCollapseAll(tabId) {
