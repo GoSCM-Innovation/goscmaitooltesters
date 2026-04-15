@@ -1365,6 +1365,35 @@
     <!-- ═══ ZIP + JOBS MODE PANELS ═══ -->
     <div id="docs-zipjobs-panels" style="display:none">
 
+      <!-- Job Inspector -->
+      <div class="panel">
+        <div class="panel-title">🔬 Inspector de Job específico</div>
+        <p class="panel-desc">
+          Ingresa el nombre de un Job Template para ver su definición, steps y parámetros de cada step.
+        </p>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input id="zipjobs-jobname-input" type="text" class="sel-search"
+            style="flex:1;min-width:220px;max-width:480px"
+            placeholder="Ej: ASIBPTS_P_DEM_CARGA_COMPLETA"
+            onkeydown="if(event.key==='Enter') inspectJob()">
+          <button class="btn btn-primary" onclick="inspectJob()">🔬 Inspeccionar</button>
+        </div>
+        <div id="zipjobs-inspect-area" style="margin-top:14px;display:none">
+          <pre id="zipjobs-inspect-json" style="
+            background:#0d1a2e;
+            color:#a5f3fc;
+            border-radius:8px;
+            padding:14px;
+            font-size:0.78rem;
+            overflow:auto;
+            max-height:600px;
+            white-space:pre-wrap;
+            word-break:break-all;
+            border:1px solid #1e3a5f;
+          "></pre>
+        </div>
+      </div>
+
       <!-- API Explorer -->
       <div class="panel">
         <div class="panel-title">🔍 Explorador de API — BC_EXT_APPJOB_MANAGEMENT</div>

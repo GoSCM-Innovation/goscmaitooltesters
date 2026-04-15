@@ -1414,6 +1414,161 @@ async function fetchEntitySample(entityName) {
   }
 }
 
+// ── Inspeccionar un job específico ───────────────────────────
+async function inspectJob() {
+  const name  = (document.getElementById('zipjobs-jobname-input').value || '').trim();
+  const area  = document.getElementById('zipjobs-inspect-area');
+  const pre   = document.getElementById('zipjobs-inspect-json');
+  if (!name) { pre.textContent = '⚠ Ingresa un nombre de job.'; area.style.display = ''; return; }
+  if (!CFG || !CFG.url || !CFG.user || !CFG.pass) {
+    pre.textContent = '⚠ Debes estar conectado a SAP IBP.'; area.style.display = ''; return;
+  }
+
+  pre.textContent = 'Consultando…';
+  area.style.display = '';
+
+  const base   = CFG.url + SVC_APPJOB;
+  const result = {};
+
+  // 1 — Resolver JobTemplateName real: buscar en JobTemplateSet
+  //     Primero intenta exacto (nombre técnico o texto), luego substring como fallback.
+  pre.textContent = 'Buscando job template…';
+  let allTemplates = [];
+  try {
+    allTemplates = await fetchAllPages(base + '/JobTemplateSet', null);
+  } catch (e) { result._error = '✗ No se pudo obtener JobTemplateSet: ' + e.message; pre.textContent = JSON.stringify(result, null, 2); return; }
+
+  const nameLower = name.toLowerCase();
+
+  // Exact match primero
+  let matched = allTemplates.filter(t =>
+    (t.JobTemplateName || '').toLowerCase() === nameLower ||
+    (t.JobTemplateText || '').toLowerCase() === nameLower ||
+    (t.Text || '').toLowerCase() === nameLower
+  );
+  // Substring como fallback
+  if (!matched.length) {
+    matched = allTemplates.filter(t =>
+      (t.JobTemplateName || '').toLowerCase().includes(nameLower) ||
+      (t.JobTemplateText || '').toLowerCase().includes(nameLower)
+    );
+    if (matched.length) result._aviso_substring = `Sin match exacto — encontrados ${matched.length} resultado(s) por substring.`;
+  }
+
+  if (!matched.length) {
+    result._aviso = `No se encontró ningún job template con nombre o texto "${name}".`;
+    result._total_templates = allTemplates.length;
+    pre.textContent = JSON.stringify(result, null, 2);
+    return;
+  }
+
+  // Solo mostrar campos relevantes del template (no los __deferred navegation links)
+  result.JobTemplateSet = matched.map(t => ({
+    JobTemplateName:    t.JobTemplateName,
+    JobTemplateVersion: t.JobTemplateVersion,
+    JobTemplateText:    t.JobTemplateText,
+    Text:               t.Text,
+    JobTemplateStepCount: t.JobTemplateStepCount,
+  }));
+
+  // Usar el primer match
+  const template      = matched[0];
+  const jtName        = template.JobTemplateName;
+  const jtVer         = template.JobTemplateVersion || '0';
+  const encNameFilter = encodeURIComponent(
+    "JobTemplateName eq '" + jtName.replace(/'/g,"''") + "' and JobTemplateVersion eq '" + jtVer + "'"
+  );
+  if (matched.length > 1) {
+    result._aviso_multiples = `${matched.length} matches — usando el primero: "${jtName}"`;
+  }
+
+  pre.textContent = 'Consultando steps y parámetros para ' + jtName + '…';
+
+  // 2 — JobTemplateSequenceSet filtrado por JobTemplateName real
+  let steps = [];
+  try {
+    const d = await apiJson(base + '/JobTemplateSequenceSet?$filter=' + encNameFilter + '&$format=json');
+    steps = (d.d && d.d.results) ? d.d.results : (d.value || []);
+    result.JobTemplateSequenceSet = steps;
+  } catch (e) { result.JobTemplateSequenceSet = '✗ ' + e.message; }
+
+  // 3 — JobTemplateParameterSet por cada step (paralelo)
+  if (steps.length) {
+    result.JobTemplateParameterSet_porStep = {};
+    await Promise.all(steps.map(async s => {
+      const seqName   = s.JobSequenceName || '';
+      const seqFilter = encodeURIComponent(
+        "JobTemplateName eq '" + jtName.replace(/'/g,"''") + "' and JobTemplateVersion eq '" + jtVer + "'" +
+        (seqName ? " and JobSequenceName eq '" + seqName.replace(/'/g,"''") + "'" : "")
+      );
+      const key = 'pos' + (s.JobSequencePosition || '?') + ' — ' + (s.JobSequenceText || seqName || 'root');
+      try {
+        const d = await apiJson(base + '/JobTemplateParameterSet?$filter=' + seqFilter + '&$format=json');
+        result.JobTemplateParameterSet_porStep[key] = (d.d && d.d.results) ? d.d.results : (d.value || []);
+      } catch (e) {
+        result.JobTemplateParameterSet_porStep[key] = '✗ ' + e.message;
+      }
+    }));
+  }
+
+  // 3.5 — Para steps DATA INTEGRATION, obtener solo el valor de P_TSKID
+  //        (el identificador técnico real del task CI-DS).
+  //        Procesa secuencialmente para no saturar el rate limiter.
+  const diSteps = steps.filter(s => (s.JceText || '').toUpperCase().includes(JCE_DATA_INT));
+  if (diSteps.length) {
+    result.ParamValues_DI = {};
+    pre.textContent = `Leyendo P_TSKID para ${diSteps.length} step(s) DATA INTEGRATION…`;
+
+    for (const s of diSteps) {
+      const pos = s.JobSequencePosition || '?';
+      const key = 'pos' + pos + ' — ' + (s.JobSequenceText || s.JobSequenceName || 'root');
+
+      // Retrieve already-fetched params for this step
+      const paramKey = Object.keys(result.JobTemplateParameterSet_porStep || {})
+        .find(k => k.startsWith('pos' + pos + ' '));
+      const params = paramKey ? (result.JobTemplateParameterSet_porStep[paramKey] || []) : [];
+
+      if (!Array.isArray(params) || !params.length) {
+        result.ParamValues_DI[key] = '(sin parámetros)';
+        continue;
+      }
+
+      // Only fetch P_TSKID — the field that holds the actual CI-DS task name
+      const tskidParam = params.find(p => (p.JobTemplateParameterName || '').startsWith('P_TSKID'));
+      if (!tskidParam) {
+        result.ParamValues_DI[key] = '(sin parámetro P_TSKID)';
+        continue;
+      }
+
+      const deferredUri = tskidParam.JobTemplateParameterValueDataSet &&
+                          tskidParam.JobTemplateParameterValueDataSet.__deferred
+        ? tskidParam.JobTemplateParameterValueDataSet.__deferred.uri
+        : null;
+
+      if (!deferredUri) { result.ParamValues_DI[key] = '(sin URI deferred)'; continue; }
+
+      try {
+        const data     = await apiJsonNext(deferredUri + '?$format=json');
+        const results2 = (data.d && data.d.results) ? data.d.results : (data.value || []);
+        result.ParamValues_DI[key] = results2.length
+          ? { P_TSKID_Low: results2[0].Low || '', P_TSKID_raw: results2[0] }
+          : '(P_TSKID vacío — sin valor configurado)';
+      } catch (e) {
+        result.ParamValues_DI[key] = '✗ ' + e.message;
+      }
+    }
+  }
+
+  // 4 — JobTemplateParamSectionSet
+  try {
+    const d = await apiJson(base + '/JobTemplateParamSectionSet?$filter=' + encNameFilter + '&$format=json');
+    result.JobTemplateParamSectionSet = (d.d && d.d.results) ? d.d.results : (d.value || []);
+  } catch (e) { result.JobTemplateParamSectionSet = '✗ ' + e.message; }
+
+  pre.textContent = JSON.stringify(result, null, 2);
+  area.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 // ── Probar todas las entidades (auto-test) ────────────────────
 async function probarTodasEntidades() {
   const btn = document.getElementById('zipjobs-probar-btn');
@@ -1585,24 +1740,72 @@ async function generateZipJobs() {
       templateText[t.JobTemplateName] = t.JobTemplateText || t.Text || t.JobTemplateName;
     });
 
-    // Build lookup: JobSequenceText.toUpperCase() → step info
-    const stepByName = {};
-    allSteps.forEach(s => {
-      const key = (s.JobSequenceText || '').toUpperCase().trim();
-      if (key) stepByName[key] = {
-        jobTemplateName: s.JobTemplateName,
-        jobTemplateText: templateText[s.JobTemplateName] || s.JobTemplateName,
-        stepName:        s.JobSequenceText || '',
-        stepPos:         s.JobSequencePosition || 0,
-        jceText:         s.JceText || ''
-      };
-    });
+    // Build lookup: P_TSKID.Low → step info
+    // P_TSKID is a parameter of each DATA INTEGRATION step that holds the actual
+    // CI-DS task name, even when JobSequenceText has been renamed by the user.
+    // We resolve this sequentially (one step at a time) to stay within rate limits.
+    const diSteps = allSteps.filter(s => (s.JceText || '').toUpperCase().includes(JCE_DATA_INT));
+    docsLog(`  🔍 Resolviendo P_TSKID para ${diSteps.length} step(s) DATA INTEGRATION…`, 'l-info');
 
-    // Match each integration
+    const stepByTaskId = {};
+    const appjobBase   = CFG.url + SVC_APPJOB;
+    let diResolved = 0, diFailed = 0;
+
+    for (const s of diSteps) {
+      const jtName  = s.JobTemplateName  || '';
+      const jtVer   = s.JobTemplateVersion || '0';
+      const seqName = s.JobSequenceName  || '';
+
+      try {
+        // Fetch parameters for this step (filtered by template + sequence)
+        const seqFilter = encodeURIComponent(
+          "JobTemplateName eq '" + jtName.replace(/'/g,"''") + "'" +
+          " and JobTemplateVersion eq '" + jtVer + "'" +
+          " and JobSequenceName eq '" + seqName.replace(/'/g,"''") + "'"
+        );
+        const pd = await apiJson(appjobBase + '/JobTemplateParameterSet?$filter=' + seqFilter + '&$format=json');
+        const params = (pd.d && pd.d.results) ? pd.d.results : (pd.value || []);
+
+        // Find P_TSKID parameter
+        const tskidParam = params.find(p => (p.JobTemplateParameterName || '').startsWith('P_TSKID'));
+        if (!tskidParam) { diFailed++; continue; }
+
+        const deferredUri = tskidParam.JobTemplateParameterValueDataSet &&
+                            tskidParam.JobTemplateParameterValueDataSet.__deferred
+          ? tskidParam.JobTemplateParameterValueDataSet.__deferred.uri : null;
+        if (!deferredUri) { diFailed++; continue; }
+
+        // Fetch P_TSKID value via navigation property (uses proxy-next)
+        const vd     = await apiJsonNext(deferredUri + '?$format=json');
+        const vals   = (vd.d && vd.d.results) ? vd.d.results : (vd.value || []);
+        const taskId = vals.length ? (vals[0].Low || '').trim() : '';
+        if (!taskId) { diFailed++; continue; }
+
+        const key = taskId.toUpperCase();
+        if (!stepByTaskId[key]) {
+          stepByTaskId[key] = {
+            jobTemplateName: jtName,
+            jobTemplateText: templateText[jtName] || jtName,
+            stepName:        s.JobSequenceText || '',
+            stepPos:         s.JobSequencePosition || 0,
+            jceText:         s.JceText || '',
+            taskId:          taskId
+          };
+        }
+        diResolved++;
+      } catch (e) {
+        docsLog(`  ⚠ Error resolviendo step ${seqName}: ${e.message}`, 'l-warn');
+        diFailed++;
+      }
+    }
+    docsLog(`  ✔ ${diResolved} task IDs resueltos · ${diFailed} sin P_TSKID`, 'l-ok');
+    setZjP(90);
+
+    // Match each integration by actual task ID (P_TSKID.Low)
     let matched = 0, unmatched = 0;
     for (const item of parsedIntegrations) {
       const key = (item.parsed.jobName || '').toUpperCase().trim();
-      const hit = stepByName[key];
+      const hit = stepByTaskId[key];
       if (hit) {
         item.paramRow.ibpJobName  = hit.jobTemplateText;
         item.paramRow.ibpStepName = hit.stepName;
