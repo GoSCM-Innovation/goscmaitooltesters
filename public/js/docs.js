@@ -3,6 +3,7 @@
 //  STATE
 // ════════════════════════════════════════════════════════════
 let files = [];
+let zipAtlFiles = [];          // [{name, text}] — ATL files for ZIP mode (optional)
 let xlsBuf = null;
 let parsedIntegrations = [];   // [{sheetName, pkg, parsed, paramRow}] — filled after scan
 
@@ -94,6 +95,33 @@ function renderFiles() {
       <button class="rm" onclick="removeFile(${i})">✕</button>
     </div>`).join('');
   document.getElementById('gen-btn').disabled = files.length === 0;
+}
+
+// ── ZIP mode ATL drop zone (optional) ───────────────────────
+function initZipAtlDropZone() {
+  const dz = document.getElementById('zip-atl-dz');
+  if (!dz) return;
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+  dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag-over'); addZipAtlFiles([...e.dataTransfer.files]); });
+  document.getElementById('zip-atl-fi').addEventListener('change', e => addZipAtlFiles([...e.target.files]));
+}
+function addZipAtlFiles(list) {
+  list.filter(f => f.name.endsWith('.atl') || f.name.endsWith('.txt')).forEach(f => {
+    if (zipAtlFiles.find(x => x.name === f.name)) return;
+    const r = new FileReader();
+    r.onload = ev => { zipAtlFiles.push({ name: f.name, text: ev.target.result }); renderZipAtlFiles(); };
+    r.readAsText(f);
+  });
+}
+function removeZipAtlFile(i) { zipAtlFiles.splice(i, 1); renderZipAtlFiles(); }
+function renderZipAtlFiles() {
+  document.getElementById('zip-atl-file-list').innerHTML = zipAtlFiles.map((f, i) => `
+    <div class="file-tag">
+      <span class="ico">📋</span>
+      <span class="name">${escH(f.name)}</span>
+      <button class="rm" onclick="removeZipAtlFile(${i})">✕</button>
+    </div>`).join('');
 }
 
 // ════════════════════════════════════════════════════════════
@@ -795,6 +823,9 @@ function buildParamSheet(rows, jobsMode) {
     headers.push({v:'Step',         s:XF.PRM_HDR});
     headers.push({v:'Tipo de paso', s:XF.PRM_HDR});
     headers.push({v:'Grupo',        s:XF.PRM_HDR});
+  } else {
+    headers.push({v:'Proceso',      s:XF.PRM_HDR});
+    headers.push({v:'Grupo',        s:XF.PRM_HDR});
   }
   headers.push(
     {v:'Task CI-DS',             s:XF.PRM_HDR},
@@ -817,6 +848,9 @@ function buildParamSheet(rows, jobsMode) {
       row.push({v: p.ibpStepName || '', s: XF.PRM_DEF});
       row.push({v: p.ibpStepType || '', s: XF.PRM_DEF});
       row.push({v: p.atlGroup    || '', s: XF.PRM_DEF});
+    } else {
+      row.push({v: p.atlSession  || '', s: XF.PRM_DEF});
+      row.push({v: p.atlGroup    || '', s: XF.PRM_DEF});
     }
     row.push(
       {v: p.jobName || '',      s: XF.PRM_ABC},
@@ -832,7 +866,7 @@ function buildParamSheet(rows, jobsMode) {
 
   const widths = jobsMode
     ? [33.4, 20, 40, 35, 40, 25, 64.6, 35.9, 71.1, 71.1, 79.2]
-    : [33.4, 20, 64.6, 35.9, 71.1, 71.1, 79.2];
+    : [33.4, 20, 30, 22, 64.6, 35.9, 71.1, 71.1, 79.2];
   sb.setColWidths(widths);
   return sb;
 }
@@ -1112,7 +1146,8 @@ async function generate() {
           tipoIntegracion: parsed.tipoIntegracion,
           dataflowName: parsed.dataflowName,
           srcDS: srcDSName, dstDS: dstDSName,
-          targetTable, sheetName
+          targetTable, sheetName,
+          atlSession: '', atlGroup: ''
         };
         parsedIntegrations.push({ sheetName, pkg: zf.name, parsed, paramRow });
         docsLog(`  ✔ ${sheetName}  (${mappings.length} mapeos · ${filters.length} filtros · ${lookups.length} lookups)`, 'l-ok');
@@ -1212,6 +1247,27 @@ async function buildExcel() {
 
   docsLog(`📋 Generando Excel con ${selected.length} integraciones…`, 'l-info');
   setP(5);
+
+  // ── ATL enrichment for ZIP mode (optional)
+  if (docsMode === 'zip' && zipAtlFiles.length > 0) {
+    docsLog('📋 Procesando ' + zipAtlFiles.length + ' archivo(s) ATL…', 'l-info');
+    const atlEnrich = {};
+    for (const f of zipAtlFiles) {
+      const atl = parseATL(f.text);
+      const matched = matchATLtoIntegrations(atl, parsedIntegrations);
+      for (const m of matched) {
+        if (m.atlGroup && m.atlGroup !== ATL_NO_GROUP) {
+          atlEnrich[m.sheetName] = { atlGroup: m.atlGroup, atlSession: atl.sessionName };
+        }
+      }
+    }
+    parsedIntegrations.forEach(function(item) {
+      const e = atlEnrich[item.sheetName];
+      item.paramRow.atlGroup   = e ? e.atlGroup   : '';
+      item.paramRow.atlSession = e ? e.atlSession : '';
+    });
+    docsLog('  ✔ ATL procesado: ' + Object.keys(atlEnrich).length + ' dataflows mapeados', 'l-ok');
+  }
 
   // ── Fetch IBP field descriptions (MASTER_DATA_API_SRV + PLANNING_DATA_API_SRV)
   docsLog('🔍 Obteniendo descripciones de campos desde IBP…', 'l-info');
@@ -2264,6 +2320,7 @@ async function generateFromJobs() {
 
 // ── Init jobs-mode drop zones on load ────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  initZipAtlDropZone();
   initAtlDropZone();
   initJobsZipDropZone();
   initZipjobsDropZone();
