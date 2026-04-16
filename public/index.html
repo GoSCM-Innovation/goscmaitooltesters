@@ -1652,6 +1652,22 @@
           <button class="btn btn-primary" id="gen-btn" disabled onclick="generate()">⚙️ Analizar Integraciones</button>
         </div>
       </div>
+
+      <!-- ATL opcional — ZIP mode -->
+      <div class="panel" id="zip-atl-panel">
+        <div class="panel-title">📋 Archivos ATL (opcional)</div>
+        <p class="panel-desc">
+          Sube los archivos ATL de SAP Data Services para enriquecer el Excel con el nombre del
+          proceso y el grupo al que pertenece cada dataflow. Se asocian por GUID o nombre del dataflow.
+        </p>
+        <div class="drop-zone" id="zip-atl-dz">
+          <input type="file" id="zip-atl-fi" accept=".atl,.txt" multiple>
+          <span class="drop-icon">📋</span>
+          <p class="drop-title">Arrastra los ATL aquí</p>
+          <p class="drop-hint">o haz click para seleccionar &nbsp;·&nbsp; <b>Múltiples archivos</b> permitidos</p>
+        </div>
+        <div id="zip-atl-file-list"></div>
+      </div>
     </div><!-- /docs-zip-panels -->
 
     <!-- ═══ JOBS MODE PANELS ═══ -->
