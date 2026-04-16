@@ -1292,12 +1292,3 @@
   font-size: 0.82rem;
   color: var(--cyan);
 }
-
-/* ═══ ZIP + JOBS — API EXPLORER ═══ */
-.zipjobs-entity-row {
-  padding: 10px 12px;
-  border-radius: 6px;
-  background: rgba(255,255,255,0.03);
-  margin-bottom: 4px;
-}
-.zipjobs-entity-row:hover { background: rgba(255,255,255,0.06); }
