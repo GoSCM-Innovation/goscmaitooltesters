@@ -124,10 +124,46 @@ fetchAllPages(url, logEl, filter, select)
   - `vizGlobMatch(text, pattern)` — matching con wildcards
 
 ### 4. Doc Generator (pestaña)
-- Permite subir archivos ZIP de SAP CIDS conteniendo integraciones en formato XML.
-- Analiza y extrae especificaciones de integración: orígenes de datos, destinos, mapeos de campos, filtros de transformación y uso de funciones (lookups).
-- Utiliza `JSZip` y el `DOMParser` nativo del navegador para el procesamiento cliente-servidor (100% frontend).
-- Ensambla toda la documentación y descarga un archivo de Excel nativo (`.xlsx`) completamente estructurado usando JSZip sin dependencias pesadas.
+Dos modos seleccionables con toggle en la parte superior:
+
+#### Modo ZIP (original)
+- Sube archivos ZIP de SAP CI-DS con integraciones en formato XML.
+- Analiza y extrae: orígenes de datos, destinos, mapeos de campos, filtros y lookups.
+- 100% frontend: `JSZip` + `DOMParser` nativo.
+- Genera Excel nativo (`.xlsx`) con hoja Parámetros + una hoja de detalle por integración.
+
+#### Modo Application Jobs
+- Conecta a SAP IBP vía `BC_EXT_APPJOB_MANAGEMENT;v=0002` (Communication Arrangement `SAP_COM_0326`).
+- Obtiene los Application Jobs y sus pasos desde `JobTemplateSet` / `JobTemplateSequenceSet`.
+- El usuario selecciona los jobs deseados; la app carga sus pasos con `JobSequenceText` y `JceText`.
+- Pasos CI-DS (`JceText` contiene `"DATA INTEGRATION"`) se cruzan contra ATL y ZIPs subidos.
+- Pasos no-CI-DS (Copy Operator, Rule-Based, etc.) se incluyen como filas informativas sin hoja de detalle.
+- **Matching de integraciones** (en `matchATLtoIntegrations` + bloque de tareas directas):
+  - Pass 1: `atl.sessionName === step.text` (exact, case-insensitive) por GUID o display name.
+  - Pass 2: contains parcial si el paso 1 falla.
+  - Tareas directas: si un paso CI-DS no tiene ATL correspondiente, se cruza contra `parsed.jobName` de los ZIPs.
+- **ATL es opcional**: jobs que solo tienen tareas directas (sin procesos) no requieren subir ATL.
+- **Orden de filas** en el Excel: selección del usuario → posición del paso (`JobSequencePosition`) → orden ATL.
+- **Columnas en hoja Parámetros** (modo jobs): Dato | Tipo | Job IBP | Step | Tipo de paso | Grupo | Task CI-DS | Descripción | Dataflow | Fuente | Destino.
+- `FLOWof_` se elimina automáticamente del nombre de grupo ATL.
+- Funciones principales en `docs.js`:
+  - `fetchAndDisplayJobs()` — consulta IBP y muestra lista de jobs.
+  - `generateFromJobs()` — orquesta fetch de pasos, parse de ATLs/ZIPs, cruce y generación del Excel.
+  - `parseATL(text)` — parsea archivo ATL de SAP Data Services: extrae grupos, dataflows, GVs.
+  - `matchATLtoIntegrations(atlParsed, parsedInts)` — cruza sesiones ATL con integraciones de los ZIPs.
+  - `parseBatchCsv(zip)` — extrae `batch.csv` del ZIP (helper compartido con modo ZIP).
+
+#### Constantes del módulo (docs.js)
+```javascript
+const SVC_APPJOB   = '/sap/opu/odata/sap/BC_EXT_APPJOB_MANAGEMENT;v=0002';
+const JCE_DATA_INT = 'DATA INTEGRATION';  // identifica pasos CI-DS por JceText
+const ATL_NO_GROUP = 'Sin grupo ATL';
+```
+
+#### proxy en server.js — soporte multi-namespace
+- `api/proxy` acepta campo `prefix` (`"IBP"` o `"SAP"`) para seleccionar el prefijo OData correcto.
+- `ALLOWED_SERVICES` incluye `BC_EXT_APPJOB_MANAGEMENT` (sin versión — el strip de `;v=...` ocurre en `validateService`).
+- `proxy-next` acepta URLs con path `/sap/opu/odata/ibp/` o `/sap/opu/odata/sap/`.
 
 ### 5. Requisitos técnicos (header)
 - Panel desplegable en el header
@@ -179,10 +215,11 @@ var CPR_BY_SID = {};                        // Co-productos por SOURCEID
 - Usar `.env` local para desarrollo; `.env.example` con placeholders genéricos para documentar las variables requeridas
 
 ### Proxy al backend (server.js)
-- El cliente nunca envía URLs completas al proxy — solo componentes estructurados: `{ base, service, path, query }`
-- El servidor valida cada componente por separado: dominio en allowlist, service en allowlist, path con regex estricto
-- Para agregar un nuevo servicio SAP permitido, actualizar `ALLOWED_SERVICES` en `server.js`
-- Los links de paginación SAP (`__next`) usan el endpoint `/api/proxy-next`, nunca `/api/proxy`
+- El cliente nunca envía URLs completas al proxy — solo componentes estructurados: `{ base, service, path, query, prefix }`
+- `prefix` es `"IBP"` o `"SAP"` según el namespace OData; el servidor lo usa para seleccionar el prefijo de path correcto vía `PREFIX_MAP`.
+- El servidor valida cada componente por separado: dominio en allowlist, service en allowlist (strip de `;v=...` antes de comparar), path con regex estricto.
+- Para agregar un nuevo servicio SAP permitido, actualizar `ALLOWED_SERVICES` en `server.js`.
+- Los links de paginación SAP (`__next`) usan el endpoint `/api/proxy-next`, nunca `/api/proxy`.
 
 ### Frontend — renderizado de datos externos
 - Todo valor proveniente de fuentes externas (archivos subidos, respuestas de API, localStorage) debe escaparse con `escH()` antes de insertarse en `innerHTML`
@@ -221,4 +258,3 @@ Al agregar un endpoint nuevo:
 - Las credenciales se configuran como variables de entorno en Vercel Dashboard → Settings → Environment Variables
 - Variables requeridas: `EMAILJS_SERVICE_ID`, `EMAILJS_TEMPLATE_ID`, `EMAILJS_PUBLIC_KEY`, `EMAILJS_PRIVATE_KEY`
 - Ver `.env.example` para la lista completa de variables con placeholders
-- **Destinatario:** gerardo.ahumada@go-scm.com

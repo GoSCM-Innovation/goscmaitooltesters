@@ -1614,6 +1614,7 @@
     <div class="docs-mode-toggle">
       <button class="mode-btn active" id="mode-zip" onclick="switchDocsMode('zip')">📦 Desde archivos ZIP</button>
       <button class="mode-btn" id="mode-jobs" onclick="switchDocsMode('jobs')">🔄 Desde Application Jobs</button>
+      <button class="mode-btn" id="mode-zipjobs" onclick="switchDocsMode('zipjobs')">🔗 ZIP + Jobs</button>
     </div>
 
     <!-- PRO TIP BANNER -->
@@ -1730,6 +1731,36 @@
       </div>
 
     </div><!-- /docs-jobs-panels -->
+
+    <!-- ═══ ZIP + JOBS MODE PANELS ═══ -->
+    <div id="docs-zipjobs-panels" style="display:none">
+
+      <!-- ZIP Upload (zip+jobs mode) -->
+      <div class="panel" id="zipjobs-zip-panel">
+        <div class="panel-title">📦 Archivos ZIP de integraciones CI-DS</div>
+        <p class="panel-desc">
+          Sube los mismos ZIPs de CI-DS que usarías en el modo ZIP. El sistema los analiza y
+          <b>enriquece automáticamente</b> con los Jobs y Steps de SAP IBP usando
+          <code>JobTemplateSequenceSet</code>.
+        </p>
+        <div class="drop-zone" id="zipjobs-dz">
+          <input type="file" id="zipjobs-fi" accept=".zip" multiple>
+          <span class="drop-icon">🗂️</span>
+          <p class="drop-title">Arrastra los ZIP aquí</p>
+          <p class="drop-hint">o haz click para seleccionar &nbsp;·&nbsp; <b>Múltiples archivos</b> permitidos</p>
+        </div>
+        <div id="zipjobs-file-list"></div>
+        <div class="progress-wrap" id="zipjobs-pw">
+          <div class="progress-bar" id="zipjobs-pb"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="zipjobs-gen-btn" disabled onclick="generateZipJobs()">
+            ⚙️ Analizar ZIPs + Enriquecer con Jobs IBP
+          </button>
+        </div>
+      </div>
+
+    </div><!-- /docs-zipjobs-panels -->
 
     <!-- SELECTION PANEL -->
     <div class="panel" id="sel-card" style="display:none">

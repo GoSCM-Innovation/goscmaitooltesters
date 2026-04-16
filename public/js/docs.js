@@ -1249,7 +1249,7 @@ async function buildExcel() {
   }
 
   docsLog('📋 Generando hoja Parámetros…', 'l-info');
-  const paramSb = buildParamSheet(paramRows);
+  const paramSb = buildParamSheet(paramRows, docsMode === 'zipjobs');
   sheets.unshift({ name: 'Parámetros', sb: paramSb });
 
   docsLog('📦 Ensamblando archivo Excel…', 'l-info');
@@ -1270,13 +1270,233 @@ async function buildExcel() {
 // ── Mode switcher ────────────────────────────────────────────
 function switchDocsMode(mode) {
   docsMode = mode;
-  document.getElementById('docs-zip-panels').style.display = mode === 'zip' ? '' : 'none';
-  document.getElementById('docs-jobs-panels').style.display = mode === 'jobs' ? '' : 'none';
-  document.getElementById('mode-zip').classList.toggle('active', mode === 'zip');
-  document.getElementById('mode-jobs').classList.toggle('active', mode === 'jobs');
+  document.getElementById('docs-zip-panels').style.display    = mode === 'zip'     ? '' : 'none';
+  document.getElementById('docs-jobs-panels').style.display   = mode === 'jobs'    ? '' : 'none';
+  document.getElementById('docs-zipjobs-panels').style.display = mode === 'zipjobs' ? '' : 'none';
+  document.getElementById('mode-zip').classList.toggle('active',     mode === 'zip');
+  document.getElementById('mode-jobs').classList.toggle('active',    mode === 'jobs');
+  document.getElementById('mode-zipjobs').classList.toggle('active', mode === 'zipjobs');
   // Hide shared panels when switching
   document.getElementById('sel-card').style.display = 'none';
   document.getElementById('stats-card').style.display = 'none';
+}
+
+// ── ZIP+Jobs mode drop zone ──────────────────────────────────
+let zipjobsFiles = [];   // [{name, data: ArrayBuffer}]
+
+function initZipjobsDropZone() {
+  const dz = document.getElementById('zipjobs-dz');
+  if (!dz) return;
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+  dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag-over'); addZipjobsFiles([...e.dataTransfer.files]); });
+  document.getElementById('zipjobs-fi').addEventListener('change', e => addZipjobsFiles([...e.target.files]));
+}
+
+function addZipjobsFiles(list) {
+  list.filter(f => f.name.endsWith('.zip')).forEach(f => {
+    if (zipjobsFiles.find(x => x.name === f.name)) return;
+    const r = new FileReader();
+    r.onload = ev => { zipjobsFiles.push({ name: f.name, data: ev.target.result }); renderZipjobsFiles(); };
+    r.readAsArrayBuffer(f);
+  });
+}
+
+function removeZipjobsFile(i) { zipjobsFiles.splice(i, 1); renderZipjobsFiles(); }
+
+function renderZipjobsFiles() {
+  document.getElementById('zipjobs-file-list').innerHTML = zipjobsFiles.map((f, i) => `
+    <div class="file-tag">
+      <span class="ico">📦</span>
+      <span class="name">${escH(f.name)}</span>
+      <span class="size">${(f.data.byteLength/1024).toFixed(0)} KB</span>
+      <button class="rm" onclick="removeZipjobsFile(${i})">✕</button>
+    </div>`).join('');
+  const btn = document.getElementById('zipjobs-gen-btn');
+  if (btn) btn.disabled = zipjobsFiles.length === 0;
+}
+
+function setZjP(p) {
+  document.getElementById('zipjobs-pw').style.display = 'block';
+  document.getElementById('zipjobs-pb').style.width = p + '%';
+}
+
+// ════════════════════════════════════════════════════════════
+//  GENERATE — ZIP + Jobs mode
+//  1. Scan ZIPs (same logic as ZIP mode)
+//  2. Fetch JobTemplateSet + JobTemplateSequenceSet from IBP
+//  3. Auto-match parsed.jobName → step.JobSequenceText
+//  4. Enrich paramRow with ibpJobName, ibpStepName, ibpStepPos
+//  5. renderSelList() — same selection panel as ZIP mode
+// ════════════════════════════════════════════════════════════
+async function generateZipJobs() {
+  docsLogEl.innerHTML = '';
+  docsLogEl.style.display = 'block';
+  docsLogHint.style.display = 'none';
+  document.getElementById('stats-card').style.display = 'none';
+  document.getElementById('sel-card').style.display = 'none';
+  document.getElementById('zipjobs-gen-btn').disabled = true;
+  xlsBuf = null;
+  parsedIntegrations = [];
+
+  docsLog('📦 Escaneando ZIPs…', 'l-info');
+  setZjP(2);
+
+  const usedNames = new Set();
+  function uniq(base) {
+    let clean = base.replace(/[:\\\/\?\*\[\]]/g, '_').substring(0, 28);
+    let n = clean, k = 0;
+    while (usedNames.has(n)) n = clean.substring(0, 25) + '_' + (++k);
+    usedNames.add(n); return n;
+  }
+
+  // ── Phase 1: scan ZIPs ──────────────────────────────────
+  let done = 0;
+  for (const zf of zipjobsFiles) {
+    docsLog(`📦 ${zf.name}`, 'l-info');
+    let zip;
+    try { zip = await JSZip.loadAsync(zf.data); }
+    catch (e) { docsLog(`  ✗ ${e.message}`, 'l-err'); continue; }
+
+    const batchMap = await parseBatchCsv(zip);
+    docsLog(`  ✔ batch.csv: ${Object.keys(batchMap).length} entradas`, 'l-ok');
+
+    const xmlNames = Object.keys(zip.files).filter(n => n.endsWith('.xml') && !n.includes('/'));
+    docsLog(`  📄 ${xmlNames.length} XMLs`, 'l-line');
+
+    for (let xi = 0; xi < xmlNames.length; xi++) {
+      const fname = xmlNames[xi];
+      setZjP(2 + Math.round(45 * (done + (xi + 1) / xmlNames.length) / zipjobsFiles.length));
+
+      let xmlStr;
+      try { xmlStr = await zip.file(fname).async('string'); }
+      catch (e) { docsLog(`  ✗ ${fname}: ${e.message}`, 'l-err'); continue; }
+
+      let dfResults;
+      try { dfResults = parseIntegration(xmlStr, batchMap[fname] || {}); }
+      catch (e) { docsLog(`  ✗ Parse ${fname}: ${e.message}`, 'l-err'); continue; }
+      if (!dfResults || !dfResults.length) { docsLog(`  ⚠ Sin DataFlows: ${fname}`, 'l-warn'); continue; }
+
+      const multiDF = dfResults.length > 1;
+      for (const parsed of dfResults) {
+        const { jobName, jobDesc, srcDSName, dstDSName, targetTable } = parsed;
+        const baseName  = jobName || fname.replace('.xml', '');
+        const sheetName = multiDF ? uniq(baseName + '_' + targetTable) : uniq(baseName);
+        const paramRow  = {
+          jobName, jobDesc,
+          tipoIntegracion: parsed.tipoIntegracion,
+          dataflowName:    parsed.dataflowName,
+          srcDS: srcDSName, dstDS: dstDSName,
+          targetTable, sheetName,
+          // IBP enrichment (filled in phase 2)
+          ibpJobName: '', ibpStepName: '', ibpStepType: '', atlGroup: ''
+        };
+        parsedIntegrations.push({ sheetName, pkg: zf.name, parsed, paramRow });
+        docsLog(`  ✔ ${sheetName}  (${parsed.mappings.length} mapeos · ${parsed.filters.length} filtros)`, 'l-ok');
+      }
+    }
+    done++;
+  }
+
+  docsLog(`✔ ${parsedIntegrations.length} integraciones encontradas`, 'l-ok');
+  setZjP(50);
+
+  // ── Phase 2: fetch IBP job steps and auto-match ──────────
+  if (CFG && CFG.url && CFG.user && CFG.pass && parsedIntegrations.length) {
+    docsLog('🔍 Obteniendo JobTemplateSet desde IBP…', 'l-info');
+    let allTemplates = [], allSteps = [];
+    try {
+      allTemplates = await fetchAllPages(CFG.url + SVC_APPJOB + '/JobTemplateSet', docsLogEl);
+      docsLog(`  ✔ ${allTemplates.length} job templates`, 'l-ok');
+    } catch (e) {
+      docsLog('  ⚠ No se pudo obtener JobTemplateSet: ' + e.message, 'l-warn');
+    }
+    setZjP(65);
+
+    try {
+      docsLog('🔍 Obteniendo JobTemplateSequenceSet…', 'l-info');
+      allSteps = await fetchAllPages(CFG.url + SVC_APPJOB + '/JobTemplateSequenceSet', docsLogEl);
+      docsLog(`  ✔ ${allSteps.length} steps`, 'l-ok');
+    } catch (e) {
+      docsLog('  ⚠ No se pudo obtener JobTemplateSequenceSet: ' + e.message, 'l-warn');
+    }
+    setZjP(80);
+
+    // Build lookup: JobTemplateName → JobTemplateText
+    const templateText = {};
+    allTemplates.forEach(t => {
+      templateText[t.JobTemplateName] = t.JobTemplateText || t.Text || t.JobTemplateName;
+    });
+
+    // Build lookup: P_TSKID.Low → step info
+    // Una sola call filtrando por startswith(JobTemplateParameterName,'P_TSKID')
+    // trae todos los task IDs de todos los templates y versiones en una sola respuesta.
+    const diSteps    = allSteps.filter(s => (s.JceText || '').toUpperCase().includes(JCE_DATA_INT));
+    const appjobBase = CFG.url + SVC_APPJOB;
+
+    docsLog(`  🔍 Obteniendo P_TSKID para ${diSteps.length} steps DATA INTEGRATION…`, 'l-info');
+
+    // seqName → taskId
+    const seqToTaskId = {};
+    try {
+      const rows = await fetchAllPages(
+        appjobBase + '/JobTemplateParameterValueDataSet', docsLogEl,
+        "startswith(JobTemplateParameterName,'P_TSKID') eq true"
+      );
+      rows.forEach(r => {
+        const seqName = (r.JobTemplateParameterName || '').replace(/^P_TSKID\s*/, '').trim();
+        const taskId  = (r.Low || '').trim();
+        if (seqName && taskId) seqToTaskId[seqName] = taskId;
+      });
+      docsLog(`  ✔ ${rows.length} entradas P_TSKID cargadas`, 'l-ok');
+    } catch (e) {
+      docsLog(`  ⚠ startswith no soportado, sin match de jobs: ${e.message}`, 'l-warn');
+    }
+
+    // Build final index: taskId.toUpperCase() → step info
+    const stepByTaskId = {};
+    diSteps.forEach(s => {
+      const taskId = seqToTaskId[s.JobSequenceName || ''];
+      if (!taskId) return;
+      const key = taskId.toUpperCase();
+      if (!stepByTaskId[key]) {
+        stepByTaskId[key] = {
+          jobTemplateName: s.JobTemplateName,
+          jobTemplateText: templateText[s.JobTemplateName] || s.JobTemplateName,
+          stepName:        s.JobSequenceText || '',
+          stepPos:         s.JobSequencePosition || 0,
+          jceText:         s.JceText || '',
+          taskId:          taskId
+        };
+      }
+    });
+    docsLog(`  ✔ ${Object.keys(stepByTaskId).length} task IDs indexados`, 'l-ok');
+    setZjP(90);
+
+    // Match each integration by actual task ID (P_TSKID.Low)
+    let matched = 0, unmatched = 0;
+    for (const item of parsedIntegrations) {
+      const key = (item.parsed.jobName || '').toUpperCase().trim();
+      const hit = stepByTaskId[key];
+      if (hit) {
+        item.paramRow.ibpJobName  = hit.jobTemplateText;
+        item.paramRow.ibpStepName = hit.stepName;
+        item.paramRow.ibpStepType = hit.jceText;
+        matched++;
+        docsLog(`  📌 "${item.parsed.jobName}" → Job: "${hit.jobTemplateText}" (pos ${hit.stepPos})`, 'l-ok');
+      } else {
+        unmatched++;
+        docsLog(`  ⚠ "${item.parsed.jobName}" sin match en IBP`, 'l-warn');
+      }
+    }
+    docsLog(`✔ Match: ${matched} encontrados · ${unmatched} sin match`, matched > 0 ? 'l-ok' : 'l-warn');
+  } else {
+    docsLog('ℹ Sin conexión a IBP — las columnas Job/Step quedarán vacías.', 'l-info');
+  }
+
+  setZjP(100);
+  document.getElementById('zipjobs-gen-btn').disabled = false;
+  renderSelList();
 }
 
 // ── ATL file handling ────────────────────────────────────────
@@ -1723,7 +1943,7 @@ async function generateFromJobs() {
       const job = fetchedJobs[selectedJobIdxs[ji]];
       if (!job) return [];
       const jtName = job.JobTemplateName || '';
-      const jtVer  = job.JobTemplateVersion || '0';
+      const jtVer  = String(job.JobTemplateVersion || '0').replace(/'/g, "''");
       if (!jtName) return [];
       try {
         const filter = "JobTemplateName eq '" + jtName.replace(/'/g,"''") + "' and JobTemplateVersion eq '" + jtVer + "'";
@@ -1735,7 +1955,7 @@ async function generateFromJobs() {
           docsLog('    pos=' + s.JobSequencePosition + ' → ' + (s.JobSequenceText || s.JceText || ''), 'l-info');
         });
         return steps.map(function(s) {
-          return { pos: s.JobSequencePosition || 0, text: s.JobSequenceText || s.JceText || '', jceText: s.JceText || '' };
+          return { pos: s.JobSequencePosition || 0, text: s.JobSequenceText || s.JceText || '', jceText: s.JceText || '', seqName: s.JobSequenceName || '', taskId: '' };
         });
       } catch(e) {
         docsLog('  ⚠ No se pudieron obtener pasos de ' + jtName + ': ' + e.message, 'l-warn');
@@ -1744,6 +1964,27 @@ async function generateFromJobs() {
     });
     const stepResults = await Promise.all(stepFetches);
     stepResults.forEach(function(steps, ji) { stepMap[ji] = steps; });
+
+    // ── Resolve P_TSKID: una sola call trae el task ID técnico de CI-DS para cada step,
+    //    independiente de cómo el usuario haya renombrado el paso en IBP.
+    const seqToTaskId = {};
+    try {
+      const tskidRows = await fetchAllPages(
+        CFG.url + SVC_APPJOB + '/JobTemplateParameterValueDataSet', null,
+        "startswith(JobTemplateParameterName,'P_TSKID') eq true"
+      );
+      tskidRows.forEach(function(r) {
+        const seqName = (r.JobTemplateParameterName || '').replace(/^P_TSKID\s*/, '').trim();
+        const taskId  = (r.Low || '').trim();
+        if (seqName && taskId) seqToTaskId[seqName] = taskId;
+      });
+      docsLog('  ✔ ' + Object.keys(seqToTaskId).length + ' task IDs resueltos via P_TSKID', 'l-ok');
+    } catch(e) {
+      docsLog('  ⚠ P_TSKID no disponible, usando JobSequenceText como fallback: ' + e.message, 'l-warn');
+    }
+    Object.values(stepMap).forEach(function(steps) {
+      steps.forEach(function(s) { s.taskId = seqToTaskId[s.seqName] || ''; });
+    });
   }
 
   // ── Parse ATL files
@@ -1846,15 +2087,23 @@ async function generateFromJobs() {
       let ibpJobIdxForAtl = Math.min(ai, selectedJobIdxs.length - 1);
       let ibpJobNameForAtl = selectedJobNames[ibpJobIdxForAtl] || selectedJobNames[selectedJobNames.length - 1] || '';
 
-      // Pass 1: exact match (text === sessionName)
+      // Pass 1: exact match por taskId (P_TSKID — técnico, invariable) o por text (fallback)
       for (let ji = 0; ji < selectedJobIdxs.length; ji++) {
-        const step = (stepMap[ji] || []).find(s => s.text.toUpperCase() === sessionUC);
+        const step = (stepMap[ji] || []).find(s =>
+          (s.taskId && s.taskId.toUpperCase() === sessionUC) ||
+          s.text.toUpperCase() === sessionUC
+        );
         if (step) { matchedStep = step; ibpJobIdxForAtl = ji; ibpJobNameForAtl = selectedJobNames[ji] || ibpJobNameForAtl; break; }
       }
-      // Pass 2: partial contains
+      // Pass 2: contains parcial — también contra taskId
       if (!matchedStep) {
         for (let ji = 0; ji < selectedJobIdxs.length; ji++) {
-          const step = (stepMap[ji] || []).find(s => s.text.toUpperCase().includes(sessionUC) || sessionUC.includes(s.text.toUpperCase()));
+          const step = (stepMap[ji] || []).find(s => {
+            const tid = (s.taskId || '').toUpperCase();
+            const txt = s.text.toUpperCase();
+            return (tid && (tid.includes(sessionUC) || sessionUC.includes(tid))) ||
+                   txt.includes(sessionUC) || sessionUC.includes(txt);
+          });
           if (step) { matchedStep = step; ibpJobIdxForAtl = ji; ibpJobNameForAtl = selectedJobNames[ji] || ibpJobNameForAtl; break; }
         }
       }
@@ -1888,10 +2137,12 @@ async function generateFromJobs() {
       const jobNameJ = selectedJobNames[ji] || '';
       for (const step of (stepMap[ji] || [])) {
         if (!(step.jceText || '').toUpperCase().includes(JCE_DATA_INT)) continue;
-        const stepTextUC = step.text.toUpperCase();
-        if (coveredByAtlSessions.has(stepTextUC)) continue;
+        // Usar taskId (P_TSKID) como clave primaria; text como fallback si taskId no está disponible
+        const stepKeyUC = (step.taskId || step.text).toUpperCase();
+        if (coveredByAtlSessions.has(stepKeyUC)) continue;
 
-        const directMatches = (intsByJobName[stepTextUC] || []).filter(p => !globalMatched.has(p.sheetName));
+        const directMatches = (intsByJobName[stepKeyUC] || intsByJobName[step.text.toUpperCase()] || [])
+          .filter(p => !globalMatched.has(p.sheetName));
         if (!directMatches.length) {
           docsLog(`  ⚠ Step "${step.text}" sin ATL y sin ZIP con jobName coincidente`, 'l-warn');
           continue;
@@ -2015,6 +2266,7 @@ async function generateFromJobs() {
 document.addEventListener('DOMContentLoaded', () => {
   initAtlDropZone();
   initJobsZipDropZone();
+  initZipjobsDropZone();
 });
 
 // ════════════════════════════════════════════════════════════
