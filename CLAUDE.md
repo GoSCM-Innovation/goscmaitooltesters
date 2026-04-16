@@ -124,34 +124,51 @@ fetchAllPages(url, logEl, filter, select)
   - `vizGlobMatch(text, pattern)` — matching con wildcards
 
 ### 4. Doc Generator (pestaña)
-Dos modos seleccionables con toggle en la parte superior:
+Tres modos seleccionables con toggle en la parte superior: ZIP, Application Jobs, ZIP + Jobs.
 
-#### Modo ZIP (original)
-- Sube archivos ZIP de SAP CI-DS con integraciones en formato XML.
-- Analiza y extrae: orígenes de datos, destinos, mapeos de campos, filtros y lookups.
+#### Modo ZIP
+- El usuario sube uno o más archivos ZIP exportados desde SAP CI-DS. Cada ZIP contiene XMLs de integraciones y un `batch.csv` con metadatos de datastores.
+- El parser extrae por cada dataflow: `jobName`, `dataflowName`, `dataflowGuid`, `srcDSName`, `dstDSName`, `targetTable`, `mappings`, `filters`, `lookups`, `variables`.
 - 100% frontend: `JSZip` + `DOMParser` nativo.
-- Genera Excel nativo (`.xlsx`) con hoja Parámetros + una hoja de detalle por integración.
+- **ATL opcional:** el usuario puede además subir archivos `.atl` de SAP Data Services. Si lo hace, cada dataflow del ATL se asocia a su integración ZIP mediante:
+  - **Primario (GUID):** `CALL DATAFLOW name::'guid'` del ATL vs atributo `guid` del `<DataFlow>` en el XML del ZIP.
+  - **Fallback (nombre):** `displayName` del dataflow ATL vs `dataflowName` del ZIP, case-insensitive.
+  - El resultado enriquece cada fila con el nombre del proceso ATL (`sessionName`) y el grupo (`displayName` del `<Plan>`, sin prefijo `FLOWof_`).
+- Genera Excel `.xlsx` con hoja Parámetros + una hoja de detalle por integración.
+- **Columnas en hoja Parámetros** (modo ZIP): Dato | Tipo | Proceso | Grupo | Task CI-DS | Descripción | Dataflow | Fuente | Destino.
+  - Proceso y Grupo quedan vacíos si no se suben ATLs.
+- Estado ATL en modo ZIP: `zipAtlFiles = [{name, text}]`.
+- Funciones principales en `docs.js`:
+  - `generate()` — escanea los ZIPs, construye `parsedIntegrations` y muestra la lista de selección.
+  - `buildExcel()` — si hay ATLs, ejecuta el enriquecimiento antes de generar las hojas.
+  - `initZipAtlDropZone()` / `addZipAtlFiles()` / `renderZipAtlFiles()` — manejo del drop zone ATL.
+  - `parseBatchCsv(zip)` — extrae `batch.csv` del ZIP (helper compartido entre todos los modos).
 
 #### Modo Application Jobs
 - Conecta a SAP IBP vía `BC_EXT_APPJOB_MANAGEMENT;v=0002` (Communication Arrangement `SAP_COM_0326`).
-- Obtiene los Application Jobs y sus pasos desde `JobTemplateSet` / `JobTemplateSequenceSet`.
-- El usuario selecciona los jobs deseados; la app carga sus pasos con `JobSequenceText` y `JceText`.
-- Pasos CI-DS (`JceText` contiene `"DATA INTEGRATION"`) se cruzan contra ATL y ZIPs subidos.
+- Obtiene los Application Jobs desde `JobTemplateSet` y sus pasos desde `JobTemplateSequenceSet`.
+- El usuario selecciona los jobs deseados. Los pasos CI-DS se identifican por `JceText` conteniendo `"DATA INTEGRATION"`.
+- **Identificación del task CI-DS por `P_TSKID`:** para cada job seleccionado, una sola call a `JobTemplateParameterValueDataSet` con filtro `startswith(JobTemplateParameterName,'P_TSKID')` devuelve todos los task IDs técnicos. El campo `Low` de cada entrada contiene el nombre real del task CI-DS (ej. `IBP_001_PROCESS_PRERREQUISITOS`), invariable aunque el usuario haya renombrado el paso en IBP. La clave de extracción es `JobTemplateParameterName` = `"P_TSKID " + JobSequenceName`.
 - Pasos no-CI-DS (Copy Operator, Rule-Based, etc.) se incluyen como filas informativas sin hoja de detalle.
-- **Matching de integraciones** (en `matchATLtoIntegrations` + bloque de tareas directas):
-  - Pass 1: `atl.sessionName === step.text` (exact, case-insensitive) por GUID o display name.
-  - Pass 2: contains parcial si el paso 1 falla.
-  - Tareas directas: si un paso CI-DS no tiene ATL correspondiente, se cruza contra `parsed.jobName` de los ZIPs.
-- **ATL es opcional**: jobs que solo tienen tareas directas (sin procesos) no requieren subir ATL.
+- **Matching ATL → step IBP:** cada ATL subido se asocia al step IBP cuyo `P_TSKID` (primario) o `JobSequenceText` (fallback) coincide con `atl.sessionName`.
+- **Matching dataflows:** `matchATLtoIntegrations(atl, parsedInts)` recibe un ATL individual; se llama en loop, una vez por ATL. Asocia cada dataflow del ATL a su integración ZIP por GUID (primario) o nombre (fallback).
+- **Tareas directas:** pasos CI-DS sin ATL se cruzan contra `parsed.jobName` de los ZIPs usando el `P_TSKID` como clave (fallback a `JobSequenceText`).
+- **ATL es opcional:** jobs con solo tareas directas no requieren ATL.
 - **Orden de filas** en el Excel: selección del usuario → posición del paso (`JobSequencePosition`) → orden ATL.
-- **Columnas en hoja Parámetros** (modo jobs): Dato | Tipo | Job IBP | Step | Tipo de paso | Grupo | Task CI-DS | Descripción | Dataflow | Fuente | Destino.
+- **Columnas en hoja Parámetros** (modo Jobs): Dato | Tipo | Job IBP | Step | Tipo de paso | Grupo | Task CI-DS | Descripción | Dataflow | Fuente | Destino.
 - `FLOWof_` se elimina automáticamente del nombre de grupo ATL.
 - Funciones principales en `docs.js`:
   - `fetchAndDisplayJobs()` — consulta IBP y muestra lista de jobs.
-  - `generateFromJobs()` — orquesta fetch de pasos, parse de ATLs/ZIPs, cruce y generación del Excel.
-  - `parseATL(text)` — parsea archivo ATL de SAP Data Services: extrae grupos, dataflows, GVs.
-  - `matchATLtoIntegrations(atlParsed, parsedInts)` — cruza sesiones ATL con integraciones de los ZIPs.
-  - `parseBatchCsv(zip)` — extrae `batch.csv` del ZIP (helper compartido con modo ZIP).
+  - `generateFromJobs()` — orquesta fetch de pasos, resolución de P_TSKID, parse de ATLs/ZIPs, cruce y generación del Excel.
+  - `parseATL(text)` — parsea un archivo ATL de SAP Data Services; devuelve `{ sessionName, groups: [{ displayName, dataflows: [{ fullName, guid, displayName }] }] }`.
+  - `matchATLtoIntegrations(atl, parsedInts)` — asocia dataflows de un ATL con integraciones ZIP; devuelve array con `atlGroup` añadido.
+
+#### Modo ZIP + Jobs
+- El usuario sube ZIPs de CI-DS y la app se conecta a IBP para obtener la estructura de jobs automáticamente (sin necesidad de subir ATL).
+- Resuelve el `P_TSKID` de cada step en una sola call a `JobTemplateParameterValueDataSet` con filtro `startswith(JobTemplateParameterName,'P_TSKID')`.
+- Construye un índice `taskId.toUpperCase() → step info` y matchea cada integración ZIP por `parsed.jobName` contra ese índice.
+- Genera el mismo Excel que el modo Jobs pero sin requerir archivos ATL.
+- Función principal: `generateZipJobs()`.
 
 #### Constantes del módulo (docs.js)
 ```javascript
@@ -192,6 +209,14 @@ var VIZ_HIDDEN_CUST = new Set();            // Clientes ocultos por filtro
 var HDR_BY_SID = {};                        // PSH por SOURCEID
 var HDR_BY_PRD = {};                        // PSH por PRDID
 var CPR_BY_SID = {};                        // Co-productos por SOURCEID
+
+// Doc Generator — estado por modo (en docs.js)
+let files          = [];  // ZIPs del modo ZIP:         [{name, data: ArrayBuffer}]
+let zipAtlFiles    = [];  // ATLs del modo ZIP:         [{name, text}] — opcional
+let atlFiles       = [];  // ATLs del modo Jobs:        [{name, text}]
+let jobsFiles      = [];  // ZIPs del modo Jobs:        [{name, data: ArrayBuffer}]
+let zipjobsFiles   = [];  // ZIPs del modo ZIP+Jobs:    [{name, data: ArrayBuffer}]
+let parsedIntegrations = []; // [{sheetName, pkg, parsed, paramRow}]
 ```
 
 ---
