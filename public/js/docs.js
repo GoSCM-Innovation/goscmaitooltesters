@@ -95,6 +95,7 @@ function renderFiles() {
       <button class="rm" onclick="removeFile(${i})">✕</button>
     </div>`).join('');
   document.getElementById('gen-btn').disabled = files.length === 0;
+  if (files.length === 1 && docsMode === 'zip' && docsCurrentStep === 0) advanceStep();
 }
 
 // ── ZIP mode ATL drop zone (optional) ───────────────────────
@@ -1180,8 +1181,12 @@ function renderSelList() {
   }).join('');
   document.getElementById('sel-search').value = '';
   updateCounter();
-  document.getElementById('sel-card').style.display = 'block';
-  document.getElementById('sel-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const selCard = document.getElementById('sel-card');
+  selCard.style.display = 'block';
+  selCard.classList.add('panel-animate-in');
+  selCard.addEventListener('animationend', () => selCard.classList.remove('panel-animate-in'), { once: true });
+  selCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  advanceStep();
 }
 
 // ── Filter list by search text ────────────────────────────────
@@ -1316,7 +1321,11 @@ async function buildExcel() {
   document.getElementById('s-jobs').textContent = totalJobs;
   document.getElementById('s-maps').textContent = totalMaps;
   document.getElementById('s-filt').textContent = totalFilts;
-  document.getElementById('stats-card').style.display = 'block';
+  const statsCard = document.getElementById('stats-card');
+  statsCard.style.display = 'block';
+  statsCard.classList.add('panel-animate-in');
+  statsCard.addEventListener('animationend', () => statsCard.classList.remove('panel-animate-in'), { once: true });
+  advanceStep();
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1335,7 +1344,52 @@ function switchDocsMode(mode) {
   // Hide shared panels when switching
   document.getElementById('sel-card').style.display = 'none';
   document.getElementById('stats-card').style.display = 'none';
+  // Reset stepper
+  docsCurrentStep = 0;
+  renderStepper(mode, 0);
 }
+
+// ════════════════════════════════════════════════════════════
+//  DOCS STEPPER
+// ════════════════════════════════════════════════════════════
+const STEPPER_STEPS = {
+  zip:     ['Subir ZIPs', 'ATL opcional', 'Seleccionar', 'Generar Excel'],
+  jobs:    ['Obtener Jobs', 'Seleccionar', 'Generar Excel'],
+  zipjobs: ['Subir ZIPs', 'Analizar', 'Seleccionar', 'Generar Excel']
+};
+
+let docsCurrentStep = 0;
+
+function renderStepper(mode, current) {
+  const steps = STEPPER_STEPS[mode] || [];
+  const container = document.getElementById('docsStepper');
+  if (!container) return;
+  if (!steps.length) { container.innerHTML = ''; return; }
+
+  let html = '';
+  steps.forEach((label, i) => {
+    const isDone   = i < current;
+    const isActive = i === current;
+    const cls = isDone ? 'completed' : isActive ? 'active' : '';
+    const clickable = isDone ? ' clickable' : '';
+    html += `<div class="stepper-step ${cls}${clickable}" data-step="${i}">
+      <div class="step-circle">${isDone ? '✓' : i + 1}</div>
+      <div class="step-label">${escH(label)}</div>
+    </div>`;
+    if (i < steps.length - 1) {
+      html += `<div class="stepper-connector ${isDone ? 'completed' : ''}"></div>`;
+    }
+  });
+  container.innerHTML = html;
+}
+
+function advanceStep() {
+  docsCurrentStep++;
+  renderStepper(docsMode, docsCurrentStep);
+}
+
+// Initialise stepper for the default mode on load
+renderStepper('zip', 0);
 
 // ── ZIP+Jobs mode drop zone ──────────────────────────────────
 let zipjobsFiles = [];   // [{name, data: ArrayBuffer}]
@@ -1370,6 +1424,7 @@ function renderZipjobsFiles() {
     </div>`).join('');
   const btn = document.getElementById('zipjobs-gen-btn');
   if (btn) btn.disabled = zipjobsFiles.length === 0;
+  if (zipjobsFiles.length === 1 && docsMode === 'zipjobs' && docsCurrentStep === 0) advanceStep();
 }
 
 function setZjP(p) {
@@ -1861,6 +1916,7 @@ function renderJobSelection(jobs, entitySets) {
   document.getElementById('atl-upload-panel').style.display = 'block';
   document.getElementById('jobs-zip-panel').style.display = 'block';
   panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (docsCurrentStep === 0) advanceStep();
 }
 
 function filterJobsList() {
@@ -2314,8 +2370,12 @@ async function generateFromJobs() {
   document.getElementById('s-jobs').textContent = totalJobs;
   document.getElementById('s-maps').textContent = totalMaps;
   document.getElementById('s-filt').textContent = totalFilts;
-  document.getElementById('stats-card').style.display = 'block';
+  const statsCardJ = document.getElementById('stats-card');
+  statsCardJ.style.display = 'block';
+  statsCardJ.classList.add('panel-animate-in');
+  statsCardJ.addEventListener('animationend', () => statsCardJ.classList.remove('panel-animate-in'), { once: true });
   document.getElementById('jobs-gen-btn').disabled = false;
+  advanceStep();
 }
 
 // ── Init jobs-mode drop zones on load ────────────────────────

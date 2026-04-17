@@ -917,14 +917,14 @@
           updateTabLocks();
       }
       
-      if (on && typeof _connectPanelOpen !== 'undefined' && _connectPanelOpen) {
-          toggleConnectPanel();
+      if (on && typeof closeConnectDialog === 'function') {
+          closeConnectDialog();
       }
 
       if (on) {
           var toast = document.createElement('div');
           toast.textContent = '✅ Conectado a SAP IBP con éxito';
-          toast.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#10B981;color:#fff;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:9999;transition:opacity 0.3s;';
+          toast.style.cssText = 'position:fixed;bottom:20px;right:20px;background:var(--green);color:#fff;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:9999;transition:opacity 0.3s;';
           document.body.appendChild(toast);
           setTimeout(function() {
               toast.style.opacity = '0';

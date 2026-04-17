@@ -5,9 +5,11 @@
 
     function switchTab(tabId) {
       document.querySelectorAll('.tab-panel').forEach(function (p) { p.classList.remove('active'); });
-      document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
+      document.querySelectorAll('.nav-item').forEach(function (b) { b.classList.remove('active'); });
       document.getElementById('tab-' + tabId).classList.add('active');
       document.getElementById('tabBtn-' + tabId).classList.add('active');
+      // Close sidebar on mobile after selecting a tab
+      if (window.innerWidth <= 900) closeSidebar();
       // Show banner for active tab only
       Object.keys(TAB_BANNERS).forEach(function (t) {
         var el = document.getElementById(TAB_BANNERS[t]);
@@ -182,7 +184,6 @@
         setConnStatus('ok', 'Conectado — ' + ENTITIES.length + ' entidades · PA: ' + CFG.pa + (CFG.pver ? ' / ' + CFG.pver : ' (Baseline)'));
         document.getElementById('panelMDT').classList.remove('hidden');
         document.getElementById('panelSNMDT').classList.remove('hidden');
-        document.getElementById('tabNav').style.display = 'flex';
         Object.keys(TAB_BANNERS).forEach(function (t) {
           var el = document.getElementById(TAB_BANNERS[t]);
           var btn = document.getElementById('tabBtn-' + t);
@@ -807,27 +808,27 @@
         });
     }
 
-    /* ── Technical Requirements Panel ── */
-    var _techReqOpen = false;
-    var _techReqCurrentTab = 'conexion';
-    var _connectPanelOpen = false;
-
-    function toggleConnectPanel() {
-      _connectPanelOpen = !_connectPanelOpen;
-      document.getElementById('connectPanelDrop').style.display = _connectPanelOpen ? 'block' : 'none';
-      document.getElementById('connectArrow').textContent = _connectPanelOpen ? '▲' : '▼';
-      if (_connectPanelOpen && _techReqOpen) {
-          toggleTechReq();
-      }
+    /* ── Connection & TechReq Dialogs ── */
+    function openConnectDialog() {
+      var d = document.getElementById('connectDialog');
+      if (d) d.showModal();
+      closeTechReqDialog();
     }
 
-    function toggleTechReq() {
-      _techReqOpen = !_techReqOpen;
-      document.getElementById('techReqPanel').style.display = _techReqOpen ? 'block' : 'none';
-      document.getElementById('techReqArrow').textContent = _techReqOpen ? '▲' : '▼';
-      if (_techReqOpen && _connectPanelOpen) {
-          toggleConnectPanel();
-      }
+    function closeConnectDialog() {
+      var d = document.getElementById('connectDialog');
+      if (d && d.open) d.close();
+    }
+
+    function openTechReqDialog() {
+      var d = document.getElementById('techReqDialog');
+      if (d) d.showModal();
+      closeConnectDialog();
+    }
+
+    function closeTechReqDialog() {
+      var d = document.getElementById('techReqDialog');
+      if (d && d.open) d.close();
     }
 
     function switchTechTab(tab) {
@@ -839,7 +840,23 @@
         btn.style.color = t === tab ? 'var(--text)' : 'var(--text2)';
         btn.style.fontWeight = t === tab ? '600' : '400';
       });
-      _techReqCurrentTab = tab;
+    }
+
+    /* ── Sidebar mobile toggle ── */
+    function toggleSidebar() {
+      var sidebar  = document.getElementById('sidebar');
+      var backdrop = document.getElementById('sidebarBackdrop');
+      if (!sidebar) return;
+      var isOpen = sidebar.classList.contains('open');
+      sidebar.classList.toggle('open', !isOpen);
+      if (backdrop) backdrop.classList.toggle('visible', !isOpen);
+    }
+
+    function closeSidebar() {
+      var sidebar  = document.getElementById('sidebar');
+      var backdrop = document.getElementById('sidebarBackdrop');
+      if (sidebar) sidebar.classList.remove('open');
+      if (backdrop) backdrop.classList.remove('visible');
     }
 
     try {
