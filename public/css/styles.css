@@ -26,6 +26,37 @@
       --pink: #f472b6;
       --font: 'DM Sans', sans-serif;
       --mono: 'JetBrains Mono', monospace;
+
+      /* ── Design System Tokens (Bencium / Scientific-Technical profile) ── */
+
+      /* Spacing scale — 4px base */
+      --sp-1: 4px;  --sp-2: 8px;   --sp-3: 12px; --sp-4: 16px;
+      --sp-5: 20px; --sp-6: 24px;  --sp-8: 32px; --sp-12: 48px;
+
+      /* Border radius scale */
+      --r-sm: 4px;  --r: 6px;  --r-lg: 10px;  --r-xl: 14px;
+
+      /* Shadows */
+      --shadow-sm: 0 1px 4px rgba(0,0,0,.35);
+      --shadow-md: 0 4px 16px rgba(0,0,0,.45);
+      --shadow-lg: 0 12px 40px rgba(0,0,0,.55);
+
+      /* Easing curves (MOTION-SPEC.md) */
+      --ease-out:   cubic-bezier(0.0, 0.0, 0.2, 1);
+      --ease-in:    cubic-bezier(0.4, 0.0, 1, 1);
+      --ease-inout: cubic-bezier(0.4, 0.0, 0.2, 1);
+
+      /* Durations — fast & precise for power users */
+      --dur-micro:  100ms;  /* buttons, checkboxes */
+      --dur-fast:   150ms;  /* hovers, badges */
+      --dur-std:    250ms;  /* tab switch, panel reveal */
+      --dur-modal:  300ms;  /* modal open/close */
+
+      /* Typography scale — 1.25x (major third), 15px base */
+      --text-xs:   10px;   /* micro-labels, data IDs */
+      --text-sm:   12px;   /* badges, logs, timestamps */
+      --text-base: 15px;   /* UI text principal */
+      --text-lg:   18px;   /* panel subtitles */
     }
 
     * {
@@ -38,22 +69,26 @@
       background: var(--bg);
       color: var(--text);
       font-family: var(--font);
-      font-size: 13px;
+      font-size: var(--text-base); /* 15px */
       min-height: 100vh;
     }
 
-    /* ── Header ── */
+    /* ── Grain texture — subtle depth on dark background ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-repeat: repeat;
+      background-size: 300px 300px;
+      opacity: 0.035;
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    /* ── Header (mobile-only top bar; hidden on desktop) ── */
     .app-header {
-      background: linear-gradient(135deg, #080f1e 0%, #0d1829 60%, #080f1e 100%);
-      border-bottom: 2px solid rgba(247, 168, 0, .25);
-      padding: 12px 28px;
-      display: flex;
-      align-items: center;
-      gap: 20px;
-      position: sticky;
-      top: 0;
-      z-index: 200;
-      box-shadow: 0 2px 20px rgba(0, 0, 0, .5);
+      display: none; /* sidebar replaces it on desktop */
     }
 
     .logo-img {
@@ -71,14 +106,14 @@
     }
 
     .app-title {
-      font-size: 17px;
+      font-size: var(--text-lg); /* 18px */
       font-weight: 700;
       color: #fff;
       letter-spacing: .01em;
     }
 
     .app-sub {
-      font-size: 11px;
+      font-size: var(--text-sm); /* 12px */
       color: var(--text2);
       margin-top: 2px;
     }
@@ -88,7 +123,7 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      font-size: 11px;
+      font-size: var(--text-sm); /* 12px */
       color: var(--text2);
     }
 
@@ -117,7 +152,7 @@
     }
 
     .panel-title {
-      font-size: 13px;
+      font-size: var(--text-sm); /* 12px — uppercase so reads larger */
       font-weight: 600;
       color: var(--accent);
       text-transform: uppercase;
@@ -145,7 +180,7 @@
     }
 
     .form-group label {
-      font-size: 11px;
+      font-size: var(--text-sm); /* 12px */
       font-weight: 500;
       color: var(--text2);
       text-transform: uppercase;
@@ -156,13 +191,13 @@
     .form-group select {
       background: var(--bg);
       border: 1px solid var(--border);
-      border-radius: 6px;
+      border-radius: var(--r);
       color: var(--text);
       font-family: var(--mono);
-      font-size: 12px;
+      font-size: var(--text-sm); /* 12px */
       padding: 8px 12px;
       outline: none;
-      transition: border .2s;
+      transition: border var(--dur-fast) var(--ease-out);
     }
 
     .form-group input:focus,
@@ -187,13 +222,13 @@
     /* ── Buttons ── */
     .btn {
       font-family: var(--font);
-      font-size: 12px;
+      font-size: var(--text-sm); /* 12px */
       font-weight: 600;
-      padding: 8px 18px;
+      padding: 9px 18px; /* min-height ~38px */
       border: none;
-      border-radius: 6px;
+      border-radius: var(--r);
       cursor: pointer;
-      transition: all .2s;
+      transition: all var(--dur-fast) var(--ease-out);
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -228,8 +263,8 @@
     }
 
     .btn-small {
-      padding: 5px 12px;
-      font-size: 11px;
+      padding: 7px 14px; /* min-height ~34px */
+      font-size: var(--text-sm); /* 12px */
     }
 
     .btn-danger {
@@ -510,7 +545,7 @@
     td {
       padding: 6px 10px;
       border-bottom: 1px solid var(--border);
-      font-size: 12px;
+      font-size: var(--text-sm); /* 12px */
       vertical-align: middle;
     }
 
@@ -800,10 +835,10 @@
       margin-bottom: -2px;
       color: var(--text2);
       font-family: var(--font);
-      font-size: 13px;
+      font-size: var(--text-sm); /* 12px — matches new scale */
       font-weight: 500;
       cursor: pointer;
-      transition: color .15s, border-color .15s;
+      transition: color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
       white-space: nowrap;
     }
 
@@ -819,6 +854,198 @@
 
     .tab-btn .tab-icon {
       font-size: 15px;
+    }
+
+    /* ── App Shell (sidebar + main content layout) ── */
+    .app-shell {
+      display: flex;
+      align-items: flex-start;
+      min-height: 100vh;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 220px;
+      flex-shrink: 0;
+      background: var(--bg2);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+
+    /* ── Sidebar brand ── */
+    .sidebar-brand {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-3);
+      padding: var(--sp-4) var(--sp-4);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .sidebar-brand .app-title {
+      font-size: var(--text-sm);
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    /* ── Sidebar connection status ── */
+    .sidebar-conn {
+      padding: var(--sp-3) var(--sp-3);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: var(--sp-2);
+      flex-shrink: 0;
+    }
+
+    .conn-status-row {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-2);
+      font-size: var(--text-sm);
+      color: var(--text2);
+    }
+
+    .sidebar-connect-btn {
+      width: 100%;
+      justify-content: center;
+      font-size: 12px !important;
+      padding: 7px var(--sp-3) !important;
+    }
+
+    /* ── Sidebar navigation ── */
+    .sidebar-nav {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: var(--sp-2) var(--sp-2);
+      gap: 2px;
+      overflow-y: auto;
+    }
+
+    /* ── Nav item (replaces tab-btn) ── */
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-2);
+      width: 100%;
+      padding: var(--sp-2) var(--sp-3);
+      background: none;
+      border: none;
+      border-radius: var(--r);
+      color: var(--text2);
+      font-family: var(--font);
+      font-size: 13px;
+      font-weight: 400;
+      cursor: pointer;
+      text-align: left;
+      transition: background var(--dur-fast) var(--ease-out),
+                  color var(--dur-fast) var(--ease-out);
+    }
+
+    .nav-item:hover {
+      background: rgba(255,255,255,.05);
+      color: var(--text);
+    }
+
+    .nav-item.active {
+      background: rgba(247,168,0,.08);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .nav-icon {
+      font-size: 14px;
+      flex-shrink: 0;
+      width: 20px;
+      text-align: center;
+    }
+
+    .nav-label {
+      flex: 1;
+      line-height: 1.3;
+    }
+
+    .nav-lock-badge {
+      font-size: 10px;
+      opacity: 0.45;
+      flex-shrink: 0;
+    }
+
+    /* Doc Generator — always available, differentiated with accent2 */
+    .nav-item.nav-docs {
+      color: var(--accent2);
+      font-weight: 500;
+    }
+
+    .nav-item.nav-docs.active {
+      background: rgba(232,98,42,.1);
+      color: var(--accent2);
+    }
+
+    .nav-item.nav-docs:hover {
+      background: rgba(232,98,42,.06);
+      color: var(--accent2);
+    }
+
+    /* ── Nav divider ── */
+    .nav-divider {
+      height: 1px;
+      background: var(--border);
+      margin: var(--sp-2) var(--sp-1);
+    }
+
+    /* ── Sidebar footer ── */
+    .sidebar-footer {
+      padding: var(--sp-2) var(--sp-2);
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .nav-footer-item {
+      color: var(--text3) !important;
+      font-size: 11px !important;
+    }
+
+    .nav-footer-item:hover {
+      color: var(--text2) !important;
+    }
+
+    /* ── Main content area ── */
+    .main-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    /* ── Sidebar backdrop (mobile) ── */
+    .sidebar-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.4);
+      z-index: 199;
+    }
+
+    .sidebar-backdrop.visible {
+      display: block;
+    }
+
+    /* ── Sidebar toggle button (mobile) ── */
+    .sidebar-toggle {
+      background: none;
+      border: none;
+      color: var(--text2);
+      font-size: 20px;
+      cursor: pointer;
+      padding: var(--sp-1) var(--sp-2);
+      border-radius: var(--r-sm);
+      line-height: 1;
+      display: none; /* desktop: hidden (sidebar always visible) */
     }
 
     /* ── Tab Panels ── */
@@ -921,14 +1148,14 @@
     }
 
     .tab-info-title {
-      font-size: 13px;
+      font-size: var(--text-base); /* 15px */
       font-weight: 600;
       color: var(--text);
       margin-bottom: 3px;
     }
 
     .tab-info-desc {
-      font-size: 12px;
+      font-size: var(--text-sm); /* 12px */
       color: var(--text2);
       line-height: 1.6;
     }
@@ -1120,33 +1347,65 @@
 .badge-pkg { font-size: 0.68rem; color: var(--text3); flex-shrink: 0; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /*======================================================================
+   MOBILE — SIDEBAR OVERLAY (≤ 900px)
+  ======================================================================*/
+@media (max-width: 900px) {
+  /* Show mobile top bar */
+  .app-header {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 150;
+    box-shadow: 0 2px 8px rgba(0,0,0,.3);
+  }
+
+  .sidebar-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Sidebar becomes fixed overlay */
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    height: 100%;
+    width: 260px;
+    z-index: 200;
+    transform: translateX(-100%);
+    transition: transform var(--dur-modal) var(--ease-out);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  /* App shell: single column on mobile */
+  .app-shell {
+    display: block;
+    min-height: auto;
+  }
+}
+
+/*======================================================================
    MOBILE RESPONSIVENESS (SMARTPHONES)
   ======================================================================*/
 @media (max-width: 768px) {
   /* Generales */
-  body { font-size: 14px; }
-  
-  /* Header */
-  .app-header {
-    flex-wrap: wrap;
-    padding: 12px 16px;
-    gap: 10px;
+  body { font-size: 14px; } /* slightly smaller on mobile */
+
+  /* Connection dialog — tighter padding on mobile */
+  .connect-dialog-body {
+    padding: var(--sp-4) !important;
   }
-  .app-title { font-size: 15px; }
-  .header-status {
-    width: 100%;
-    margin-left: 0;
-    justify-content: flex-start;
-  }
-  .header-divider { display: none; }
-  #btnHeaderConnect { width: 100%; justify-content: center; }
-  #btnTechReq { width: 100%; justify-content: center; }
-  
-  /* Panel Conexión Dropdown */
-  #connectPanelDrop {
-    padding: 20px 16px !important;
-  }
-  
+
   /* Formularios y Botones */
   .form-grid {
     grid-template-columns: 1fr;
@@ -1159,19 +1418,6 @@
     width: 100%;
     justify-content: center;
     padding: 10px 18px;
-  }
-  
-  /* Pestañas (Navegación TABS Principal) */
-  .tab-nav {
-    overflow-x: auto;
-    flex-wrap: nowrap;
-    padding: 0 16px 8px 16px;
-    -webkit-overflow-scrolling: touch;
-  }
-  .tab-nav::-webkit-scrollbar { height: 4px; }
-  .tab-btn {
-    white-space: nowrap;
-    flex-shrink: 0;
   }
   
   /* Banners de Pestaña */
@@ -1382,8 +1628,333 @@
 .guide-cat-weak       { color: #F7A800; border-color: rgba(247,168,0,.4);   background: rgba(247,168,0,.08); }
 .guide-cat-critical   { color: #ff6b6b; border-color: rgba(255,107,107,.4); background: rgba(255,107,107,.08); }
 
+/* ═══════════════════════════════════════════════════════════════
+   INTERACTIVE STATES — Focus, Hover, Active, Disabled (Step 2)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Focus visible (WCAG 2.1 AA) ── */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+/* Override for inputs that already have border feedback */
+input:focus-visible,
+select:focus-visible,
+.ss-input-vis:focus-visible,
+.sel-search:focus-visible {
+  outline: none;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px rgba(247,168,0,.18);
+}
+
+/* ── Button press feedback (tactile) ── */
+.btn:active,
+.btn-primary:active,
+.btn-secondary:active,
+.btn-danger:active,
+.btn-sm:active {
+  transform: scale(0.98);
+  transition: transform var(--dur-micro) var(--ease-in);
+}
+
+/* ── Mode buttons — inactive affordance ── */
+.mode-btn:not(.active):hover {
+  background: rgba(247,168,0,.08);
+  color: var(--text);
+  border-color: rgba(247,168,0,.3);
+}
+.mode-btn:active { transform: scale(0.98); }
+
+/* ── Disabled button tooltip ── */
+button[disabled][title] { position: relative; }
+button[disabled][title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: var(--r);
+  padding: 5px 10px;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  pointer-events: none;
+  color: var(--text2);
+  z-index: 500;
+  font-family: var(--font);
+  box-shadow: var(--shadow-md);
+}
+
+/* ── Panel titles hierarchy — secondary level ── */
+/* guide-item-header = second level; don't compete with .panel-title */
+.guide-item-header {
+  font-size: var(--text-sm) !important;
+  font-weight: 500 !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  color: var(--text2) !important;
+}
+/* But keep hover state */
+.guide-item-header:hover { background: var(--surface2); color: var(--text) !important; }
+
+/* ═══════════════════════════════════════════════════════════════
+   STEP 3 — Connection & TechReq Dialogs
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Base dialog reset ── */
+.connect-dialog,
+.tech-req-dialog {
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--border2);
+  border-radius: var(--r-xl);
+  background: var(--bg2);
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+  font-family: var(--font);
+  overflow: hidden;
+}
+
+/* ── Backdrop ── */
+.connect-dialog::backdrop,
+.tech-req-dialog::backdrop {
+  background: rgba(0,0,0,.55);
+  backdrop-filter: blur(3px);
+}
+
+/* ── Connect dialog sizing ── */
+.connect-dialog {
+  width: min(840px, 94vw);
+}
+
+/* ── Connect dialog header ── */
+.connect-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-3) var(--sp-6);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.connect-dialog-title {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.connect-dialog-body {
+  padding: var(--sp-6);
+}
+
+/* ── Shared dialog close button ── */
+.dialog-close-btn {
+  background: none;
+  border: none;
+  color: var(--text3);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
+  transition: color var(--dur-fast) var(--ease-out),
+              background var(--dur-fast) var(--ease-out);
+}
+.dialog-close-btn:hover {
+  color: var(--text);
+  background: rgba(255,255,255,.06);
+}
+
+/* ── TechReq dialog sizing ── */
+.tech-req-dialog {
+  width: min(900px, 96vw);
+}
+
+/* ── TechReq dialog header ── */
+.tech-req-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-3) var(--sp-6);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   STEP 4 — Docs Stepper
+   ═══════════════════════════════════════════════════════════════ */
+
+.docs-stepper {
+  display: flex;
+  align-items: center;
+  padding: var(--sp-4) var(--sp-6);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg2);
+  gap: 0;
+  min-height: 56px;
+}
+
+/* Hidden when empty (before JS populates it) */
+.docs-stepper:empty {
+  display: none;
+}
+
+.stepper-step {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+  cursor: default;
+}
+
+.stepper-step.clickable {
+  cursor: pointer;
+}
+
+.step-circle {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--border2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text3);
+  background: var(--bg3);
+  flex-shrink: 0;
+  transition: border-color var(--dur-std) var(--ease-out),
+              background var(--dur-std) var(--ease-out),
+              color var(--dur-std) var(--ease-out);
+}
+
+.step-label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text3);
+  white-space: nowrap;
+  transition: color var(--dur-std) var(--ease-out);
+}
+
+/* Active step */
+.stepper-step.active .step-circle {
+  border-color: var(--accent);
+  background: rgba(247,168,0,.12);
+  color: var(--accent);
+}
+
+.stepper-step.active .step-label {
+  color: var(--text);
+}
+
+/* Completed step */
+.stepper-step.completed .step-circle {
+  border-color: var(--green);
+  background: rgba(52,211,153,.12);
+  color: var(--green);
+}
+
+.stepper-step.completed .step-label {
+  color: var(--text2);
+}
+
+/* Connector between steps */
+.stepper-connector {
+  flex: 1;
+  height: 2px;
+  background: var(--border2);
+  min-width: var(--sp-4);
+  max-width: 48px;
+  border-radius: 1px;
+  transition: background var(--dur-std) var(--ease-out);
+}
+
+.stepper-connector.completed {
+  background: var(--green);
+}
+
+/* ═══════════════════════════════════════════════════════════════ */
+
 .guide-color-legend {
   margin-top: 14px; padding: 8px 14px; border-radius: 8px;
   background: rgba(255,255,255,.03); border: 1px solid var(--border);
   font-size: 11px; color: var(--text2); line-height: 1.8;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   STEP 6 — Animations & Polish
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Shared panel reveal keyframe ── */
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Class applied by JS when revealing panels ── */
+.panel-animate-in {
+  animation: panel-in var(--dur-std) var(--ease-out) forwards;
+}
+
+/* ── Tab panel switch ── */
+.tab-panel.active {
+  animation: panel-in var(--dur-fast) var(--ease-out);
+}
+
+/* ── Connection dialog open animation ── */
+.connect-dialog[open],
+.tech-req-dialog[open] {
+  animation: dialog-in var(--dur-modal) var(--ease-out) forwards;
+}
+
+@keyframes dialog-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── Backdrop fade-in ── */
+.connect-dialog::backdrop,
+.tech-req-dialog::backdrop {
+  animation: backdrop-in var(--dur-modal) var(--ease-out);
+}
+
+@keyframes backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Button press feedback ── */
+.btn:active,
+.btn-primary:active,
+.btn-secondary:active {
+  transform: scale(0.98);
+  transition: transform var(--dur-micro) var(--ease-in);
+}
+
+/* ── Nav item press ── */
+.nav-item:active {
+  transform: scale(0.98);
+}
+
+/* ── Mode button press ── */
+.mode-btn:active {
+  transform: scale(0.98);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ACCESSIBILITY — prefers-reduced-motion
+   ═══════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

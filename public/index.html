@@ -23,82 +23,70 @@
 
 <body>
 
-  <!-- ═══ HEADER ═══ -->
-  <div class="app-header">
-    <img src="logo-goscm.png" alt="GoSCM" class="logo-img">
-    <div class="header-divider"></div>
-    <div>
-      <div class="app-title">Applications Hub</div>
-    </div>
-    <div class="header-status">
-      <button onclick="toggleTechReq()" id="btnTechReq"
-        style="background:rgba(255,255,255,0.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);font-family:var(--font);font-size:11px;font-weight:500;padding:5px 12px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all .2s;"
-        onmouseenter="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
-        onmouseleave="this.style.borderColor='var(--border2)';this.style.color='var(--text2)'">
-        ⚙ Requisitos técnicos <span id="techReqArrow">▼</span>
-      </button>
-      <div class="header-divider"></div>
-      <button onclick="toggleConnectPanel()" id="btnHeaderConnect" class="btn btn-primary btn-small"
-        style="padding:5px 12px;font-size:11px;display:flex;align-items:center;gap:6px;">
-        🔗 Conectar SAP IBP <span id="connectArrow">▼</span>
-      </button>
-      <div class="header-divider"></div>
-      <div class="status-dot off" id="statusDot"></div>
-      <span id="statusText">Desconectado</span>
-    </div>
+  <!-- ═══ MOBILE HEADER (desktop: hidden, sidebar handles nav) ═══ -->
+  <div class="app-header" id="mobileHeader">
+    <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()" aria-label="Abrir menú">☰</button>
+    <img src="logo-goscm.png" alt="GoSCM" class="logo-img" style="height:28px;">
+    <div class="app-title" style="font-size:var(--text-base);">Applications Hub</div>
   </div>
 
-  <!-- ═══ CONNECTION PANEL DROPDOWN ═══ -->
-  <div id="connectPanelDrop"
-    style="display:none;background:var(--bg2);border-bottom:2px solid var(--border);z-index:190;position:relative;padding:24px 28px;">
-    <div class="panel-title" style="margin-top:0;">Conexión a SAP IBP</div>
-    <form id="connectForm" onsubmit="doConnect(event)">
-      <div class="form-grid" style="max-width:800px;">
-        <div class="form-group full">
-          <label>API Base URL</label>
-          <input type="url" id="inpUrl" name="api_url" list="urlsList" autocomplete="url"
-            placeholder="https://example123-api.scmibp.ondemand.com" value="" required>
-          <datalist id="urlsList"></datalist>
-        </div>
-        <div class="form-group">
-          <label>Usuario</label>
-          <input type="text" id="inpUser" name="username" autocomplete="username" placeholder="COMM_USER" required>
-        </div>
-        <div class="form-group">
-          <label>Contraseña</label>
-          <input type="password" id="inpPass" name="password" autocomplete="current-password" placeholder="••••••••"
-            required>
-        </div>
-        <div class="form-group">
-          <label>Planning Area</label>
-          <input type="text" id="inpPA" name="planning_area" list="paList" autocomplete="on"
-            placeholder="ID del área de planificación" style="font-family:var(--mono);" required>
-          <datalist id="paList"></datalist>
-        </div>
-        <div class="form-group">
-          <label>Versión</label>
-          <input type="text" id="inpPver" name="pver" list="pverList" autocomplete="on"
-            placeholder="ID de la versión (vacío = Baseline)" style="font-family:var(--mono);">
-          <datalist id="pverList"></datalist>
-        </div>
-
-      </div>
-      <div class="btn-row" style="margin-top:20px;">
-        <button type="submit" class="btn btn-primary" id="btnConnect">Conectar y detectar entidades</button>
-        <button type="button" class="btn btn-secondary" onclick="toggleConnectPanel()">Cancelar</button>
-      </div>
-    </form>
-    <div id="connStatus" style="display:none;font-size:12px;margin-top:12px;align-items:center;gap:8px;">
-      <span id="connStatusText"></span>
-      <button id="btnToggleConnLogs" class="btn btn-secondary btn-small" style="padding:2px 8px;font-size:11px;"
-        onclick="toggleConnLogs()">Ver logs técnicos</button>
+  <!-- ═══ CONNECTION DIALOG ═══ -->
+  <dialog id="connectDialog" class="connect-dialog">
+    <div class="connect-dialog-header">
+      <span class="connect-dialog-title">Conexión a SAP IBP</span>
+      <button type="button" class="dialog-close-btn" onclick="closeConnectDialog()" aria-label="Cerrar">✕</button>
     </div>
-    <div class="log-area hidden" id="logConnect"></div>
-  </div>
+    <div class="connect-dialog-body">
+      <form id="connectForm" onsubmit="doConnect(event)">
+        <div class="form-grid" style="max-width:800px;">
+          <div class="form-group full">
+            <label>API Base URL</label>
+            <input type="url" id="inpUrl" name="api_url" list="urlsList" autocomplete="url"
+              placeholder="https://example123-api.scmibp.ondemand.com" value="" required>
+            <datalist id="urlsList"></datalist>
+          </div>
+          <div class="form-group">
+            <label>Usuario</label>
+            <input type="text" id="inpUser" name="username" autocomplete="username" placeholder="COMM_USER" required>
+          </div>
+          <div class="form-group">
+            <label>Contraseña</label>
+            <input type="password" id="inpPass" name="password" autocomplete="current-password" placeholder="••••••••"
+              required>
+          </div>
+          <div class="form-group">
+            <label>Planning Area</label>
+            <input type="text" id="inpPA" name="planning_area" list="paList" autocomplete="on"
+              placeholder="ID del área de planificación" style="font-family:var(--mono);" required>
+            <datalist id="paList"></datalist>
+          </div>
+          <div class="form-group">
+            <label>Versión</label>
+            <input type="text" id="inpPver" name="pver" list="pverList" autocomplete="on"
+              placeholder="ID de la versión (vacío = Baseline)" style="font-family:var(--mono);">
+            <datalist id="pverList"></datalist>
+          </div>
+        </div>
+        <div class="btn-row" style="margin-top:20px;">
+          <button type="submit" class="btn btn-primary" id="btnConnect">Conectar y detectar entidades</button>
+          <button type="button" class="btn btn-secondary" onclick="closeConnectDialog()">Cancelar</button>
+        </div>
+      </form>
+      <div id="connStatus" style="display:none;font-size:12px;margin-top:12px;align-items:center;gap:8px;">
+        <span id="connStatusText"></span>
+        <button id="btnToggleConnLogs" class="btn btn-secondary btn-small" style="padding:2px 8px;font-size:11px;"
+          onclick="toggleConnLogs()">Ver logs técnicos</button>
+      </div>
+      <div class="log-area hidden" id="logConnect"></div>
+    </div>
+  </dialog>
 
-  <!-- ═══ TECHNICAL REQUIREMENTS PANEL ═══ -->
-  <div id="techReqPanel"
-    style="display:none;background:var(--bg2);border-bottom:2px solid var(--border);z-index:190;position:relative;">
+  <!-- ═══ TECHNICAL REQUIREMENTS DIALOG ═══ -->
+  <dialog id="techReqDialog" class="tech-req-dialog">
+    <div class="tech-req-header">
+      <span class="connect-dialog-title">Requisitos técnicos</span>
+      <button type="button" class="dialog-close-btn" onclick="closeTechReqDialog()" aria-label="Cerrar">✕</button>
+    </div>
     <!-- Tabs -->
     <div
       style="display:flex;gap:0;border-bottom:1px solid var(--border);padding:0 24px;background:var(--bg);overflow-x:auto;">
@@ -118,7 +106,7 @@
         de red</button>
     </div>
     <!-- Content -->
-    <div style="padding:20px 28px;max-height:340px;overflow-y:auto;">
+    <div style="padding:20px 28px;max-height:360px;overflow-y:auto;">
 
       <div id="treqContent-conexion">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
@@ -325,32 +313,75 @@
       </div>
 
     </div>
-  </div>
+  </dialog>
 
-  <!-- Panel moved to dropdown above -->
+  <!-- ═══ SIDEBAR BACKDROP (mobile overlay) ═══ -->
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar()"></div>
 
-  <!-- ═══ TAB NAVIGATION ═══ -->
-  <div class="tab-nav" id="tabNav">
-    <button class="tab-btn req-conn" onclick="switchTab('bom')" id="tabBtn-bom">
-      <span>📦</span> Production Visualizer <span class="lock-icon"
-        style="font-size:10px;opacity:0.7;margin-left:4px;">🔒</span>
-    </button>
-    <button class="tab-btn req-conn" onclick="switchTab('pa')" id="tabBtn-pa">
-      <span>🔬</span> Production Analyzer <span class="lock-icon"
-        style="font-size:10px;opacity:0.7;margin-left:4px;">🔒</span>
-    </button>
-    <button class="tab-btn req-conn" onclick="switchTab('visualizer')" id="tabBtn-visualizer">
-      <span>🔭</span> Network Visualizer <span class="lock-icon"
-        style="font-size:10px;opacity:0.7;margin-left:4px;">🔒</span>
-    </button>
-    <button class="tab-btn req-conn" onclick="switchTab('network')" id="tabBtn-network">
-      <span>🌐</span> Network Analyzer <span class="lock-icon"
-        style="font-size:10px;opacity:0.7;margin-left:4px;">🔒</span>
-    </button>
-    <button class="tab-btn" onclick="switchTab('docs')" id="tabBtn-docs">
-      <span>📄</span> Mapping Dataflow Generator
-    </button>
-  </div>
+  <!-- ═══ APP SHELL ═══ -->
+  <div class="app-shell">
+
+    <!-- ── Sidebar ── -->
+    <aside class="sidebar" id="sidebar">
+
+      <!-- Brand -->
+      <div class="sidebar-brand">
+        <img src="logo-goscm.png" alt="GoSCM" class="logo-img" style="height:28px;">
+        <div class="app-title">Applications Hub</div>
+      </div>
+
+      <!-- Connection status -->
+      <div class="sidebar-conn">
+        <div class="conn-status-row">
+          <div class="status-dot off" id="statusDot"></div>
+          <span id="statusText">Desconectado</span>
+        </div>
+        <button onclick="openConnectDialog()" id="btnHeaderConnect" class="btn btn-primary sidebar-connect-btn">
+          🔗 Conectar SAP IBP
+        </button>
+      </div>
+
+      <!-- Navigation -->
+      <nav class="sidebar-nav">
+        <button class="nav-item req-conn" onclick="switchTab('bom')" id="tabBtn-bom">
+          <span class="nav-icon">📦</span>
+          <span class="nav-label">Production Visualizer</span>
+          <span class="nav-lock-badge lock-icon">🔒</span>
+        </button>
+        <button class="nav-item req-conn" onclick="switchTab('pa')" id="tabBtn-pa">
+          <span class="nav-icon">🔬</span>
+          <span class="nav-label">Production Analyzer</span>
+          <span class="nav-lock-badge lock-icon">🔒</span>
+        </button>
+        <button class="nav-item req-conn" onclick="switchTab('visualizer')" id="tabBtn-visualizer">
+          <span class="nav-icon">🔭</span>
+          <span class="nav-label">Network Visualizer</span>
+          <span class="nav-lock-badge lock-icon">🔒</span>
+        </button>
+        <button class="nav-item req-conn" onclick="switchTab('network')" id="tabBtn-network">
+          <span class="nav-icon">🌐</span>
+          <span class="nav-label">Network Analyzer</span>
+          <span class="nav-lock-badge lock-icon">🔒</span>
+        </button>
+        <div class="nav-divider"></div>
+        <button class="nav-item nav-docs" onclick="switchTab('docs')" id="tabBtn-docs">
+          <span class="nav-icon">📄</span>
+          <span class="nav-label">Mapping Dataflow Generator</span>
+        </button>
+      </nav>
+
+      <!-- Footer -->
+      <div class="sidebar-footer">
+        <button onclick="openTechReqDialog()" class="nav-item nav-footer-item" id="btnTechReq">
+          <span class="nav-icon">⚙</span>
+          <span class="nav-label">Requisitos técnicos</span>
+        </button>
+      </div>
+
+    </aside>
+
+    <!-- ── Main content ── -->
+    <div class="main-content" id="mainContent">
 
   <!-- ═══ TAB: BOM HIERARCHY ═══ -->
   <div class="tab-panel" id="tab-bom">
@@ -372,7 +403,7 @@
         acceder.
       </p>
       <button class="btn btn-primary" style="margin-top:20px; font-size:13px; padding:10px 20px;"
-        onclick="toggleConnectPanel()">
+        onclick="openConnectDialog()">
         🔗 Conectar a SAP IBP
       </button>
     </div>
@@ -510,7 +541,7 @@
         El análisis de red evalúa múltiples entidades. Por favor, conéctate a tu entorno de SAP IBP para acceder.
       </p>
       <button class="btn btn-primary" style="margin-top:20px; font-size:13px; padding:10px 20px;"
-        onclick="toggleConnectPanel()">
+        onclick="openConnectDialog()">
         🔗 Conectar a SAP IBP
       </button>
     </div>
@@ -910,7 +941,7 @@
         para acceder.
       </p>
       <button class="btn btn-primary" style="margin-top:20px; font-size:13px; padding:10px 20px;"
-        onclick="toggleConnectPanel()">
+        onclick="openConnectDialog()">
         🔗 Conectar a SAP IBP
       </button>
     </div>
@@ -1263,7 +1294,7 @@
         El analizador de producción requiere acceso a múltiples entidades de SAP IBP. Por favor, conéctate primero.
       </p>
       <button class="btn btn-primary" style="margin-top:20px; font-size:13px; padding:10px 20px;"
-        onclick="toggleConnectPanel()">
+        onclick="openConnectDialog()">
         🔗 Conectar a SAP IBP
       </button>
     </div>
@@ -1617,6 +1648,9 @@
       <button class="mode-btn" id="mode-zipjobs" onclick="switchDocsMode('zipjobs')">🔗 ZIP + Jobs</button>
     </div>
 
+    <!-- DOCS STEPPER -->
+    <div class="docs-stepper" id="docsStepper"></div>
+
     <!-- PRO TIP BANNER -->
     <div class="pro-tip-banner">
       <span class="pro-tip-icon">💡</span>
@@ -1821,6 +1855,9 @@
     </div>
 
   </div><!-- /tab-docs -->
+
+    </div><!-- /main-content -->
+  </div><!-- /app-shell -->
 
   <script src="js/state.js"></script>
   <script src="js/utils.js"></script>
