@@ -187,6 +187,81 @@ const ATL_NO_GROUP = 'Sin grupo ATL';
 - 5 pestañas: Conexión, Usuario SAP IBP, Communication Arrangement, Entidades OData, Permisos de red
 - Visible sin necesidad de conectarse
 
+### 5. Integration Explorer (pestaña)
+Explorador visual de integraciones SAP CI-DS. No requiere conexión IBP — 100% frontend.
+
+#### Flujo de uso
+1. El usuario sube uno o más ZIPs exportados desde SAP CI-DS.
+2. El módulo reutiliza `parseBatchCsv(zip)` y `parseIntegration(xmlStr, batchEntry)` de `docs.js` (funciones globales, sin IIFE).
+3. Se muestran todas las integraciones en una vista master-detail con buscador global y dimensiones pivotadas.
+4. Se detectan automáticamente cadenas consecutivas y se visualizan en un grafo jerárquico (vis-network).
+
+#### Namespace
+Todo el módulo vive en el IIFE `const Explorer = (function(){ ... })()` para evitar colisiones con las variables globales de `docs.js` (`files`, `dz`, `addFiles`, etc.). Las variables internas usan el prefijo `ex` (`exFiles`, `integrations`, etc.).
+
+#### Estado interno (`explorer.js`)
+```javascript
+let exFiles      = [];  // [{name, data: ArrayBuffer}]
+let integrations = [];  // parsed planos; cada uno tiene _idx, _zipName
+let filtered     = [];  // subconjunto post-búsqueda
+let indexes      = {};  // byDstTable, bySrcTable, byDstField, bySrcField, searchTokens
+let chainEdges   = [];  // [{from, to, via: 'table'|'file'|'lookup', label}]
+let selectedIdx  = null;
+let currentView  = 'list';  // 'list' | 'graph'
+let currentDim   = 'integration';
+let visNetwork   = null;
+```
+
+#### Estructura del objeto parsed (por dataflow)
+Igual que el del Doc Generator; campos relevantes para el Explorer:
+- `jobName` — nombre del task CI-DS (mostrado como título principal)
+- `dataflowName` — nombre del dataflow dentro del job (subtítulo cuando difiere)
+- `tipoIntegracion` — `'MD'` | `'KF'` | `'FILE'`
+- `targetTable` — nombre de la tabla o formato de archivo destino
+- `fileLoaderFileName` — ruta/nombre del archivo físico (puede estar vacío)
+- `srcDSName`, `dstDSName` — nombres de datastore origen/destino (de `batch.csv`)
+- `mappings`, `filters`, `lookups`, `variables`
+
+#### Detección de cadenas (`detectChains`)
+Tres mecanismos; cada par A→B se registra solo una vez (más específico primero):
+
+| Mecanismo | Condición | Color en grafo |
+|---|---|---|
+| **Tabla (DB)** | `normTableKey(m.srcDS, m.srcTable)` de B coincide con `normTableKey(a.dstDSName, a.targetTable)` de A (L1 exacto). L2 (solo tabla sin DS) solo aplica si ninguno de los dos es tipo FILE. | Verde `#34d399`, línea sólida |
+| **Archivo** | A es tipo FILE; el nombre de formato (`targetTable`) coincide con `m.srcTable` de B, y `m.srcDS` de B es tipo archivo. | Naranja `#E8622A`, línea punteada |
+| **Lookup** | B tiene expresiones `lookup(DS."archivo.csv", ...)`. Se extraen pares `{ds, file}` con `extractLookupPairs()`. El DS debe coincidir con `a.targetTable`; si A tiene `fileLoaderFileName` y el lookup provee nombre de archivo, ambos nombres base (sin extensión) deben coincidir. | Morado `#a78bfa`, línea dash-dot |
+
+**Regla crítica de archivos:** para cadenas que involucran integraciones FILE, se requiere que TANTO la tabla destino como el nombre de archivo de A sean iguales a la tabla origen y nombre de archivo de B. Esto evita falsos positivos cuando el mismo esquema de formato se usa con archivos físicos distintos.
+
+#### Dimensiones de exploración
+Además de la vista por integración, hay cuatro vistas pivotadas construidas sobre `indexes`:
+- **Tabla Destino** (`byDstTable`): agrupa por `normTableKey(dstDS, dstTable)`
+- **Tabla Origen** (`bySrcTable`): agrupa por `normTableKey(srcDS, srcTable)`
+- **Campo Destino** (`byDstField`): agrupa por nombre de campo destino (uppercase)
+- **Campo Origen** (`bySrcField`): agrupa por nombre de campo origen (uppercase)
+
+#### Grafo (vis-network)
+- Layout jerárquico LR, `physics: false`
+- Nodos coloreados por `tipoIntegracion`: MD=#F7A800, KF=#29ABE2, FILE=#E8622A
+- Leyenda flotante superpuesta en esquina inferior derecha del contenedor del grafo
+- Click en nodo → `switchView('list')` + `renderDetail(idx)`
+- Función: `renderGraph()` en `explorer.js`
+
+#### Funciones principales (`explorer.js`)
+- `Explorer.analyze()` — parsea todos los ZIPs, construye índices y cadenas, renderiza lista
+- `Explorer.renderDetail(idx)` — detalle de una integración: header, cadenas, mappings, filtros, lookups, variables
+- `Explorer.applySearch(q)` — filtro client-side sobre tokens indexados
+- `Explorer.switchView(v)` — alterna entre 'list' y 'graph'
+- `Explorer.switchDimension(dim)` — cambia la dimensión activa en la vista lista
+- `Explorer.renderGraph()` — construye o re-renderiza el grafo vis-network
+- `extractLookupPairs(lookups)` — extrae `[{ds, file}]` de expresiones `lookup(...)`
+- `normTableKey(ds, tbl)` / `normFileKey(file)` — normalización de claves para matching
+
+#### Archivo
+`public/js/explorer.js` — cargado después de `docs.js` en `index.html` para acceder a las funciones globales del parser.
+
+---
+
 ### 6. Feedback (botón flotante)
 - Botón fijo esquina inferior derecha
 - Panel lateral con formulario: Nombre, App, Tipo, Descripción

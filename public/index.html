@@ -368,6 +368,10 @@
           <span class="nav-icon">📄</span>
           <span class="nav-label">Mapping Dataflow Generator</span>
         </button>
+        <button class="nav-item nav-docs" onclick="switchTab('explorer')" id="tabBtn-explorer">
+          <span class="nav-icon">🔎</span>
+          <span class="nav-label">Integration Explorer</span>
+        </button>
       </nav>
 
       <!-- Footer -->
@@ -1856,6 +1860,76 @@
 
   </div><!-- /tab-docs -->
 
+  <div class="tab-panel" id="tab-explorer">
+    <div class="tab-info-banner" id="infoBannerExplorer">
+      <span class="tab-info-icon">🔎</span>
+      <div class="tab-info-content">
+        <div class="tab-info-desc">Explora visualmente las integraciones CI-DS. Sube ZIPs, navega mappings/filtros/lookups y detecta cadenas consecutivas entre dataflows.</div>
+      </div>
+    </div>
+
+    <!-- Upload -->
+    <div class="panel">
+      <div class="panel-title">📦 ZIPs de integraciones CI-DS</div>
+      <div class="drop-zone" id="ex-dz">
+        <input type="file" id="ex-fi" accept=".zip" multiple style="display:none">
+        <span class="drop-icon">🗂️</span>
+        <p class="drop-title">Arrastra los ZIP aquí o haz click para seleccionar</p>
+        <p class="drop-hint">Múltiples archivos permitidos · Se reutiliza el parser de Doc Generator</p>
+      </div>
+      <div id="ex-file-list"></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="ex-analyze-btn" disabled onclick="Explorer.analyze()">🔬 Explorar integraciones</button>
+      </div>
+    </div>
+
+    <!-- Resultados -->
+    <div class="panel" id="ex-results" style="display:none">
+      <div class="ex-toolbar">
+        <div class="ex-dim-toggle">
+          <button class="dim-btn active" id="ex-dim-integration" onclick="Explorer.switchDimension('integration')">🔗 Integración</button>
+          <button class="dim-btn" id="ex-dim-dst-table"    onclick="Explorer.switchDimension('dst-table')">📤 Tabla Destino</button>
+          <button class="dim-btn" id="ex-dim-src-table"    onclick="Explorer.switchDimension('src-table')">📥 Tabla Origen</button>
+          <button class="dim-btn" id="ex-dim-dst-field"    onclick="Explorer.switchDimension('dst-field')">📋 Campo Destino</button>
+          <button class="dim-btn" id="ex-dim-src-field"    onclick="Explorer.switchDimension('src-field')">📋 Campo Origen</button>
+        </div>
+        <div class="ex-toolbar-row2">
+          <input class="sel-search" id="ex-search" placeholder="🔍 Buscar..." oninput="Explorer.applySearch(this.value)">
+          <div class="ex-view-toggle" id="ex-view-toggle">
+            <button class="mode-btn active" id="ex-view-list" onclick="Explorer.switchView('list')">📋 Lista</button>
+            <button class="mode-btn" id="ex-view-graph" onclick="Explorer.switchView('graph')">🕸️ Grafo</button>
+          </div>
+          <span class="sel-counter" id="ex-counter"></span>
+        </div>
+      </div>
+
+      <!-- Vista LISTA -->
+      <div class="ex-split" id="ex-list-view">
+        <div class="ex-master" id="ex-master"></div>
+        <div class="ex-detail" id="ex-detail">
+          <p class="docs-hint">Selecciona una integración a la izquierda para explorar sus campos</p>
+        </div>
+      </div>
+
+      <!-- Vista GRAFO -->
+      <div id="ex-graph-wrap" style="display:none; position:relative;">
+        <div id="ex-graph-view" style="height:640px; border:1px solid var(--border); border-radius:8px;"></div>
+        <div id="ex-graph-legend" class="ex-graph-legend">
+          <div class="ex-legend-title">Leyenda</div>
+          <div class="ex-legend-section-label">Conexiones</div>
+          <div class="ex-legend-item"><svg width="32" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="#34d399" stroke-width="2.5"/><polygon points="20,1 26,5 20,9" fill="#34d399"/></svg> Tabla (DB)</div>
+          <div class="ex-legend-item"><svg width="32" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="#E8622A" stroke-width="2" stroke-dasharray="6 4"/><polygon points="20,1 26,5 20,9" fill="#E8622A"/></svg> Archivo</div>
+          <div class="ex-legend-item"><svg width="32" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="#a78bfa" stroke-width="2" stroke-dasharray="2 3 8 3"/><polygon points="20,1 26,5 20,9" fill="#a78bfa"/></svg> Lookup</div>
+          <div class="ex-legend-sep"></div>
+          <div class="ex-legend-section-label">Nodos</div>
+          <div class="ex-legend-item"><span class="ex-legend-node" style="background:#F7A800;color:#000;">MD</span> Master data</div>
+          <div class="ex-legend-item"><span class="ex-legend-node" style="background:#29ABE2;color:#000;">KF</span> Key figure</div>
+          <div class="ex-legend-item"><span class="ex-legend-node" style="background:#E8622A;color:#fff;">FILE</span> Archivo</div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /tab-explorer -->
+
     </div><!-- /main-content -->
   </div><!-- /app-shell -->
 
@@ -1868,6 +1942,7 @@
   <script src="js/prodAnalyzer.js"></script>
   <script src="js/main.js"></script>
   <script src="js/docs.js"></script>
+  <script src="js/explorer.js"></script>
 
   <!-- Feedback button -->
   <button onclick="openFeedback()" title="Reportar / Consultar / Sugerir"
