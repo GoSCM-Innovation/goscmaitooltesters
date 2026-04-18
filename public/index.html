@@ -1576,40 +1576,60 @@
       </div>
     </div>
 
-    <!-- ═══ PA: MODO DE EXPORTACIÓN ═══ -->
+    <!-- ═══ PA: EXCLUIR TIPOS DE MATERIAL (opcional) ═══ -->
+    <div class="mattype-panel hidden" id="panelPAExclude">
+      <div class="mattype-panel-header" onclick="mattypeToggleExcludePanel()">
+        <div class="mattype-panel-title">
+          ② Excluir tipos de material
+          <span class="mattype-optional-badge">Opcional</span>
+        </div>
+        <div class="mattype-panel-actions">
+          <span class="mattype-summary" id="mattypeExcludeSummary">Todos los tipos incluidos — sin configurar</span>
+          <button class="mattype-reset-btn" onclick="event.stopPropagation();mattypeResetExclude()">Restablecer</button>
+          <span class="mattype-arr" id="mattypeExcludeArr">▶</span>
+        </div>
+      </div>
+      <div class="mattype-panel-body" id="mattypeExcludeBody" style="display:none;">
+        <div id="mattypeExcludeWrap"></div>
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="btn btn-primary btn-small" onclick="paContinueToCategories()">Continuar &#8594;</button>
+          <button class="btn btn-secondary btn-small" onclick="paBackToMapping()">&#8592; Volver al mapeo</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ PA: CATEGORIZAR TIPOS (opcional) ═══ -->
+    <div class="mattype-panel hidden" id="panelPACategories">
+      <div class="mattype-panel-header" onclick="mattypeToggleCatPanel()">
+        <div class="mattype-panel-title">
+          ③ Categorizar tipos de material
+          <span class="mattype-optional-badge">Opcional</span>
+        </div>
+        <div class="mattype-panel-actions">
+          <span class="mattype-summary" id="mattypeCatSummary">Sin categorización — análisis estándar</span>
+          <button class="mattype-reset-btn" onclick="event.stopPropagation();mattypeResetCat()">Restablecer</button>
+          <span class="mattype-arr" id="mattypeCatArr">▶</span>
+        </div>
+      </div>
+      <div class="mattype-panel-body" id="mattypeCatBody" style="display:none;">
+        <div id="mattypeCatWrap"></div>
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="btn btn-primary btn-small" onclick="paContinueToRun()">Continuar &#8594;</button>
+          <button class="btn btn-secondary btn-small" onclick="paBackToExclude()">&#8592; Volver</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ PA: EJECUTAR ANÁLISIS ═══ -->
     <div class="panel hidden" id="panelPAExportMode">
-      <div class="panel-title">③ Modo de exportación</div>
+      <div class="panel-title">④ Ejecutar análisis</div>
       <div id="bodyPAExportMode">
-        <p style="font-size:12px;color:var(--text2);margin-bottom:12px;">
-          Selecciona cómo deseas exportar el análisis de jerarquía de producción.
-        </p>
-        <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
-
-          <!-- LIGHT -->
-          <label for="modeLightPA" style="flex:1;min-width:240px;cursor:pointer;display:block;border:2px solid var(--accent);border-radius:8px;padding:14px 16px;background:rgba(247,168,0,0.06);transition:border-color .2s;" id="cardLightPA">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-              <input type="radio" name="paExportMode" value="light" id="modeLightPA" checked onchange="paModeChange()">
-              <span style="font-weight:700;font-size:13px;color:var(--accent);">Light — CSV comprimido</span>
-              <span style="font-size:10px;background:var(--accent);color:#0b1120;padding:1px 6px;border-radius:10px;font-weight:700;">Recomendado</span>
-            </div>
-            <p style="font-size:12px;color:var(--text2);margin:0 0 6px;">Genera un archivo <strong>.zip</strong> con 7 archivos <strong>.csv</strong> (Resumen, Product, Resource, Resource Location, Prod Source Header, Prod Source Item, Prod Source Resource). Sin formato ni colores. Ideal para volúmenes de datos altos o procesamiento posterior en Excel / Python / BI.</p>
-            <p style="font-size:11px;color:var(--green);margin:0;"><strong>Uso de memoria: muy bajo.</strong> Los datos se construyen como texto plano y se comprimen con JSZip sin mantener todo en RAM simultáneamente.</p>
-          </label>
-
-          <!-- HEAVY -->
-          <label for="modeHeavyPA" style="flex:1;min-width:240px;cursor:pointer;display:block;border:2px solid var(--border,#1e2d45);border-radius:8px;padding:14px 16px;background:rgba(41,171,226,0.04);transition:border-color .2s;" id="cardHeavyPA">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-              <input type="radio" name="paExportMode" value="heavy" id="modeHeavyPA" onchange="paModeChange()">
-              <span style="font-weight:700;font-size:13px;color:var(--cyan);">Heavy — Excel formateado</span>
-            </div>
-            <p style="font-size:12px;color:var(--text2);margin:0 0 6px;">Genera un archivo <strong>.xlsx</strong> con 7 hojas formateadas: colores por severidad (🔴/🟡/✅), encabezados congelados, anchos automáticos y hoja de Resumen con estadísticas de consistencia.</p>
-            <p style="font-size:11px;color:var(--amber,#f59e0b);margin:0;"><strong>Uso de memoria: alto.</strong> ExcelJS mantiene cada celda con metadatos de estilo en memoria; en datasets grandes puede superar varios cientos de MB en el navegador.</p>
-          </label>
-
+        <div id="paRunSummary" style="font-size:12px;color:var(--text2);margin-bottom:14px;padding:10px 12px;background:rgba(41,171,226,.05);border-left:3px solid var(--cyan);border-radius:4px;">
+          Configuración por defecto — análisis estándar
         </div>
         <div class="btn-row">
-          <button class="btn btn-primary" id="btnFetchPA" onclick="doProductionAnalysis()">Iniciar análisis</button>
-          <button class="btn btn-secondary btn-small" onclick="paBackToMapping()">&#8592; Volver al mapeo</button>
+          <button class="btn btn-primary" id="btnFetchPA" onclick="doProductionAnalysis()">▶ Ejecutar análisis</button>
+          <button class="btn btn-secondary btn-small" onclick="paBackToCategories()">&#8592; Volver</button>
         </div>
         <div class="progress-bar hidden" id="progBarPA">
           <div class="fill" id="progFillPA" style="width:0%"></div>
@@ -1865,6 +1885,7 @@
   <script src="js/bom.js"></script>
   <script src="js/analyzer.js"></script>
   <script src="js/visualizer.js"></script>
+  <script src="js/mattype-config.js"></script>
   <script src="js/prodAnalyzer.js"></script>
   <script src="js/main.js"></script>
   <script src="js/docs.js"></script>
