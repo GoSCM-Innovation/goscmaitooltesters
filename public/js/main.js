@@ -1,7 +1,7 @@
     /* ═══════════════════════════════════════════════════════════════
        TAB NAVIGATION
        ═══════════════════════════════════════════════════════════════ */
-    var TAB_BANNERS = { bom: 'infoBannerBom', network: 'infoBannerNetwork', visualizer: 'infoBannerVisualizer', pa: 'infoBannerPA', docs: 'infoBannerDocs' };
+    var TAB_BANNERS = { bom: 'infoBannerBom', network: 'infoBannerNetwork', visualizer: 'infoBannerVisualizer', pa: 'infoBannerPA', docs: 'infoBannerDocs', explorer: 'infoBannerExplorer' };
 
     function switchTab(tabId) {
       document.querySelectorAll('.tab-panel').forEach(function (p) { p.classList.remove('active'); });
