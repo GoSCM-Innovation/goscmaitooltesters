@@ -302,9 +302,9 @@
       function _xe(v) {
         if (v == null) return '';
         return String(v)
+          .replace(/[^\x09\x0A\x0D\x20-\uD7FF\uE000-\uFFFD]/g, '')
           .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;').replace(/'/g, '&apos;')
-          .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+          .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
       }
 
       // cellXfs indices (ver _styles): 0=normal 1=cabecera 2=rojo 3=amarillo
