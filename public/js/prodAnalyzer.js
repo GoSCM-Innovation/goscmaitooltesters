@@ -866,26 +866,17 @@ async function paAnalyzeAndExport(
       })) : 'none';
       var fill = severityToFill(finalSev);
 
-      // N/A: suprimir métricas que no aplican según el tipo de material
-      var hasKnownCat = cats.indexOf('all') < 0;
-      var naPSH  = hasKnownCat && rules.requiresPSH  === 'none';
-      var naPSI  = hasKnownCat && rules.requiresPSI  === 'none';
-      var naPSR  = hasKnownCat && rules.requiresPSR  === 'none';
-      var naVend = hasKnownCat && cats.indexOf('rawmat') < 0 && cats.indexOf('trading') < 0;
-      var naCov  = hasKnownCat && rules.requiresVendorArc === 'none';
-      function na(cond, val) { return cond ? NA_DASH : val; }
-
       S1.addRow([
         statusLabel(fill), obs.join(' | '),
         prdid, pd(prdid), mattypeid,
-        yn(inLP), na(naPSH, yn(inPSH)), yn(inPSI), yn(inLS),
-        na(naPSH, sidsPrd.length),        na(naPSH, codes(sidsPrd)),
-        na(naPSH, plantsSet.size),        na(naPSH, codes(plantsSet)),
-        na(naPSI, compCount),
-        na(naPSR, resSet.size),           na(naPSR, codes(resSet)),
-        na(naVend, vendorSet.size),       na(naVend, codes(vendorSet)),
-        na(naCov, covData.covered.size),  na(naCov, codes(covData.covered)),
-        na(naCov, covData.uncovered.size), na(naCov, codes(covData.uncovered)),
+        yn(inLP), yn(inPSH), yn(inPSI), yn(inLS),
+        sidsPrd.length,        codes(sidsPrd),
+        plantsSet.size,        codes(plantsSet),
+        compCount,
+        resSet.size,           codes(resSet),
+        vendorSet.size,        codes(vendorSet),
+        covData.covered.size,  codes(covData.covered),
+        covData.uncovered.size, codes(covData.uncovered),
         usedBySet.size,
         origins.size,         codes(origins),
         consLocs.size,        codes(consLocs)
@@ -1135,28 +1126,26 @@ async function paAnalyzeAndExport(
       var finalSev = fills.length ? mattypeResolveSeverity(fills) : 'none';
       var fill = finalSev === 'red' ? C_RED : finalSev === 'yellow' ? C_YEL : null;
 
-      function naL(cond, val) { return cond ? NA_DASH : val; }
-
       S9.addRow([
         statusLabel(fill), obs.join(' | '),
         locid, locdescr, loctype, rolStr,
-        naL(!isPlanta, plantaPrds.size),    naL(!isPlanta, codes(plantaPrds)),
-        naL(!isPlanta, plantaSids.size),    naL(!isPlanta, codes(plantaSids)),
-        naL(!isPlanta, resAsignados.size),  naL(!isPlanta, codes(resAsignados)),
-        naL(!isPlanta, resActivos.size),    naL(!isPlanta, codes(resActivos)),
-        naL(!isPlanta, resOciosos.size),    naL(!isPlanta, codes(resOciosos)),
-        naL(!isPlanta, bomssinPSI.size),    naL(!isPlanta, codes(bomssinPSI)),
-        naL(!isPlanta, bomssinPSR.size),    naL(!isPlanta, codes(bomssinPSR)),
-        naL(!isPlanta, compExternos),       naL(!isPlanta, compSinCov.size), naL(!isPlanta, codes(compSinCov)),
-        naL(!isPlanta, sidsSinPlt.size),    naL(!isPlanta, codes(sidsSinPlt)),
-        naL(!isProveedor, prdAbastecidos.size), naL(!isProveedor, codes(prdAbastecidos)),
-        naL(!isProveedor, plantasAbast.size),   naL(!isProveedor, codes(plantasAbast)),
-        naL(!isProveedor, sinConsumoPSI.size),  naL(!isProveedor, codes(sinConsumoPSI)),
-        naL(!isProveedor, sinLocProd.size),     naL(!isProveedor, codes(sinLocProd)),
-        naL(!isTransferencia, prdTransferidos.size), naL(!isTransferencia, codes(prdTransferidos)),
-        naL(!isTransferencia, destTransf.size),      naL(!isTransferencia, codes(destTransf)),
-        naL(!isReceptor, prdRecibidos.size),  naL(!isReceptor, codes(prdRecibidos)),
-        naL(!isReceptor, origenes.size),      naL(!isReceptor, codes(origenes))
+        plantaPrds.size,    codes(plantaPrds),
+        plantaSids.size,    codes(plantaSids),
+        resAsignados.size,  codes(resAsignados),
+        resActivos.size,    codes(resActivos),
+        resOciosos.size,    codes(resOciosos),
+        bomssinPSI.size,    codes(bomssinPSI),
+        bomssinPSR.size,    codes(bomssinPSR),
+        compExternos,       compSinCov.size, codes(compSinCov),
+        sidsSinPlt.size,    codes(sidsSinPlt),
+        prdAbastecidos.size, codes(prdAbastecidos),
+        plantasAbast.size,   codes(plantasAbast),
+        sinConsumoPSI.size,  codes(sinConsumoPSI),
+        sinLocProd.size,     codes(sinLocProd),
+        prdTransferidos.size, codes(prdTransferidos),
+        destTransf.size,      codes(destTransf),
+        prdRecibidos.size,  codes(prdRecibidos),
+        origenes.size,      codes(origenes)
       ], fill);
       track('Location', fill);
     });
