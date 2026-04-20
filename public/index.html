@@ -1332,19 +1332,19 @@
             <span>📦 2 · Product</span><span class="guide-arr">▶</span>
           </div>
           <div class="guide-item-body hidden">
-            <p>Un producto por fila. Verifica que cada material esté correctamente configurado para la planificación. Las columnas que no aplican para el tipo de material se muestran como <strong>—</strong>.</p>
+            <p>Un producto por fila. Verifica que cada material esté correctamente configurado para la planificación. Todas las métricas se calculan para cada producto; el usuario puede discriminar cuáles aplican según el tipo de material.</p>
             <ul>
               <li><strong>MATTYPEID</strong> — Tipo de material SAP. Determina qué validaciones aplican a este producto.</li>
               <li><strong>En Location Product</strong> — ¿IBP sabe en qué plantas puede existir este material? Sin esto, el producto no entra a ningún plan. <em>Ej: PROD-001 sin Location Product → IBP lo ignora.</em></li>
-              <li><strong>En PSH (output)</strong> — ¿Tiene una receta de producción propia? Solo aplica a productos fabricados. <em>Ej: un producto terminado sin PSH no tiene instrucciones de cómo fabricarse.</em></li>
+              <li><strong>En PSH (output)</strong> — ¿Tiene una receta de producción propia? <em>Ej: un producto terminado sin PSH no tiene instrucciones de cómo fabricarse.</em></li>
               <li><strong>En PSI (componente)</strong> — ¿Este producto es ingrediente en el BOM de algún otro? <em>Ej: SEMI-001 aparece como componente en el BOM de PROD-001.</em></li>
               <li><strong>En Location Source</strong> — ¿Tiene rutas de transferencia entre plantas configuradas?</li>
               <li><strong># Opciones prod. / SOURCEIDs</strong> — Cuántas recetas de producción distintas tiene. <em>Ej: 2 = puede fabricarse de dos maneras diferentes.</em></li>
               <li><strong># Plantas prod. / Plantas prod.</strong> — En cuántas plantas se fabrica este producto.</li>
               <li><strong># Componentes BOM</strong> — Cuántos ingredientes tiene en total entre todas sus recetas.</li>
               <li><strong># Recursos prod. / Recursos</strong> — Cuántos puestos de trabajo o máquinas están asignados a sus recetas.</li>
-              <li><strong># Proveedores / Proveedores</strong> — Cuántas ubicaciones de origen lo abastecen. Solo aplica a materias primas y mercaderías.</li>
-              <li><strong># Plantas cubiertas / sin cobertura</strong> — De las plantas que consumen este material como insumo, cuántas tienen ruta de suministro configurada y cuántas no. Solo aplica a materias primas. <em>Ej: MAT-A se usa en P01 y P02. P01 tiene ruta configurada (cubierta), P02 no (sin cobertura) → alerta 🔴.</em></li>
+              <li><strong># Proveedores / Proveedores</strong> — Cuántas ubicaciones de origen lo abastecen.</li>
+              <li><strong># Plantas cubiertas / sin cobertura</strong> — De las plantas que consumen este material como insumo, cuántas tienen ruta de suministro configurada y cuántas no. <em>Ej: MAT-A se usa en P01 y P02. P01 tiene ruta configurada (cubierta), P02 no (sin cobertura) → alerta 🔴.</em></li>
               <li><strong># Productos que lo usan</strong> — Cuántos productos distintos requieren este material como ingrediente.</li>
               <li><strong># Orígenes en red / Orígenes</strong> — Desde cuántas ubicaciones se puede recibir este producto en la red.</li>
               <li><strong># Plantas consumidoras / Plantas consumidoras</strong> — En cuántas plantas se usa este material como ingrediente de algún BOM.</li>
