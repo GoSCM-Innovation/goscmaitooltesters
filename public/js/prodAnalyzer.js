@@ -674,7 +674,8 @@ async function paAnalyzeAndExport(
   if (ent.prd) {
     initStat('Product');
     var S1 = makeSheet('Product', 'FF29ABE2', [
-      'Estado','PRDID','PRDDESCR','MATTYPEID',
+      'Estado','Observacion',
+      'PRDID','PRDDESCR','MATTYPEID',
       'En Location Product','En PSH (output)','En PSI (componente)','En Location Source',
       '# Opciones prod.','Opciones prod. (SOURCEIDs)',
       '# Plantas prod.','Plantas prod. (códigos)',
@@ -685,8 +686,7 @@ async function paAnalyzeAndExport(
       '# Plantas sin cobertura','Plantas sin cobertura (códigos)',
       '# Productos que lo usan',
       '# Orígenes en red','Orígenes en red (códigos)',
-      '# Plantas consumidoras','Plantas consumidoras (códigos)',
-      'Observacion'
+      '# Plantas consumidoras','Plantas consumidoras (códigos)'
     ]);
 
     Object.keys(PA_PRD).sort().forEach(function(prdid) {
@@ -783,7 +783,8 @@ async function paAnalyzeAndExport(
       var fill = severityToFill(finalSev);
 
       S1.addRow([
-        statusLabel(fill), prdid, pd(prdid), mattypeid,
+        statusLabel(fill), obs.join(' | '),
+        prdid, pd(prdid), mattypeid,
         yn(inLP), yn(inPSH), yn(inPSI), yn(inLS),
         sidsPrd.length,       codes(sidsPrd),
         plantsSet.size,       codes(plantsSet),
@@ -794,8 +795,7 @@ async function paAnalyzeAndExport(
         covData.uncovered.size, codes(covData.uncovered),
         usedBySet.size,
         origins.size,         codes(origins),
-        consLocs.size,        codes(consLocs),
-        obs.join(' | ')
+        consLocs.size,        codes(consLocs)
       ], fill);
       track('Product', fill);
     });
@@ -805,322 +805,14 @@ async function paAnalyzeAndExport(
   }
 
   /* ════════════════════════════════════════════════════════════════
-     HOJA 2 — RESOURCE
-     ════════════════════════════════════════════════════════════════ */
-  if (ent.res) {
-    initStat('Resource');
-    var S2 = makeSheet('Resource', 'FFa78bfa', [
-      'Estado','RESID','RESDESCR',
-      'En PSR','En Resource Location',
-      '# Plantas asignadas','Plantas asignadas (códigos)',
-      '# Fuentes prod.','Fuentes prod. (SOURCEIDs)',
-      '# Productos que fabrica','Productos que fabrica (códigos)',
-      'Observacion'
-    ]);
-
-    // Índice: RESID → Set<LOCID> (desde Resource Location)
-    var resLocsByResid = {};
-    Object.keys(PA_RES_LOC).forEach(function(resid) {
-      resLocsByResid[resid] = new Set(PA_RES_LOC[resid].map(function(e){ return e.LOCID; }));
-    });
-
-    // Índice: RESID → Set<SOURCEID>
-    var resSidsByResid = {};
-    allPsr.forEach(function(r) {
-      var resid = str(r.RESID || ''), sid = str(r.SOURCEID);
-      if (!resid) return;
-      if (!resSidsByResid[resid]) resSidsByResid[resid] = new Set();
-      resSidsByResid[resid].add(sid);
-    });
-
-    // Índice: RESID → Set<PRDID>
-    var resPrdsByResid = {};
-    allPsr.forEach(function(r) {
-      var resid = str(r.RESID || ''), sid = str(r.SOURCEID);
-      if (!resid) return;
-      var info = pshSidLocid[sid] || {};
-      if (info.PRDID) {
-        if (!resPrdsByResid[resid]) resPrdsByResid[resid] = new Set();
-        resPrdsByResid[resid].add(info.PRDID);
-      }
-    });
-
-    Object.keys(PA_RES).sort().forEach(function(resid) {
-      var inPSR = psrResidSet.has(resid);
-      var inRL  = resLocResidSet.has(resid);
-      var locsSet = resLocsByResid[resid] || new Set();
-      var sidsSet = resSidsByResid[resid] || new Set();
-      var prdsSet = resPrdsByResid[resid] || new Set();
-      var obs = [];
-      if (!inPSR && !inRL) obs.push('Recurso huérfano: sin uso en producción ni planta asignada');
-      else if (!inPSR)     obs.push('Sin uso en producción (no aparece en PSR)');
-      else if (!inRL)      obs.push('Sin planta asignada en Resource Location');
-      if (!obs.length)     obs.push('OK');
-      var fill = (!inPSR && !inRL) ? C_RED : (!inPSR || !inRL) ? C_YEL : null;
-      S2.addRow([
-        statusLabel(fill), resid, rd(resid),
-        yn(inPSR), yn(inRL),
-        locsSet.size, codes(locsSet),
-        sidsSet.size, codes(sidsSet),
-        prdsSet.size, codes(prdsSet),
-        obs.join(' | ')
-      ], fill);
-      track('Resource', fill);
-    });
-    S2.finalize();
-    setStatusPA('Hoja Resource lista...', 84);
-    await new Promise(function(r){ setTimeout(r, 0); });
-  }
-
-  /* ════════════════════════════════════════════════════════════════
-     HOJA 3 — RESOURCE LOCATION
-     ════════════════════════════════════════════════════════════════ */
-  if (ent.resLoc) {
-    initStat('Resource Location');
-    var S3 = makeSheet('Resource Location', 'FFFF9F43', [
-      'Estado','RESID','RESDESCR','LOCID','LOCDESCR',
-      'RESID+LOCID usado en PSR','Observacion'
-    ]);
-    Object.keys(PA_RES_LOC).sort().forEach(function(resid) {
-      PA_RES_LOC[resid].forEach(function(e) {
-        var locid = e.LOCID;
-        var used  = psrByResidLoc.has(resid + '|' + locid);
-        var obs   = used ? 'OK' : 'Recurso asignado a planta pero sin uso en PSR para esta planta';
-        var fill  = used ? null : C_YEL;
-        S3.addRow([statusLabel(fill), resid, rd(resid), locid, ld(locid), yn(used), obs], fill);
-        track('Resource Location', fill);
-      });
-    });
-    S3.finalize();
-    setStatusPA('Hoja Resource Location lista...', 85);
-    await new Promise(function(r){ setTimeout(r, 0); });
-  }
-
-  /* ════════════════════════════════════════════════════════════════
-     HOJA 4 — PRODUCTION SOURCE HEADER
-     ════════════════════════════════════════════════════════════════ */
-  if (ent.psh) {
-    initStat('Prod Source Header');
-    var S6 = makeSheet('Prod Source Header', 'FFF7A800', [
-      'Estado','SOURCEID',
-      'PRDID output','PRDDESCR output','MATTYPEID output',
-      'LOCID planta','LOCDESCR planta',
-      'SOURCETYPE(s)','PLEADTIME','OUTPUTCOEFFICIENT',
-      'PRDID+LOCID en Location Product',
-      '# Componentes PSI','# Recursos PSR','Recursos PSR (códigos)',
-      '# Componentes con alternativa',
-      'Tiene PSR','Observacion'
-    ]);
-    Object.keys(pshBySid).sort().forEach(function(sid) {
-      var recs    = pshBySid[sid];
-      var primary = recs.find(function(r){ return r.SOURCETYPE === 'P'; }) || recs[0];
-      var outPrd  = primary.PRDID, outLoc = primary.LOCID;
-      var plt     = primary.PLEADTIME || '', coeff = primary.OUTPUTCOEFFICIENT || '';
-      var stypes  = recs.map(function(r){ return r.SOURCETYPE; })
-                        .filter(function(v,i,a){ return a.indexOf(v) === i; }).join('/');
-      var inLP    = locPrdSet.has(outLoc + '|' + outPrd);
-      var psiRows = psiBySourceid[sid] || [];
-      var psrRows = psrBySourceid[sid] || [];
-      var hasPSI  = psiRows.length > 0;
-      var hasPSR  = psrRows.length > 0;
-      var noLt    = !plt || plt === '0';
-      var hasP    = pshSidHasP[sid];
-      var multi   = (pshByPrdLoc[outPrd + '|' + outLoc] || []).length > 1;
-
-      // Métricas
-      var residsSet = new Set(psrRows.map(function(r){ return str(r.RESID || ''); }).filter(Boolean));
-      var altCount  = psiRows.filter(function(r){ return str(r.ISALTITEM || '') === 'X'; }).length;
-
-      var obs = [];
-      if (!hasPSI) obs.push('BOM vacío: sin componentes PSI');
-      if (noLt)    obs.push('PLEADTIME = 0 o no definido');
-      if (!inLP)   obs.push('PRDID+LOCID sin cobertura en Location Product');
-      if (!hasP)   obs.push('Sin registro SOURCETYPE=P');
-      if (!hasPSR) obs.push('Sin recursos PSR asignados');
-      if (multi)   obs.push('Múltiples SOURCEIDs para mismo PRDID+LOCID — verificar cuotas');
-      if (!obs.length) obs.push('OK');
-      var fill = (!hasPSI || noLt || !inLP || !hasPSR) ? C_RED : (!hasP || multi) ? C_YEL : null;
-      S6.addRow([
-        statusLabel(fill), sid,
-        outPrd, pd(outPrd), pm(outPrd),
-        outLoc, ld(outLoc),
-        stypes, plt, coeff,
-        yn(inLP),
-        psiRows.length, residsSet.size, codes(residsSet),
-        altCount,
-        yn(hasPSR),
-        obs.join(' | ')
-      ], fill);
-      track('Prod Source Header', fill);
-    });
-    S6.finalize();
-    setStatusPA('Hoja Prod Source Header lista...', 88);
-    await new Promise(function(r){ setTimeout(r, 0); });
-  }
-
-  /* ════════════════════════════════════════════════════════════════
-     HOJA 5 — PRODUCTION SOURCE ITEM
-     ════════════════════════════════════════════════════════════════ */
-  if (ent.psi) {
-    initStat('Prod Source Item');
-    var S7 = makeSheet('Prod Source Item', 'FF06B6D4', [
-      'Estado','SOURCEID',
-      'PRDID output','PRDDESCR output','MATTYPEID output',
-      'LOCID planta','LOCDESCR planta',
-      'PRDID componente','PRDDESCR comp','MATTYPEID comp',
-      'COMPONENTCOEFFICIENT','Tipo componente',
-      'PRDID comp+LOCID en Location Product',
-      'En Location Source (insumo)',
-      'LOCFR origen','LOCDESCR origen',
-      '# Orígenes comp.','Orígenes comp. (códigos)',
-      'Material de reemplazo (ISALTITEM)','Reemplaza a',
-      'Observacion'
-    ]);
-
-    // ¿Es excluido el componente?
-    function _compExclNote(compMt) {
-      return (compMt && mattypeIsExcluded(compMt)) ? ' [componente de tipo excluido]' : '';
-    }
-
-    var PSI_CHUNK = 300;
-    for (var pii = 0; pii < allPsi.length; pii += PSI_CHUNK) {
-      allPsi.slice(pii, pii + PSI_CHUNK).forEach(function(r) {
-        var sid    = str(r.SOURCEID);
-        var comp   = str(r.PRDID || '');
-        var coeff  = str(r.COMPONENTCOEFFICIENT || '');
-        var isAlt  = str(r.ISALTITEM || '');
-        var info   = pshSidLocid[sid] || {};
-        var locid  = info.LOCID || '';
-        var outPrd = info.PRDID || '';
-        var compMt = pm(comp);
-
-        var noSrc  = !locid;
-        var isSemi = !!(locid && pshByPrdLoc[comp + '|' + locid]);
-        var tipo   = noSrc ? 'No determinado' : isSemi ? 'Semielaborado' : 'Insumo';
-        var compInLP = locid ? locPrdSet.has(locid + '|' + comp) : false;
-        var noCoeff  = !coeff || Number(coeff) === 0;
-
-        var lsRows  = (!isSemi && locid) ? (locSrcByPrdLoc[comp + '|' + locid] || []) : [];
-        var inLS    = lsRows.length > 0;
-        var locfrVals = inLS ? [...new Set(lsRows.map(function(x){ return x.LOCFR; }))] : [];
-        var locfrCodes = locfrVals.join(', ');
-        var locfrDescr = locfrVals.map(function(lf){ return ld(lf) || '?'; }).join(', ');
-
-        // Orígenes del componente (todos los LOCFR en LocSrc para este comp en esta planta)
-        var originsComp = new Set(lsRows.map(function(x){ return x.LOCFR; }).filter(Boolean));
-        // Si semielaborado, orígenes son las plantas que lo producen
-        if (isSemi) {
-          (pshSidsByPrd[comp] || []).forEach(function(sid2) {
-            var l = (pshSidLocid[sid2] || {}).LOCID;
-            if (l) originsComp.add(l);
-          });
-        }
-
-        var replacedBy = '';
-        if (isAlt === 'X') {
-          var replaced = psiSubBySprdfr[comp] || [];
-          replacedBy = replaced.join(', ');
-        }
-
-        var obs = [];
-        var exclNote = _compExclNote(compMt);
-        if (noSrc)    obs.push('SOURCEID no encontrado en PSH');
-        if (noCoeff)  obs.push('Coeficiente = 0 o no definido');
-        if (isSemi)   obs.push('Semielaborado: trazabilidad en PSH');
-        if (!isSemi && !noSrc) {
-          if (!inLS)  obs.push('Insumo sin arco de abastecimiento en Location Source');
-        }
-        if (!compInLP && locid) obs.push('Componente no habilitado en Location Product para esta planta');
-        if (isAlt === 'X' && !replacedBy && ent.psiSub) obs.push('Material de reemplazo sin registro en Item Sub');
-        if (exclNote) obs.push('Componente de tipo excluido (' + compMt + ') — validado en contexto');
-        if (!obs.length) obs.push('OK');
-
-        var fill = (noCoeff || (!isSemi && !inLS && !noSrc) || (!compInLP && locid)) ? C_RED
-                 : (noSrc || (isAlt === 'X' && !replacedBy && ent.psiSub)) ? C_YEL
-                 : null;
-
-        S7.addRow([
-          statusLabel(fill), sid,
-          outPrd, pd(outPrd), pm(outPrd),
-          locid, ld(locid),
-          comp, pd(comp), compMt,
-          coeff, tipo,
-          yn(compInLP),
-          !isSemi && !noSrc ? yn(inLS) : 'N/A',
-          locfrCodes, locfrDescr,
-          originsComp.size, codes(originsComp),
-          isAlt || '', replacedBy,
-          obs.join(' | ')
-        ], fill);
-        track('Prod Source Item', fill);
-      });
-      await new Promise(function(r){ setTimeout(r, 0); });
-      setStatusPA('Hoja Prod Source Item: ' + Math.min(pii + PSI_CHUNK, allPsi.length) + '/' + allPsi.length + '...',
-        88 + Math.round((Math.min(pii + PSI_CHUNK, allPsi.length) / Math.max(allPsi.length, 1)) * 3));
-    }
-    S7.finalize();
-    setStatusPA('Hoja Prod Source Item lista...', 91);
-    await new Promise(function(r){ setTimeout(r, 0); });
-  }
-
-  /* ════════════════════════════════════════════════════════════════
-     HOJA 6 — PRODUCTION SOURCE RESOURCE
-     ════════════════════════════════════════════════════════════════ */
-  if (ent.psr) {
-    initStat('Prod Source Resource');
-    var S8 = makeSheet('Prod Source Resource', 'FF6C63FF', [
-      'Estado','SOURCEID',
-      'PRDID output','PRDDESCR output','MATTYPEID output',
-      'LOCID planta','LOCDESCR planta',
-      'RESID','RESDESCR',
-      'RESID+LOCID en Resource Location',
-      '# Plantas con este recurso asignado','Plantas recurso (códigos)',
-      'Observacion'
-    ]);
-
-    // RESID → plantas asignadas (Resource Location)
-    var resLocMapByResid = {};
-    Object.keys(PA_RES_LOC).forEach(function(resid) {
-      resLocMapByResid[resid] = new Set(PA_RES_LOC[resid].map(function(e){ return e.LOCID; }));
-    });
-
-    allPsr.forEach(function(r) {
-      var sid    = str(r.SOURCEID);
-      var resid  = str(r.RESID || '');
-      var info   = pshSidLocid[sid] || {};
-      var locid  = info.LOCID || '';
-      var outPrd = info.PRDID || '';
-      var inRL   = !!(locid && resid && resLocSet.has(resid + '|' + locid));
-      var noSrc  = !locid;
-      var resPlants = resLocMapByResid[resid] || new Set();
-      var obs    = noSrc ? 'SOURCEID no encontrado en PSH'
-                 : inRL  ? 'OK'
-                 :          'Recurso en producción sin asignación en Resource Location para planta ' + locid;
-      var fill   = noSrc ? C_YEL : inRL ? null : C_YEL;
-      S8.addRow([
-        statusLabel(fill), sid,
-        outPrd, pd(outPrd), pm(outPrd),
-        locid, ld(locid),
-        resid, rd(resid),
-        yn(inRL),
-        resPlants.size, codes(resPlants),
-        obs
-      ], fill);
-      track('Prod Source Resource', fill);
-    });
-    S8.finalize();
-    setStatusPA('Hoja Prod Source Resource lista...', 93);
-    await new Promise(function(r){ setTimeout(r, 0); });
-  }
-
-  /* ════════════════════════════════════════════════════════════════
-     HOJA 7 — LOCATION
+     HOJA 2 — LOCATION
      Roles inferidos por comportamiento en los datos
      ════════════════════════════════════════════════════════════════ */
   if (ent.loc) {
     initStat('Location');
     var S9 = makeSheet('Location', 'FF10B981', [
-      'Estado','LOCID','LOCDESCR','LOCTYPE',
+      'Estado','Observacion',
+      'LOCID','LOCDESCR','LOCTYPE',
       'Rol(es) inferido(s)',
       /* Planta */
       '# Productos fabricados','Productos fabricados (códigos)',
@@ -1142,8 +834,7 @@ async function paAnalyzeAndExport(
       '# Destinos transferencia','Destinos transferencia (códigos)',
       /* Nodo receptor */
       '# Productos recibidos','Productos recibidos (códigos)',
-      '# Orígenes desde los que recibe','Orígenes (códigos)',
-      'Observacion'
+      '# Orígenes desde los que recibe','Orígenes (códigos)'
     ]);
 
     // Unión de todos los locids conocidos
@@ -1286,7 +977,8 @@ async function paAnalyzeAndExport(
       var fill = finalSev === 'red' ? C_RED : finalSev === 'yellow' ? C_YEL : null;
 
       S9.addRow([
-        statusLabel(fill), locid, locdescr, loctype, rolStr,
+        statusLabel(fill), obs.join(' | '),
+        locid, locdescr, loctype, rolStr,
         plantaPrds.size,   codes(plantaPrds),
         plantaSids.size,   codes(plantaSids),
         resAsignados.size, codes(resAsignados),
@@ -1303,13 +995,323 @@ async function paAnalyzeAndExport(
         prdTransferidos.size, codes(prdTransferidos),
         destTransf.size,      codes(destTransf),
         prdRecibidos.size,    codes(prdRecibidos),
-        origenes.size,        codes(origenes),
-        obs.join(' | ')
+        origenes.size,        codes(origenes)
       ], fill);
       track('Location', fill);
     });
     S9.finalize();
-    setStatusPA('Hoja Location lista...', 95);
+    setStatusPA('Hoja Location lista...', 84);
+    await new Promise(function(r){ setTimeout(r, 0); });
+  }
+
+  /* ════════════════════════════════════════════════════════════════
+     HOJA 3 — RESOURCE
+     ════════════════════════════════════════════════════════════════ */
+  if (ent.res) {
+    initStat('Resource');
+    var S2 = makeSheet('Resource', 'FFa78bfa', [
+      'Estado','Observacion',
+      'RESID','RESDESCR',
+      'En PSR','En Resource Location',
+      '# Plantas asignadas','Plantas asignadas (códigos)',
+      '# Fuentes prod.','Fuentes prod. (SOURCEIDs)',
+      '# Productos que fabrica','Productos que fabrica (códigos)'
+    ]);
+
+    // Índice: RESID → Set<LOCID> (desde Resource Location)
+    var resLocsByResid = {};
+    Object.keys(PA_RES_LOC).forEach(function(resid) {
+      resLocsByResid[resid] = new Set(PA_RES_LOC[resid].map(function(e){ return e.LOCID; }));
+    });
+
+    // Índice: RESID → Set<SOURCEID>
+    var resSidsByResid = {};
+    allPsr.forEach(function(r) {
+      var resid = str(r.RESID || ''), sid = str(r.SOURCEID);
+      if (!resid) return;
+      if (!resSidsByResid[resid]) resSidsByResid[resid] = new Set();
+      resSidsByResid[resid].add(sid);
+    });
+
+    // Índice: RESID → Set<PRDID>
+    var resPrdsByResid = {};
+    allPsr.forEach(function(r) {
+      var resid = str(r.RESID || ''), sid = str(r.SOURCEID);
+      if (!resid) return;
+      var info = pshSidLocid[sid] || {};
+      if (info.PRDID) {
+        if (!resPrdsByResid[resid]) resPrdsByResid[resid] = new Set();
+        resPrdsByResid[resid].add(info.PRDID);
+      }
+    });
+
+    Object.keys(PA_RES).sort().forEach(function(resid) {
+      var inPSR = psrResidSet.has(resid);
+      var inRL  = resLocResidSet.has(resid);
+      var locsSet = resLocsByResid[resid] || new Set();
+      var sidsSet = resSidsByResid[resid] || new Set();
+      var prdsSet = resPrdsByResid[resid] || new Set();
+      var obs = [];
+      if (!inPSR && !inRL) obs.push('Recurso huérfano: sin uso en producción ni planta asignada');
+      else if (!inPSR)     obs.push('Sin uso en producción (no aparece en PSR)');
+      else if (!inRL)      obs.push('Sin planta asignada en Resource Location');
+      if (!obs.length)     obs.push('OK');
+      var fill = (!inPSR && !inRL) ? C_RED : (!inPSR || !inRL) ? C_YEL : null;
+      S2.addRow([
+        statusLabel(fill), obs.join(' | '),
+        resid, rd(resid),
+        yn(inPSR), yn(inRL),
+        locsSet.size, codes(locsSet),
+        sidsSet.size, codes(sidsSet),
+        prdsSet.size, codes(prdsSet)
+      ], fill);
+      track('Resource', fill);
+    });
+    S2.finalize();
+    setStatusPA('Hoja Resource lista...', 84);
+    await new Promise(function(r){ setTimeout(r, 0); });
+  }
+
+  /* ════════════════════════════════════════════════════════════════
+     HOJA 3 — RESOURCE LOCATION
+     ════════════════════════════════════════════════════════════════ */
+  if (ent.resLoc) {
+    initStat('Resource Location');
+    var S3 = makeSheet('Resource Location', 'FFFF9F43', [
+      'Estado','Observacion',
+      'RESID','RESDESCR','LOCID','LOCDESCR',
+      'RESID+LOCID usado en PSR'
+    ]);
+    Object.keys(PA_RES_LOC).sort().forEach(function(resid) {
+      PA_RES_LOC[resid].forEach(function(e) {
+        var locid = e.LOCID;
+        var used  = psrByResidLoc.has(resid + '|' + locid);
+        var obs   = used ? 'OK' : 'Recurso asignado a planta pero sin uso en PSR para esta planta';
+        var fill  = used ? null : C_YEL;
+        S3.addRow([statusLabel(fill), obs, resid, rd(resid), locid, ld(locid), yn(used)], fill);
+        track('Resource Location', fill);
+      });
+    });
+    S3.finalize();
+    setStatusPA('Hoja Resource Location lista...', 85);
+    await new Promise(function(r){ setTimeout(r, 0); });
+  }
+
+  /* ════════════════════════════════════════════════════════════════
+     HOJA 4 — PRODUCTION SOURCE HEADER
+     ════════════════════════════════════════════════════════════════ */
+  if (ent.psh) {
+    initStat('Prod Source Header');
+    var S6 = makeSheet('Prod Source Header', 'FFF7A800', [
+      'Estado','Observacion',
+      'SOURCEID',
+      'PRDID output','PRDDESCR output','MATTYPEID output',
+      'LOCID planta','LOCDESCR planta',
+      'SOURCETYPE(s)','PLEADTIME','OUTPUTCOEFFICIENT',
+      'PRDID+LOCID en Location Product',
+      '# Componentes PSI','# Recursos PSR','Recursos PSR (códigos)',
+      '# Componentes con alternativa',
+      'Tiene PSR'
+    ]);
+    Object.keys(pshBySid).sort().forEach(function(sid) {
+      var recs    = pshBySid[sid];
+      var primary = recs.find(function(r){ return r.SOURCETYPE === 'P'; }) || recs[0];
+      var outPrd  = primary.PRDID, outLoc = primary.LOCID;
+      var plt     = primary.PLEADTIME || '', coeff = primary.OUTPUTCOEFFICIENT || '';
+      var stypes  = recs.map(function(r){ return r.SOURCETYPE; })
+                        .filter(function(v,i,a){ return a.indexOf(v) === i; }).join('/');
+      var inLP    = locPrdSet.has(outLoc + '|' + outPrd);
+      var psiRows = psiBySourceid[sid] || [];
+      var psrRows = psrBySourceid[sid] || [];
+      var hasPSI  = psiRows.length > 0;
+      var hasPSR  = psrRows.length > 0;
+      var noLt    = !plt || plt === '0';
+      var hasP    = pshSidHasP[sid];
+      var multi   = (pshByPrdLoc[outPrd + '|' + outLoc] || []).length > 1;
+
+      // Métricas
+      var residsSet = new Set(psrRows.map(function(r){ return str(r.RESID || ''); }).filter(Boolean));
+      var altCount  = psiRows.filter(function(r){ return str(r.ISALTITEM || '') === 'X'; }).length;
+
+      var obs = [];
+      if (!hasPSI) obs.push('BOM vacío: sin componentes PSI');
+      if (noLt)    obs.push('PLEADTIME = 0 o no definido');
+      if (!inLP)   obs.push('PRDID+LOCID sin cobertura en Location Product');
+      if (!hasP)   obs.push('Sin registro SOURCETYPE=P');
+      if (!hasPSR) obs.push('Sin recursos PSR asignados');
+      if (multi)   obs.push('Múltiples SOURCEIDs para mismo PRDID+LOCID — verificar cuotas');
+      if (!obs.length) obs.push('OK');
+      var fill = (!hasPSI || noLt || !inLP || !hasPSR) ? C_RED : (!hasP || multi) ? C_YEL : null;
+      S6.addRow([
+        statusLabel(fill), obs.join(' | '),
+        sid,
+        outPrd, pd(outPrd), pm(outPrd),
+        outLoc, ld(outLoc),
+        stypes, plt, coeff,
+        yn(inLP),
+        psiRows.length, residsSet.size, codes(residsSet),
+        altCount,
+        yn(hasPSR)
+      ], fill);
+      track('Prod Source Header', fill);
+    });
+    S6.finalize();
+    setStatusPA('Hoja Prod Source Header lista...', 88);
+    await new Promise(function(r){ setTimeout(r, 0); });
+  }
+
+  /* ════════════════════════════════════════════════════════════════
+     HOJA 5 — PRODUCTION SOURCE ITEM
+     ════════════════════════════════════════════════════════════════ */
+  if (ent.psi) {
+    initStat('Prod Source Item');
+    var S7 = makeSheet('Prod Source Item', 'FF06B6D4', [
+      'Estado','Observacion',
+      'SOURCEID',
+      'PRDID output','PRDDESCR output','MATTYPEID output',
+      'LOCID planta','LOCDESCR planta',
+      'PRDID componente','PRDDESCR comp','MATTYPEID comp',
+      'COMPONENTCOEFFICIENT','Tipo componente',
+      'PRDID comp+LOCID en Location Product',
+      'En Location Source (insumo)',
+      'LOCFR origen','LOCDESCR origen',
+      '# Orígenes comp.','Orígenes comp. (códigos)',
+      'Material de reemplazo (ISALTITEM)','Reemplaza a'
+    ]);
+
+    // ¿Es excluido el componente?
+    function _compExclNote(compMt) {
+      return (compMt && mattypeIsExcluded(compMt)) ? ' [componente de tipo excluido]' : '';
+    }
+
+    var PSI_CHUNK = 300;
+    for (var pii = 0; pii < allPsi.length; pii += PSI_CHUNK) {
+      allPsi.slice(pii, pii + PSI_CHUNK).forEach(function(r) {
+        var sid    = str(r.SOURCEID);
+        var comp   = str(r.PRDID || '');
+        var coeff  = str(r.COMPONENTCOEFFICIENT || '');
+        var isAlt  = str(r.ISALTITEM || '');
+        var info   = pshSidLocid[sid] || {};
+        var locid  = info.LOCID || '';
+        var outPrd = info.PRDID || '';
+        var compMt = pm(comp);
+
+        var noSrc  = !locid;
+        var isSemi = !!(locid && pshByPrdLoc[comp + '|' + locid]);
+        var tipo   = noSrc ? 'No determinado' : isSemi ? 'Semielaborado' : 'Insumo';
+        var compInLP = locid ? locPrdSet.has(locid + '|' + comp) : false;
+        var noCoeff  = !coeff || Number(coeff) === 0;
+
+        var lsRows  = (!isSemi && locid) ? (locSrcByPrdLoc[comp + '|' + locid] || []) : [];
+        var inLS    = lsRows.length > 0;
+        var locfrVals = inLS ? [...new Set(lsRows.map(function(x){ return x.LOCFR; }))] : [];
+        var locfrCodes = locfrVals.join(', ');
+        var locfrDescr = locfrVals.map(function(lf){ return ld(lf) || '?'; }).join(', ');
+
+        // Orígenes del componente (todos los LOCFR en LocSrc para este comp en esta planta)
+        var originsComp = new Set(lsRows.map(function(x){ return x.LOCFR; }).filter(Boolean));
+        // Si semielaborado, orígenes son las plantas que lo producen
+        if (isSemi) {
+          (pshSidsByPrd[comp] || []).forEach(function(sid2) {
+            var l = (pshSidLocid[sid2] || {}).LOCID;
+            if (l) originsComp.add(l);
+          });
+        }
+
+        var replacedBy = '';
+        if (isAlt === 'X') {
+          var replaced = psiSubBySprdfr[comp] || [];
+          replacedBy = replaced.join(', ');
+        }
+
+        var obs = [];
+        var exclNote = _compExclNote(compMt);
+        if (noSrc)    obs.push('SOURCEID no encontrado en PSH');
+        if (noCoeff)  obs.push('Coeficiente = 0 o no definido');
+        if (isSemi)   obs.push('Semielaborado: trazabilidad en PSH');
+        if (!isSemi && !noSrc) {
+          if (!inLS)  obs.push('Insumo sin arco de abastecimiento en Location Source');
+        }
+        if (!compInLP && locid) obs.push('Componente no habilitado en Location Product para esta planta');
+        if (isAlt === 'X' && !replacedBy && ent.psiSub) obs.push('Material de reemplazo sin registro en Item Sub');
+        if (exclNote) obs.push('Componente de tipo excluido (' + compMt + ') — validado en contexto');
+        if (!obs.length) obs.push('OK');
+
+        var fill = (noCoeff || (!isSemi && !inLS && !noSrc) || (!compInLP && locid)) ? C_RED
+                 : (noSrc || (isAlt === 'X' && !replacedBy && ent.psiSub)) ? C_YEL
+                 : null;
+
+        S7.addRow([
+          statusLabel(fill), obs.join(' | '),
+          sid,
+          outPrd, pd(outPrd), pm(outPrd),
+          locid, ld(locid),
+          comp, pd(comp), compMt,
+          coeff, tipo,
+          yn(compInLP),
+          !isSemi && !noSrc ? yn(inLS) : 'N/A',
+          locfrCodes, locfrDescr,
+          originsComp.size, codes(originsComp),
+          isAlt || '', replacedBy
+        ], fill);
+        track('Prod Source Item', fill);
+      });
+      await new Promise(function(r){ setTimeout(r, 0); });
+      setStatusPA('Hoja Prod Source Item: ' + Math.min(pii + PSI_CHUNK, allPsi.length) + '/' + allPsi.length + '...',
+        88 + Math.round((Math.min(pii + PSI_CHUNK, allPsi.length) / Math.max(allPsi.length, 1)) * 3));
+    }
+    S7.finalize();
+    setStatusPA('Hoja Prod Source Item lista...', 91);
+    await new Promise(function(r){ setTimeout(r, 0); });
+  }
+
+  /* ════════════════════════════════════════════════════════════════
+     HOJA 6 — PRODUCTION SOURCE RESOURCE
+     ════════════════════════════════════════════════════════════════ */
+  if (ent.psr) {
+    initStat('Prod Source Resource');
+    var S8 = makeSheet('Prod Source Resource', 'FF6C63FF', [
+      'Estado','Observacion',
+      'SOURCEID',
+      'PRDID output','PRDDESCR output','MATTYPEID output',
+      'LOCID planta','LOCDESCR planta',
+      'RESID','RESDESCR',
+      'RESID+LOCID en Resource Location',
+      '# Plantas con este recurso asignado','Plantas recurso (códigos)'
+    ]);
+
+    // RESID → plantas asignadas (Resource Location)
+    var resLocMapByResid = {};
+    Object.keys(PA_RES_LOC).forEach(function(resid) {
+      resLocMapByResid[resid] = new Set(PA_RES_LOC[resid].map(function(e){ return e.LOCID; }));
+    });
+
+    allPsr.forEach(function(r) {
+      var sid    = str(r.SOURCEID);
+      var resid  = str(r.RESID || '');
+      var info   = pshSidLocid[sid] || {};
+      var locid  = info.LOCID || '';
+      var outPrd = info.PRDID || '';
+      var inRL   = !!(locid && resid && resLocSet.has(resid + '|' + locid));
+      var noSrc  = !locid;
+      var resPlants = resLocMapByResid[resid] || new Set();
+      var obs    = noSrc ? 'SOURCEID no encontrado en PSH'
+                 : inRL  ? 'OK'
+                 :          'Recurso en producción sin asignación en Resource Location para planta ' + locid;
+      var fill   = noSrc ? C_YEL : inRL ? null : C_YEL;
+      S8.addRow([
+        statusLabel(fill), obs,
+        sid,
+        outPrd, pd(outPrd), pm(outPrd),
+        locid, ld(locid),
+        resid, rd(resid),
+        yn(inRL),
+        resPlants.size, codes(resPlants)
+      ], fill);
+      track('Prod Source Resource', fill);
+    });
+    S8.finalize();
+    setStatusPA('Hoja Prod Source Resource lista...', 93);
     await new Promise(function(r){ setTimeout(r, 0); });
   }
 
@@ -1374,12 +1376,12 @@ async function paAnalyzeAndExport(
   setStatusPA('Generando Resumen...', 98);
   var sheetDefs = [
     { key: 'Product',              num: 1 },
-    { key: 'Resource',             num: 2 },
-    { key: 'Resource Location',    num: 3 },
-    { key: 'Prod Source Header',   num: 4 },
-    { key: 'Prod Source Item',     num: 5 },
-    { key: 'Prod Source Resource', num: 6 },
-    { key: 'Location',             num: 7 },
+    { key: 'Location',             num: 2 },
+    { key: 'Resource',             num: 3 },
+    { key: 'Resource Location',    num: 4 },
+    { key: 'Prod Source Header',   num: 5 },
+    { key: 'Prod Source Item',     num: 6 },
+    { key: 'Prod Source Resource', num: 7 },
     { key: 'Tipos Excluidos',      num: 8 }
   ];
   sheetDefs.forEach(function(d) {

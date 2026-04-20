@@ -1307,14 +1307,14 @@
           style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:11px;cursor:pointer;padding:2px 10px;line-height:1.6;">▼ Expandir</button>
       </div>
       <div class="guide-panel-body hidden" id="panelPAGuideBody">
-      <p style="font-size:12px;color:var(--text2);margin:0 0 14px;">El Excel generado contiene <strong style="color:var(--text);">7 hojas</strong>. Expande cada una para ver el detalle de sus columnas.</p>
+      <p style="font-size:12px;color:var(--text2);margin:0 0 14px;">El Excel generado contiene <strong style="color:var(--text);">8 hojas</strong>. En todas las hojas de análisis, la columna <strong style="color:var(--text);">Observacion</strong> es la segunda columna (junto al Estado), para facilitar la lectura rápida.</p>
 
       <div class="guide-accordion">
 
         <!-- Resumen -->
         <div class="guide-item">
           <div class="guide-item-header" onclick="guideToggle(this)">
-            <span>📊 Resumen</span><span class="guide-arr">▶</span>
+            <span>📊 1 · Resumen</span><span class="guide-arr">▶</span>
           </div>
           <div class="guide-item-body hidden">
             <p>Una fila por cada hoja analizada. Permite ver de un vistazo la calidad global de los datos de producción.</p>
@@ -1333,20 +1333,49 @@
         <!-- Product -->
         <div class="guide-item">
           <div class="guide-item-header" onclick="guideToggle(this)">
-            <span>📦 Product</span><span class="guide-arr">▶</span>
+            <span>📦 2 · Product</span><span class="guide-arr">▶</span>
           </div>
           <div class="guide-item-body hidden">
             <p>Un producto por fila. Verifica que cada material del maestro esté correctamente integrado en la cadena de producción.</p>
             <ul>
               <li><strong>Estado</strong> — Color de alerta.</li>
+              <li><strong>Observacion</strong> — Resumen de hallazgos: sin PSH, sin PSI, sin Location Product, etc.</li>
               <li><strong>PRDID</strong> — Código del producto.</li>
               <li><strong>PRDDESCR</strong> — Descripción del producto.</li>
               <li><strong>MATTYPEID</strong> — Tipo de material.</li>
-              <li><strong>En PSH (output)?</strong> — ¿El producto es el output de alguna fuente de producción?</li>
-              <li><strong>En PSI (componente)?</strong> — ¿El producto aparece como componente en algún BOM?</li>
-              <li><strong>En Location Product?</strong> — ¿Está habilitado como manejable en alguna ubicación?</li>
-              <li><strong>En Location Source?</strong> — ¿Tiene arcos de transferencia entre ubicaciones?</li>
-              <li><strong>Observacion</strong> — Resumen de hallazgos: producto solo en maestro, sin PSH ni PSI, etc.</li>
+              <li><strong>En Location Product</strong> — ¿Está habilitado como manejable en alguna ubicación?</li>
+              <li><strong>En PSH (output)</strong> — ¿El producto es el output de alguna fuente de producción?</li>
+              <li><strong>En PSI (componente)</strong> — ¿El producto aparece como componente en algún BOM?</li>
+              <li><strong>En Location Source</strong> — ¿Tiene arcos de transferencia entre ubicaciones?</li>
+              <li><strong># Opciones prod. / Opciones prod. (SOURCEIDs)</strong> — Cantidad y códigos de fuentes de producción propias.</li>
+              <li><strong># Plantas prod. / Plantas prod. (códigos)</strong> — Plantas donde se fabrica.</li>
+              <li><strong># Componentes BOM</strong> — Total de componentes en sus BOMs.</li>
+              <li><strong># Recursos prod. / Recursos prod. (códigos)</strong> — Recursos asignados a sus fuentes.</li>
+              <li><strong># Proveedores / Proveedores (códigos)</strong> — Ubicaciones de origen que lo abastecen vía Location Source.</li>
+              <li><strong># Plantas cubiertas / sin cobertura</strong> — Plantas consumidoras con y sin arco de abastecimiento.</li>
+              <li><strong># Productos que lo usan</strong> — Cuántos productos lo requieren como componente PSI.</li>
+              <li><strong># Orígenes en red / Orígenes en red (códigos)</strong> — Nodos origen en la red de abastecimiento.</li>
+              <li><strong># Plantas consumidoras / Plantas consumidoras (códigos)</strong> — Plantas donde se consume como insumo.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Location -->
+        <div class="guide-item">
+          <div class="guide-item-header" onclick="guideToggle(this)">
+            <span>🗺️ 3 · Location</span><span class="guide-arr">▶</span>
+          </div>
+          <div class="guide-item-body hidden">
+            <p>Una ubicación por fila. Clasifica cada nodo de la red por su rol inferido a partir de su comportamiento real en los datos (PSH, Location Source, Resource Location), sin depender del campo LOCTYPE.</p>
+            <ul>
+              <li><strong>Estado</strong> — Color de alerta.</li>
+              <li><strong>Observacion</strong> — Hallazgos: BOMs sin PSI/PSR, componentes sin cobertura, productos sin Location Product en destino, etc.</li>
+              <li><strong>LOCID / LOCDESCR / LOCTYPE</strong> — Identificador, descripción y tipo SAP de la ubicación.</li>
+              <li><strong>Rol(es) inferido(s)</strong> — Uno o más de: <em>Planta de producción · Proveedor · Nodo de transferencia · Nodo receptor · Nodo de recursos · Sin actividad</em>.</li>
+              <li><strong>Métricas Planta</strong> — # Productos fabricados, SOURCEIDs, Recursos asignados/activos/ociosos, BOMs sin PSI/PSR, Componentes sin cobertura LocSrc, SOURCEIDs sin PLEADTIME.</li>
+              <li><strong>Métricas Proveedor</strong> — # Productos abastecidos, Plantas abastecidas, Arcos sin consumo PSI en destino, Productos sin Location Product en destino.</li>
+              <li><strong>Métricas Transferencia</strong> — # Productos transferidos, Destinos de transferencia.</li>
+              <li><strong>Métricas Receptor</strong> — # Productos recibidos, Orígenes desde los que recibe.</li>
             </ul>
           </div>
         </div>
@@ -1354,17 +1383,19 @@
         <!-- Resource -->
         <div class="guide-item">
           <div class="guide-item-header" onclick="guideToggle(this)">
-            <span>🔧 Resource</span><span class="guide-arr">▶</span>
+            <span>🔧 4 · Resource</span><span class="guide-arr">▶</span>
           </div>
           <div class="guide-item-body hidden">
             <p>Un recurso productivo (puesto de trabajo o máquina) por fila. Verifica que cada recurso declarado esté asignado a procesos de producción y tenga ubicación configurada.</p>
             <ul>
               <li><strong>Estado</strong> — Color de alerta.</li>
-              <li><strong>RESID</strong> — Código del recurso.</li>
-              <li><strong>RESDESCR</strong> — Descripción del recurso.</li>
-              <li><strong>En PSR?</strong> — ¿El recurso está asignado a al menos una fuente de producción (Production Source Resource)?</li>
-              <li><strong>En Resource Location?</strong> — ¿Tiene una ubicación física configurada?</li>
               <li><strong>Observacion</strong> — Un recurso 🔴 sin PSR ni Resource Location existe en el maestro pero no aporta a ningún proceso productivo.</li>
+              <li><strong>RESID / RESDESCR</strong> — Código y descripción del recurso.</li>
+              <li><strong>En PSR</strong> — ¿El recurso está asignado a al menos una fuente de producción?</li>
+              <li><strong>En Resource Location</strong> — ¿Tiene una ubicación física configurada?</li>
+              <li><strong># Plantas asignadas / Plantas asignadas (códigos)</strong> — Plantas donde está configurado en Resource Location.</li>
+              <li><strong># Fuentes prod. / Fuentes prod. (SOURCEIDs)</strong> — Fuentes de producción a las que está asignado.</li>
+              <li><strong># Productos que fabrica / Productos que fabrica (códigos)</strong> — Productos de los SOURCEIDs asignados.</li>
             </ul>
           </div>
         </div>
@@ -1372,16 +1403,16 @@
         <!-- Resource Location -->
         <div class="guide-item">
           <div class="guide-item-header" onclick="guideToggle(this)">
-            <span>📍 Resource Location</span><span class="guide-arr">▶</span>
+            <span>📍 5 · Resource Location</span><span class="guide-arr">▶</span>
           </div>
           <div class="guide-item-body hidden">
             <p>Un par <code>RESID + LOCID</code> por fila. Valida que cada combinación recurso-ubicación tenga uso real en alguna receta de producción.</p>
             <ul>
               <li><strong>Estado</strong> — Color de alerta.</li>
-              <li><strong>RESID</strong> — Código del recurso.</li>
-              <li><strong>LOCID</strong> — Código de la ubicación (planta) donde está el recurso.</li>
-              <li><strong>RESID+LOCID usado en PSR?</strong> — ¿Esta combinación recurso-planta está asignada a al menos una fuente de producción? Si es No, el recurso está ubicado en esa planta en el maestro pero no se asignó a ninguna receta productiva.</li>
               <li><strong>Observacion</strong> — Detalle del hallazgo.</li>
+              <li><strong>RESID / RESDESCR</strong> — Código y descripción del recurso.</li>
+              <li><strong>LOCID / LOCDESCR</strong> — Código y descripción de la planta donde está el recurso.</li>
+              <li><strong>RESID+LOCID usado en PSR</strong> — ¿Esta combinación recurso-planta está asignada a al menos una fuente de producción? Si es No, el recurso está ubicado en esa planta en el maestro pero no se asignó a ninguna receta productiva.</li>
             </ul>
           </div>
         </div>
@@ -1389,22 +1420,23 @@
         <!-- PSH -->
         <div class="guide-item">
           <div class="guide-item-header" onclick="guideToggle(this)">
-            <span>🏭 Prod Source Header (PSH)</span><span class="guide-arr">▶</span>
+            <span>🏭 6 · Prod Source Header (PSH)</span><span class="guide-arr">▶</span>
           </div>
           <div class="guide-item-body hidden">
             <p>Un <code>SOURCEID</code> (fuente de producción) por fila. Analiza la consistencia de cada receta de producción registrada en SAP IBP.</p>
             <ul>
               <li><strong>Estado</strong> — Color de alerta.</li>
+              <li><strong>Observacion</strong> — Detalle de hallazgos: PLEADTIME cero, sin BOM, sin recursos, etc.</li>
               <li><strong>SOURCEID</strong> — Identificador único de la fuente de producción.</li>
-              <li><strong>PRDID output</strong> — Producto terminado que produce esta fuente.</li>
-              <li><strong>LOCID planta</strong> — Planta donde se ejecuta la producción.</li>
+              <li><strong>PRDID output / PRDDESCR output / MATTYPEID output</strong> — Producto que produce esta fuente.</li>
+              <li><strong>LOCID planta / LOCDESCR planta</strong> — Planta donde se ejecuta la producción.</li>
               <li><strong>SOURCETYPE(s)</strong> — <code>P</code> = producción primaria · <code>C</code> = co-producto.</li>
               <li><strong>PLEADTIME</strong> — Lead time de producción en días. Se alerta si está vacío o en cero.</li>
               <li><strong>OUTPUTCOEFFICIENT</strong> — Unidades del producto terminado generadas por corrida de producción.</li>
-              <li><strong>PRDID+LOCID en Location Product?</strong> — ¿El producto está habilitado en esa planta en Location Product?</li>
-              <li><strong>Tiene items PSI (BOM)?</strong> — ¿Hay componentes definidos para esta fuente? Si es No, la fuente existe pero sin BOM: no se puede planificar el consumo de materiales.</li>
-              <li><strong>Tiene recursos PSR?</strong> — ¿Hay recursos asignados a esta fuente?</li>
-              <li><strong>Observacion</strong> — Detalle de hallazgos: PLEADTIME cero, sin BOM, sin recursos, etc.</li>
+              <li><strong>PRDID+LOCID en Location Product</strong> — ¿El producto está habilitado en esa planta?</li>
+              <li><strong># Componentes PSI / # Recursos PSR / Recursos PSR (códigos)</strong> — Componentes y recursos asignados a la fuente.</li>
+              <li><strong># Componentes con alternativa</strong> — Cantidad de componentes PSI marcados como sustitutos.</li>
+              <li><strong>Tiene PSR</strong> — ¿Hay recursos asignados a esta fuente?</li>
             </ul>
           </div>
         </div>
@@ -1412,26 +1444,24 @@
         <!-- PSI -->
         <div class="guide-item">
           <div class="guide-item-header" onclick="guideToggle(this)">
-            <span>🔩 Prod Source Item (PSI)</span><span class="guide-arr">▶</span>
+            <span>🔩 7 · Prod Source Item (PSI)</span><span class="guide-arr">▶</span>
           </div>
           <div class="guide-item-body hidden">
             <p>Un componente del BOM por fila. Valida la consistencia de cada ítem de la lista de materiales.</p>
             <ul>
               <li><strong>Estado</strong> — Color de alerta.</li>
-              <li><strong>SOURCEID</strong> — Fuente de producción a la que pertenece este componente.</li>
-              <li><strong>PRDID output</strong> — Producto terminado que se fabrica con este BOM.</li>
-              <li><strong>LOCID planta</strong> — Planta donde se fabrica.</li>
-              <li><strong>PRDID componente</strong> — Material que se consume como insumo.</li>
-              <li><strong>COMPONENTCOEFFICIENT</strong> — Unidades del componente consumidas por unidad producida. Si está en cero, la planificación de demanda del insumo será incorrecta.</li>
-              <li><strong>Tipo componente</strong> — Principal o alternativo (sustituto).</li>
-              <li><strong>PRDID comp+LOCID en Location Product?</strong> — ¿El componente está habilitado en la planta de producción?</li>
-              <li><strong>En Location Source (insumo)?</strong> — ¿El componente tiene arcos de transferencia que podrían abastecerlo?</li>
-              <li><strong>LOCFR origen</strong> — Ubicación de origen desde donde se transfiere el insumo (si existe).</li>
-              <li><strong>LOCTYPE origen</strong> — Tipo de la ubicación de origen.</li>
-              <li><strong>LOCFR+PRDID en Location Product?</strong> — ¿El insumo está habilitado en la ubicación de origen?</li>
-              <li><strong>Material de reemplazo (ISALTITEM)?</strong> — ¿Este componente es un sustituto alternativo?</li>
-              <li><strong>Reemplaza a</strong> — Código del componente principal al que reemplaza (si aplica).</li>
               <li><strong>Observacion</strong> — Coeficiente cero, sin Location Product, cadena de sustitución incompleta, etc.</li>
+              <li><strong>SOURCEID</strong> — Fuente de producción a la que pertenece este componente.</li>
+              <li><strong>PRDID output / PRDDESCR output / MATTYPEID output</strong> — Producto terminado que se fabrica.</li>
+              <li><strong>LOCID planta / LOCDESCR planta</strong> — Planta donde se fabrica.</li>
+              <li><strong>PRDID componente / PRDDESCR comp / MATTYPEID comp</strong> — Material consumido como insumo.</li>
+              <li><strong>COMPONENTCOEFFICIENT</strong> — Unidades consumidas por unidad producida. Cero genera planificación incorrecta.</li>
+              <li><strong>Tipo componente</strong> — Semielaborado (tiene PSH propio) o Insumo (viene de Location Source).</li>
+              <li><strong>PRDID comp+LOCID en Location Product</strong> — ¿El componente está habilitado en la planta?</li>
+              <li><strong>En Location Source (insumo)</strong> — ¿El componente tiene arcos de abastecimiento? (<code>N/A</code> para semielaborados).</li>
+              <li><strong>LOCFR origen / LOCDESCR origen</strong> — Ubicación(es) de origen desde donde se transfiere el insumo.</li>
+              <li><strong># Orígenes comp. / Orígenes comp. (códigos)</strong> — Nodos de origen del componente.</li>
+              <li><strong>Material de reemplazo (ISALTITEM) / Reemplaza a</strong> — ¿Es sustituto alternativo? ¿A qué componente reemplaza?</li>
             </ul>
           </div>
         </div>
@@ -1439,18 +1469,19 @@
         <!-- PSR -->
         <div class="guide-item">
           <div class="guide-item-header" onclick="guideToggle(this)">
-            <span>⚙️ Prod Source Resource (PSR)</span><span class="guide-arr">▶</span>
+            <span>⚙️ 8 · Prod Source Resource (PSR)</span><span class="guide-arr">▶</span>
           </div>
           <div class="guide-item-body hidden">
             <p>Asignaciones recurso → fuente de producción. Un par <code>RESID + SOURCEID</code> por fila.</p>
             <ul>
               <li><strong>Estado</strong> — Color de alerta.</li>
+              <li><strong>Observacion</strong> — Registros 🔴 indican asignaciones huérfanas: el recurso o la fuente no existen en sus respectivos maestros.</li>
               <li><strong>SOURCEID</strong> — Fuente de producción a la que se asigna el recurso.</li>
-              <li><strong>PRDID output</strong> — Producto que fabrica esa fuente.</li>
-              <li><strong>LOCID planta</strong> — Planta donde opera la fuente.</li>
-              <li><strong>RESID</strong> — Recurso asignado a esta fuente.</li>
-              <li><strong>RESID+LOCID en Resource Location?</strong> — ¿La combinación recurso-planta está configurada en Resource Location? Si es No, el recurso no tiene ubicación en esa planta.</li>
-              <li><strong>Observacion</strong> — Registros 🔴 indican asignaciones huérfanas: el recurso o la fuente no existen en sus respectivos maestros, lo que puede causar errores en el motor de planificación.</li>
+              <li><strong>PRDID output / PRDDESCR output / MATTYPEID output</strong> — Producto que fabrica esa fuente.</li>
+              <li><strong>LOCID planta / LOCDESCR planta</strong> — Planta donde opera la fuente.</li>
+              <li><strong>RESID / RESDESCR</strong> — Recurso asignado a esta fuente.</li>
+              <li><strong>RESID+LOCID en Resource Location</strong> — ¿La combinación recurso-planta está configurada? Si es No, el recurso no tiene ubicación en esa planta.</li>
+              <li><strong># Plantas con este recurso asignado / Plantas recurso (códigos)</strong> — Plantas donde el recurso tiene Resource Location.</li>
             </ul>
           </div>
         </div>
