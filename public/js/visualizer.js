@@ -272,6 +272,7 @@
         document.getElementById('btnVizFullscreen').style.display = '';
         document.getElementById('btnVizFilter').style.display = '';
         log(logEl, 'ok', '✓ Diagrama: ' + summary);
+        toggleMappingBody('bodyVizMDT', 'arrVizMDT', false);
       } catch (e) {
         statusText.textContent = '✕ Error: ' + e.message;
         document.getElementById('vizStatus').textContent = '✕ Error: ' + e.message;
