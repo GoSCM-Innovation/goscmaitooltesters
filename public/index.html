@@ -1307,7 +1307,7 @@
           style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:11px;cursor:pointer;padding:2px 10px;line-height:1.6;">▼ Expandir</button>
       </div>
       <div class="guide-panel-body hidden" id="panelPAGuideBody">
-      <p style="font-size:12px;color:var(--text2);margin:0 0 14px;">El Excel generado contiene <strong style="color:var(--text);">8 hojas</strong>. En todas las hojas de análisis, la columna <strong style="color:var(--text);">Observacion</strong> es la segunda columna (junto al Estado), para facilitar la lectura rápida.</p>
+      <p style="font-size:12px;color:var(--text2);margin:0 0 14px;">El Excel generado contiene <strong style="color:var(--text);">8 hojas</strong>. En todas las hojas, <strong style="color:var(--text);">Estado</strong> muestra el semáforo y <strong style="color:var(--text);">Observacion</strong> explica qué falló o qué validaciones pasaron.</p>
 
       <div class="guide-accordion">
 
@@ -1317,15 +1317,11 @@
             <span>📊 1 · Resumen</span><span class="guide-arr">▶</span>
           </div>
           <div class="guide-item-body hidden">
-            <p>Una fila por cada hoja analizada. Permite ver de un vistazo la calidad global de los datos de producción.</p>
+            <p>Una fila por hoja. Permite ver de un vistazo cuántos registros tienen problemas.</p>
             <ul>
-              <li><strong>#</strong> — Número de hoja.</li>
-              <li><strong>Hoja</strong> — Nombre de la hoja a la que corresponde la fila.</li>
-              <li><strong>Total registros</strong> — Cantidad de filas analizadas en esa hoja.</li>
-              <li><strong>Alertas 🔴</strong> — Registros con problema crítico que requiere corrección.</li>
-              <li><strong>Advertencias 🟡</strong> — Registros con dato para revisar.</li>
-              <li><strong>OK ✅</strong> — Registros sin observaciones.</li>
-              <li><strong>% Consistencia</strong> — <code>OK / Total × 100</code>.</li>
+              <li><strong>Total registros</strong> — Filas analizadas en esa hoja.</li>
+              <li><strong>Alertas 🔴 / Advertencias 🟡 / OK ✅</strong> — Conteo por nivel de severidad.</li>
+              <li><strong>% Consistencia</strong> — Porcentaje de registros sin problemas. <em>Ej: 85 de 100 productos OK = 85%.</em></li>
             </ul>
           </div>
         </div>
@@ -1336,26 +1332,22 @@
             <span>📦 2 · Product</span><span class="guide-arr">▶</span>
           </div>
           <div class="guide-item-body hidden">
-            <p>Un producto por fila. Verifica que cada material del maestro esté correctamente integrado en la cadena de producción.</p>
+            <p>Un producto por fila. Verifica que cada material esté correctamente configurado para la planificación. Las columnas que no aplican para el tipo de material se muestran como <strong>—</strong>.</p>
             <ul>
-              <li><strong>Estado</strong> — Color de alerta.</li>
-              <li><strong>Observacion</strong> — Resumen de hallazgos: sin PSH, sin PSI, sin Location Product, etc.</li>
-              <li><strong>PRDID</strong> — Código del producto.</li>
-              <li><strong>PRDDESCR</strong> — Descripción del producto.</li>
-              <li><strong>MATTYPEID</strong> — Tipo de material.</li>
-              <li><strong>En Location Product</strong> — ¿Está habilitado como manejable en alguna ubicación?</li>
-              <li><strong>En PSH (output)</strong> — ¿El producto es el output de alguna fuente de producción?</li>
-              <li><strong>En PSI (componente)</strong> — ¿El producto aparece como componente en algún BOM?</li>
-              <li><strong>En Location Source</strong> — ¿Tiene arcos de transferencia entre ubicaciones?</li>
-              <li><strong># Opciones prod. / Opciones prod. (SOURCEIDs)</strong> — Cantidad y códigos de fuentes de producción propias.</li>
-              <li><strong># Plantas prod. / Plantas prod. (códigos)</strong> — Plantas donde se fabrica.</li>
-              <li><strong># Componentes BOM</strong> — Total de componentes en sus BOMs.</li>
-              <li><strong># Recursos prod. / Recursos prod. (códigos)</strong> — Recursos asignados a sus fuentes.</li>
-              <li><strong># Proveedores / Proveedores (códigos)</strong> — Ubicaciones de origen que lo abastecen vía Location Source.</li>
-              <li><strong># Plantas cubiertas / sin cobertura</strong> — Plantas consumidoras con y sin arco de abastecimiento.</li>
-              <li><strong># Productos que lo usan</strong> — Cuántos productos lo requieren como componente PSI.</li>
-              <li><strong># Orígenes en red / Orígenes en red (códigos)</strong> — Nodos origen en la red de abastecimiento.</li>
-              <li><strong># Plantas consumidoras / Plantas consumidoras (códigos)</strong> — Plantas donde se consume como insumo.</li>
+              <li><strong>MATTYPEID</strong> — Tipo de material SAP. Determina qué validaciones aplican a este producto.</li>
+              <li><strong>En Location Product</strong> — ¿IBP sabe en qué plantas puede existir este material? Sin esto, el producto no entra a ningún plan. <em>Ej: PROD-001 sin Location Product → IBP lo ignora.</em></li>
+              <li><strong>En PSH (output)</strong> — ¿Tiene una receta de producción propia? Solo aplica a productos fabricados. <em>Ej: un producto terminado sin PSH no tiene instrucciones de cómo fabricarse.</em></li>
+              <li><strong>En PSI (componente)</strong> — ¿Este producto es ingrediente en el BOM de algún otro? <em>Ej: SEMI-001 aparece como componente en el BOM de PROD-001.</em></li>
+              <li><strong>En Location Source</strong> — ¿Tiene rutas de transferencia entre plantas configuradas?</li>
+              <li><strong># Opciones prod. / SOURCEIDs</strong> — Cuántas recetas de producción distintas tiene. <em>Ej: 2 = puede fabricarse de dos maneras diferentes.</em></li>
+              <li><strong># Plantas prod. / Plantas prod.</strong> — En cuántas plantas se fabrica este producto.</li>
+              <li><strong># Componentes BOM</strong> — Cuántos ingredientes tiene en total entre todas sus recetas.</li>
+              <li><strong># Recursos prod. / Recursos</strong> — Cuántos puestos de trabajo o máquinas están asignados a sus recetas.</li>
+              <li><strong># Proveedores / Proveedores</strong> — Cuántas ubicaciones de origen lo abastecen. Solo aplica a materias primas y mercaderías.</li>
+              <li><strong># Plantas cubiertas / sin cobertura</strong> — De las plantas que consumen este material como insumo, cuántas tienen ruta de suministro configurada y cuántas no. Solo aplica a materias primas. <em>Ej: MAT-A se usa en P01 y P02. P01 tiene ruta configurada (cubierta), P02 no (sin cobertura) → alerta 🔴.</em></li>
+              <li><strong># Productos que lo usan</strong> — Cuántos productos distintos requieren este material como ingrediente.</li>
+              <li><strong># Orígenes en red / Orígenes</strong> — Desde cuántas ubicaciones se puede recibir este producto en la red.</li>
+              <li><strong># Plantas consumidoras / Plantas consumidoras</strong> — En cuántas plantas se usa este material como ingrediente de algún BOM.</li>
             </ul>
           </div>
         </div>
@@ -1366,16 +1358,21 @@
             <span>🗺️ 3 · Location</span><span class="guide-arr">▶</span>
           </div>
           <div class="guide-item-body hidden">
-            <p>Una ubicación por fila. Clasifica cada nodo de la red por su rol inferido a partir de su comportamiento real en los datos (PSH, Location Source, Resource Location), sin depender del campo LOCTYPE.</p>
+            <p>Una ubicación por fila. El analizador deduce el rol de cada nodo a partir de su comportamiento real en los datos, sin depender del campo LOCTYPE de SAP.</p>
             <ul>
-              <li><strong>Estado</strong> — Color de alerta.</li>
-              <li><strong>Observacion</strong> — Hallazgos: BOMs sin PSI/PSR, componentes sin cobertura, productos sin Location Product en destino, etc.</li>
-              <li><strong>LOCID / LOCDESCR / LOCTYPE</strong> — Identificador, descripción y tipo SAP de la ubicación.</li>
-              <li><strong>Rol(es) inferido(s)</strong> — Uno o más de: <em>Planta de producción · Proveedor · Nodo de transferencia · Nodo receptor · Nodo de recursos · Sin actividad</em>.</li>
-              <li><strong>Métricas Planta</strong> — # Productos fabricados, SOURCEIDs, Recursos asignados/activos/ociosos, BOMs sin PSI/PSR, Componentes sin cobertura LocSrc, SOURCEIDs sin PLEADTIME.</li>
-              <li><strong>Métricas Proveedor</strong> — # Productos abastecidos, Plantas abastecidas, Arcos sin consumo PSI en destino, Productos sin Location Product en destino.</li>
-              <li><strong>Métricas Transferencia</strong> — # Productos transferidos, Destinos de transferencia.</li>
-              <li><strong>Métricas Receptor</strong> — # Productos recibidos, Orígenes desde los que recibe.</li>
+              <li><strong>Rol(es) inferido(s)</strong> — Qué función cumple esta ubicación en la red:
+                <ul style="margin-top:4px;">
+                  <li><em>Planta de producción</em> — tiene recetas PSH propias. Ej: P001 fabrica PROD-A.</li>
+                  <li><em>Proveedor</em> — abastece materiales a otras plantas vía Location Source. Ej: PROV-01 envía MAT-X a P001.</li>
+                  <li><em>Nodo de transferencia</em> — recibe y reenvía productos a otras ubicaciones.</li>
+                  <li><em>Nodo receptor</em> — solo recibe, no produce ni transfiere.</li>
+                  <li><em>Nodo de recursos</em> — tiene recursos asignados en Resource Location pero sin producción activa.</li>
+                  <li><em>Sin actividad</em> — existe en el maestro pero no aparece en ningún otro dato. 🟡</li>
+                </ul>
+              </li>
+              <li><strong>Métricas Planta</strong> — Productos fabricados, recetas, recursos activos y ociosos, recetas sin componentes o sin lead time.</li>
+              <li><strong>Métricas Proveedor</strong> — Productos y plantas abastecidas, rutas sin consumo real en destino.</li>
+              <li><strong>Métricas Transferencia / Receptor</strong> — Productos que mueve y desde dónde los recibe.</li>
             </ul>
           </div>
         </div>
@@ -1386,16 +1383,11 @@
             <span>🔧 4 · Resource</span><span class="guide-arr">▶</span>
           </div>
           <div class="guide-item-body hidden">
-            <p>Un recurso productivo (puesto de trabajo o máquina) por fila. Verifica que cada recurso declarado esté asignado a procesos de producción y tenga ubicación configurada.</p>
+            <p>Un recurso (máquina o puesto de trabajo) por fila. Detecta recursos declarados en el maestro que no participan en ningún proceso productivo.</p>
             <ul>
-              <li><strong>Estado</strong> — Color de alerta.</li>
-              <li><strong>Observacion</strong> — Un recurso 🔴 sin PSR ni Resource Location existe en el maestro pero no aporta a ningún proceso productivo.</li>
-              <li><strong>RESID / RESDESCR</strong> — Código y descripción del recurso.</li>
-              <li><strong>En PSR</strong> — ¿El recurso está asignado a al menos una fuente de producción?</li>
-              <li><strong>En Resource Location</strong> — ¿Tiene una ubicación física configurada?</li>
-              <li><strong># Plantas asignadas / Plantas asignadas (códigos)</strong> — Plantas donde está configurado en Resource Location.</li>
-              <li><strong># Fuentes prod. / Fuentes prod. (SOURCEIDs)</strong> — Fuentes de producción a las que está asignado.</li>
-              <li><strong># Productos que fabrica / Productos que fabrica (códigos)</strong> — Productos de los SOURCEIDs asignados.</li>
+              <li><strong>En PSR</strong> — ¿Este recurso está asignado a alguna receta de producción? Si no, IBP no lo usa para planificar. <em>Ej: MAQUINA-01 en el maestro pero sin PSR → recurso fantasma.</em></li>
+              <li><strong>En Resource Location</strong> — ¿Tiene planta asignada? Sin esto, IBP no sabe dónde opera.</li>
+              <li><strong># Plantas asignadas / Fuentes prod. / Productos que fabrica</strong> — Resumen del alcance productivo del recurso.</li>
             </ul>
           </div>
         </div>
@@ -1406,13 +1398,10 @@
             <span>📍 5 · Resource Location</span><span class="guide-arr">▶</span>
           </div>
           <div class="guide-item-body hidden">
-            <p>Un par <code>RESID + LOCID</code> por fila. Valida que cada combinación recurso-ubicación tenga uso real en alguna receta de producción.</p>
+            <p>Un par recurso + planta por fila. Valida que cada combinación tenga uso real en alguna receta.</p>
             <ul>
-              <li><strong>Estado</strong> — Color de alerta.</li>
-              <li><strong>Observacion</strong> — Detalle del hallazgo.</li>
-              <li><strong>RESID / RESDESCR</strong> — Código y descripción del recurso.</li>
-              <li><strong>LOCID / LOCDESCR</strong> — Código y descripción de la planta donde está el recurso.</li>
-              <li><strong>RESID+LOCID usado en PSR</strong> — ¿Esta combinación recurso-planta está asignada a al menos una fuente de producción? Si es No, el recurso está ubicado en esa planta en el maestro pero no se asignó a ninguna receta productiva.</li>
+              <li><strong>RESID + LOCID</strong> — Recurso y la planta donde está configurado.</li>
+              <li><strong>Usado en PSR</strong> — ¿Esta combinación aparece en alguna receta de producción? Si es No, el recurso está en esa planta en el maestro pero nunca se asignó a ninguna receta. <em>Ej: MAQUINA-01 en P002 según Resource Location, pero ningún SOURCEID de P002 la usa → 🟡 advertencia.</em></li>
             </ul>
           </div>
         </div>
@@ -1423,20 +1412,17 @@
             <span>🏭 6 · Prod Source Header (PSH)</span><span class="guide-arr">▶</span>
           </div>
           <div class="guide-item-body hidden">
-            <p>Un <code>SOURCEID</code> (fuente de producción) por fila. Analiza la consistencia de cada receta de producción registrada en SAP IBP.</p>
+            <p>Una receta de producción (SOURCEID) por fila. Cada receta define qué producto se fabrica, en qué planta, con qué ingredientes y en cuánto tiempo.</p>
             <ul>
-              <li><strong>Estado</strong> — Color de alerta.</li>
-              <li><strong>Observacion</strong> — Detalle de hallazgos: PLEADTIME cero, sin BOM, sin recursos, etc.</li>
-              <li><strong>SOURCEID</strong> — Identificador único de la fuente de producción.</li>
-              <li><strong>PRDID output / PRDDESCR output / MATTYPEID output</strong> — Producto que produce esta fuente.</li>
-              <li><strong>LOCID planta / LOCDESCR planta</strong> — Planta donde se ejecuta la producción.</li>
-              <li><strong>SOURCETYPE(s)</strong> — <code>P</code> = producción primaria · <code>C</code> = co-producto.</li>
-              <li><strong>PLEADTIME</strong> — Lead time de producción en días. Se alerta si está vacío o en cero.</li>
-              <li><strong>OUTPUTCOEFFICIENT</strong> — Unidades del producto terminado generadas por corrida de producción.</li>
-              <li><strong>PRDID+LOCID en Location Product</strong> — ¿El producto está habilitado en esa planta?</li>
-              <li><strong># Componentes PSI / # Recursos PSR / Recursos PSR (códigos)</strong> — Componentes y recursos asignados a la fuente.</li>
-              <li><strong># Componentes con alternativa</strong> — Cantidad de componentes PSI marcados como sustitutos.</li>
-              <li><strong>Tiene PSR</strong> — ¿Hay recursos asignados a esta fuente?</li>
+              <li><strong>SOURCEID</strong> — Código que identifica esta receta de producción en SAP IBP.</li>
+              <li><strong>PRDID output / Planta</strong> — Qué producto fabrica y en qué planta.</li>
+              <li><strong>SOURCETYPE(s)</strong> — <code>P</code> = producción principal · <code>C</code> = co-producto que se obtiene en el mismo proceso.</li>
+              <li><strong>PLEADTIME</strong> — Días que tarda el proceso desde que se lanza la orden hasta tener el producto listo. <em>Ej: 5 = 5 días de fabricación. Si es 0, IBP planifica como si fuera instantáneo → alerta 🔴.</em></li>
+              <li><strong>OUTPUTCOEFFICIENT</strong> — Cuántas unidades del producto se obtienen por corrida. <em>Ej: 100 = cada corrida produce 100 unidades.</em></li>
+              <li><strong>En Location Product</strong> — ¿El producto está habilitado en esa planta? Si no, hay una receta para algo que IBP no reconoce en ese lugar.</li>
+              <li><strong># Componentes PSI</strong> — Cuántos ingredientes tiene esta receta.</li>
+              <li><strong># Recursos PSR / Tiene PSR</strong> — Cuántos recursos (máquinas) están asignados. Sin recursos, IBP no puede planificar la capacidad.</li>
+              <li><strong># Componentes con alternativa</strong> — Ingredientes marcados como sustitutos de otro componente.</li>
             </ul>
           </div>
         </div>
@@ -1447,21 +1433,16 @@
             <span>🔩 7 · Prod Source Item (PSI)</span><span class="guide-arr">▶</span>
           </div>
           <div class="guide-item-body hidden">
-            <p>Un componente del BOM por fila. Valida la consistencia de cada ítem de la lista de materiales.</p>
+            <p>Un ingrediente del BOM por fila. Verifica que cada componente esté bien configurado para que IBP pueda planificar su abastecimiento.</p>
             <ul>
-              <li><strong>Estado</strong> — Color de alerta.</li>
-              <li><strong>Observacion</strong> — Coeficiente cero, sin Location Product, cadena de sustitución incompleta, etc.</li>
-              <li><strong>SOURCEID</strong> — Fuente de producción a la que pertenece este componente.</li>
-              <li><strong>PRDID output / PRDDESCR output / MATTYPEID output</strong> — Producto terminado que se fabrica.</li>
-              <li><strong>LOCID planta / LOCDESCR planta</strong> — Planta donde se fabrica.</li>
-              <li><strong>PRDID componente / PRDDESCR comp / MATTYPEID comp</strong> — Material consumido como insumo.</li>
-              <li><strong>COMPONENTCOEFFICIENT</strong> — Unidades consumidas por unidad producida. Cero genera planificación incorrecta.</li>
-              <li><strong>Tipo componente</strong> — Semielaborado (tiene PSH propio) o Insumo (viene de Location Source).</li>
-              <li><strong>PRDID comp+LOCID en Location Product</strong> — ¿El componente está habilitado en la planta?</li>
-              <li><strong>En Location Source (insumo)</strong> — ¿El componente tiene arcos de abastecimiento? (<code>N/A</code> para semielaborados).</li>
-              <li><strong>LOCFR origen / LOCDESCR origen</strong> — Ubicación(es) de origen desde donde se transfiere el insumo.</li>
-              <li><strong># Orígenes comp. / Orígenes comp. (códigos)</strong> — Nodos de origen del componente.</li>
-              <li><strong>Material de reemplazo (ISALTITEM) / Reemplaza a</strong> — ¿Es sustituto alternativo? ¿A qué componente reemplaza?</li>
+              <li><strong>SOURCEID / Producto output / Planta</strong> — A qué receta pertenece este ingrediente y dónde se fabrica.</li>
+              <li><strong>PRDID componente</strong> — El material que se consume como ingrediente en esta receta.</li>
+              <li><strong>COMPONENTCOEFFICIENT</strong> — Cuántas unidades de este ingrediente se necesitan por unidad producida. <em>Ej: 2.5 = se consumen 2.5 kg de MAT-A por cada unidad de PROD-001. Si es 0, IBP no planifica compra de este ingrediente → alerta 🔴.</em></li>
+              <li><strong>Tipo componente</strong> — <em>Semielaborado</em>: tiene su propia receta de producción (se fabrica antes de usarse). <em>Insumo</em>: viene de un proveedor o de otra planta vía Location Source.</li>
+              <li><strong>En Location Product</strong> — ¿El ingrediente está habilitado en la planta donde se consume? Si no, IBP no sabe que puede usarlo ahí.</li>
+              <li><strong>En Location Source (insumo)</strong> — ¿Hay una ruta configurada que traiga este insumo a la planta? <em>Ej: MAT-A debe llegar a P001 desde PROV-01; si no hay arco PROV-01 → P001 para MAT-A → alerta 🔴.</em> Muestra N/A para semielaborados.</li>
+              <li><strong>Orígenes comp.</strong> — Desde qué ubicaciones se abastece este ingrediente.</li>
+              <li><strong>Material de reemplazo / Reemplaza a</strong> — Si este componente es sustituto de otro, y a cuál reemplaza. <em>Ej: MAT-A-PREMIUM reemplaza a MAT-A cuando no hay stock.</em></li>
             </ul>
           </div>
         </div>
@@ -1472,16 +1453,12 @@
             <span>⚙️ 8 · Prod Source Resource (PSR)</span><span class="guide-arr">▶</span>
           </div>
           <div class="guide-item-body hidden">
-            <p>Asignaciones recurso → fuente de producción. Un par <code>RESID + SOURCEID</code> por fila.</p>
+            <p>Un par recurso + receta por fila. Muestra qué máquinas o puestos de trabajo están asignados a cada proceso de producción.</p>
             <ul>
-              <li><strong>Estado</strong> — Color de alerta.</li>
-              <li><strong>Observacion</strong> — Registros 🔴 indican asignaciones huérfanas: el recurso o la fuente no existen en sus respectivos maestros.</li>
-              <li><strong>SOURCEID</strong> — Fuente de producción a la que se asigna el recurso.</li>
-              <li><strong>PRDID output / PRDDESCR output / MATTYPEID output</strong> — Producto que fabrica esa fuente.</li>
-              <li><strong>LOCID planta / LOCDESCR planta</strong> — Planta donde opera la fuente.</li>
-              <li><strong>RESID / RESDESCR</strong> — Recurso asignado a esta fuente.</li>
-              <li><strong>RESID+LOCID en Resource Location</strong> — ¿La combinación recurso-planta está configurada? Si es No, el recurso no tiene ubicación en esa planta.</li>
-              <li><strong># Plantas con este recurso asignado / Plantas recurso (códigos)</strong> — Plantas donde el recurso tiene Resource Location.</li>
+              <li><strong>SOURCEID / Producto / Planta</strong> — La receta a la que está asignado el recurso.</li>
+              <li><strong>RESID / RESDESCR</strong> — El recurso asignado. <em>Ej: LINEA-01, HORNO-A.</em></li>
+              <li><strong>RESID+LOCID en Resource Location</strong> — ¿El recurso tiene planta asignada en el maestro de ubicaciones? Si es No, está asignado a una receta en una planta donde IBP no lo reconoce como ubicado. <em>→ Alerta 🔴.</em></li>
+              <li><strong># Plantas con este recurso</strong> — En cuántas plantas tiene configurado este recurso según Resource Location.</li>
             </ul>
           </div>
         </div>

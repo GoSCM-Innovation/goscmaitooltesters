@@ -872,7 +872,7 @@ async function paAnalyzeAndExport(
       var naPSI  = hasKnownCat && rules.requiresPSI  === 'none';
       var naPSR  = hasKnownCat && rules.requiresPSR  === 'none';
       var naVend = hasKnownCat && cats.indexOf('rawmat') < 0 && cats.indexOf('trading') < 0;
-      var naCov  = hasKnownCat && rules.requiresPlantAsOrigin === 'none';
+      var naCov  = hasKnownCat && rules.requiresVendorArc === 'none';
       function na(cond, val) { return cond ? NA_DASH : val; }
 
       S1.addRow([
