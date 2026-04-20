@@ -697,7 +697,7 @@ async function paAnalyzeAndExport(
       'Total de filas procesadas en esa hoja.',
       'Registros con problema crítico que requiere corrección inmediata.',
       'Registros con dato para revisar o que puede impactar la planificación.',
-      'Registros sin observaciones — datos consistentes.',
+      'Registros sin hallazgos — datos consistentes.',
       'Porcentaje de registros OK sobre el total. Fórmula: OK / Total × 100.'
     ],
     ['control','control','metric','metric','metric','metric','metric']);
@@ -722,8 +722,8 @@ async function paAnalyzeAndExport(
       '# Orígenes en red','Orígenes en red (códigos)',
       '# Plantas consumidoras','Plantas consumidoras (códigos)'
     ], [
-      'Color de alerta: 🔴 Alerta = problema crítico | 🟡 Advertencia = revisar | ✅ OK = sin observaciones.',
-      'Resumen de todos los hallazgos detectados para este producto.',
+      'Color de alerta: 🔴 Alerta = problema crítico | 🟡 Advertencia = revisar | ✅ OK = sin hallazgos.',
+      'Detalle de validaciones. Si hay hallazgos, describe el problema. Si el estado es OK, detalla qué validaciones se realizaron y pasaron correctamente.',
       'Código único del producto en SAP IBP (PRDID).',
       'Descripción del producto del maestro de materiales.',
       'Tipo de material SAP (MATTYPEID). Determina las reglas de validación aplicadas.',
@@ -850,7 +850,15 @@ async function paAnalyzeAndExport(
         }
       }
 
-      if (!obs.length) obs.push('OK');
+      if (!obs.length) {
+        var okParts = ['Habilitado en Location Product'];
+        if (reqPSH !== 'none' && inPSH)                     okParts.push('Con PSH, PSI y PSR');
+        if (rules.requiresPlantAsOrigin !== 'none' && inPSH) okParts.push('Planta es origen en Location Source');
+        if (rules.requiresVendorArc !== 'none')              okParts.push('Arcos de abastecimiento completos');
+        if (rules.requiresAnyOriginDest !== 'none')          okParts.push('Con arcos en Location Source');
+        if (rules.pleadtimeZero !== 'none' && inPSH)         okParts.push('Lead time definido en todos los SOURCEIDs');
+        obs.push(okParts.join(' | '));
+      }
 
       // Severidad final
       var finalSev = fills.length ? mattypeResolveSeverity(fills.map(function(f){
@@ -921,8 +929,8 @@ async function paAnalyzeAndExport(
       '# Productos recibidos','Productos recibidos (códigos)',
       '# Orígenes desde los que recibe','Orígenes (códigos)'
     ], [
-      'Color de alerta: 🔴 Alerta = problema crítico | 🟡 Advertencia = revisar | ✅ OK = sin observaciones.',
-      'Resumen de todos los hallazgos detectados para esta ubicación.',
+      'Color de alerta: 🔴 Alerta = problema crítico | 🟡 Advertencia = revisar | ✅ OK = sin hallazgos.',
+      'Detalle de validaciones. Si hay hallazgos, describe el problema. Si el estado es OK, detalla qué validaciones se realizaron y pasaron correctamente.',
       'Código único de la ubicación en SAP IBP (LOCID).',
       'Descripción de la ubicación del maestro de ubicaciones.',
       'Tipo de ubicación según el campo LOCTYPE de SAP IBP.',
@@ -1117,7 +1125,12 @@ async function paAnalyzeAndExport(
         if (sinLocProd.size)    { obs.push(sinLocProd.size + ' producto(s) sin Location Product en planta destino'); fills.push('red'); }
       }
       if (roles[0] === 'Sin actividad') { obs.push('Ubicación en maestro sin actividad en otros datos'); fills.push('info'); }
-      if (!obs.length) obs.push('OK');
+      if (!obs.length) {
+        var okParts = [];
+        if (isPlanta)    okParts.push('BOMs con PSI, PSR y lead time | Sin componentes descubiertos | Sin recursos ociosos');
+        if (isProveedor) okParts.push('Abastecimiento con consumo PSI y cobertura LP en destino');
+        obs.push(okParts.join(' | '));
+      }
 
       var finalSev = fills.length ? mattypeResolveSeverity(fills) : 'none';
       var fill = finalSev === 'red' ? C_RED : finalSev === 'yellow' ? C_YEL : null;
@@ -1165,8 +1178,8 @@ async function paAnalyzeAndExport(
       '# Fuentes prod.','Fuentes prod. (SOURCEIDs)',
       '# Productos que fabrica','Productos que fabrica (códigos)'
     ], [
-      'Color de alerta: 🔴 Alerta = problema crítico | 🟡 Advertencia = revisar | ✅ OK = sin observaciones.',
-      'Resumen de hallazgos. Un recurso sin PSR ni Resource Location existe en el maestro pero no aporta a ningún proceso productivo.',
+      'Color de alerta: 🔴 Alerta = problema crítico | 🟡 Advertencia = revisar | ✅ OK = sin hallazgos.',
+      'Detalle de validaciones. Si OK: recurso en uso en PSR y con planta asignada en Resource Location. Si hay hallazgo: describe qué falta.',
       'Código único del recurso productivo en SAP IBP (RESID).',
       'Descripción del recurso del maestro de recursos.',
       'Si / No — ¿El recurso está asignado a al menos una fuente de producción en Prod Source Resource (PSR)?',
@@ -1223,7 +1236,7 @@ async function paAnalyzeAndExport(
       if (!inPSR && !inRL) obs.push('Recurso huérfano: sin uso en producción ni planta asignada');
       else if (!inPSR)     obs.push('Sin uso en producción (no aparece en PSR)');
       else if (!inRL)      obs.push('Sin planta asignada en Resource Location');
-      if (!obs.length)     obs.push('OK');
+      if (!obs.length)     obs.push('En uso en PSR y con planta asignada en Resource Location');
       var fill = (!inPSR && !inRL) ? C_RED : (!inPSR || !inRL) ? C_YEL : null;
       S2.addRow([
         statusLabel(fill), obs.join(' | '),
@@ -1250,8 +1263,8 @@ async function paAnalyzeAndExport(
       'RESID','RESDESCR','LOCID','LOCDESCR',
       'RESID+LOCID usado en PSR'
     ], [
-      'Color de alerta: 🔴 Alerta = problema crítico | 🟡 Advertencia = revisar | ✅ OK = sin observaciones.',
-      'Detalle del hallazgo. Si No: el recurso está ubicado en esta planta en el maestro pero no se asignó a ninguna receta productiva (PSR).',
+      'Color de alerta: 🔴 Alerta = problema crítico | 🟡 Advertencia = revisar | ✅ OK = sin hallazgos.',
+      'Detalle de validación. OK = recurso activo en PSR para esta planta. Hallazgo = asignado en maestro pero sin uso en PSR.',
       'Código del recurso productivo (RESID).',
       'Descripción del recurso del maestro de recursos.',
       'Código de la planta donde está configurado este recurso (LOCID).',
@@ -1266,7 +1279,7 @@ async function paAnalyzeAndExport(
       PA_RES_LOC[resid].forEach(function(e) {
         var locid = e.LOCID;
         var used  = psrByResidLoc.has(resid + '|' + locid);
-        var obs   = used ? 'OK' : 'Recurso asignado a planta pero sin uso en PSR para esta planta';
+        var obs   = used ? 'Recurso activo en PSR para esta planta' : 'Recurso asignado a planta pero sin uso en PSR para esta planta';
         var fill  = used ? null : C_YEL;
         S3.addRow([statusLabel(fill), obs, resid, rd(resid), locid, ld(locid), yn(used)], fill);
         track('Resource Location', fill);
@@ -1293,7 +1306,7 @@ async function paAnalyzeAndExport(
       '# Componentes con alternativa',
       'Tiene PSR'
     ], [
-      'Color de alerta: 🔴 Alerta = problema crítico | 🟡 Advertencia = revisar | ✅ OK = sin observaciones.',
+      'Color de alerta: 🔴 Alerta = problema crítico | 🟡 Advertencia = revisar | ✅ OK = sin hallazgos.',
       'Detalle de hallazgos: PLEADTIME cero, BOM vacío, sin recursos PSR, sin Location Product, múltiples fuentes sin cuota, etc.',
       'Identificador único de la fuente de producción (SOURCEID) en SAP IBP.',
       'Código del producto que produce esta fuente de producción (output).',
@@ -1348,7 +1361,7 @@ async function paAnalyzeAndExport(
       if (!hasP)   obs.push('Sin registro SOURCETYPE=P');
       if (!hasPSR) obs.push('Sin recursos PSR asignados');
       if (multi)   obs.push('Múltiples SOURCEIDs para mismo PRDID+LOCID — verificar cuotas');
-      if (!obs.length) obs.push('OK');
+      if (!obs.length) obs.push('BOM con componentes PSI | Lead time definido | Habilitado en LP | SOURCETYPE=P presente | Recursos PSR asignados');
       var fill = (!hasPSI || noLt || !inLP || !hasPSR) ? C_RED : (!hasP || multi) ? C_YEL : null;
       S6.addRow([
         statusLabel(fill), obs.join(' | '),
@@ -1386,7 +1399,7 @@ async function paAnalyzeAndExport(
       '# Orígenes comp.','Orígenes comp. (códigos)',
       'Material de reemplazo (ISALTITEM)','Reemplaza a'
     ], [
-      'Color de alerta: 🔴 Alerta = problema crítico | 🟡 Advertencia = revisar | ✅ OK = sin observaciones.',
+      'Color de alerta: 🔴 Alerta = problema crítico | 🟡 Advertencia = revisar | ✅ OK = sin hallazgos.',
       'Detalle de hallazgos: coeficiente cero, componente sin Location Product, sin arco de abastecimiento, sustitución incompleta, etc.',
       'Fuente de producción (SOURCEID) a la que pertenece este componente del BOM.',
       'Código del producto terminado que se fabrica con este BOM.',
@@ -1477,7 +1490,7 @@ async function paAnalyzeAndExport(
         if (!compInLP && locid) obs.push('Componente no habilitado en Location Product para esta planta');
         if (isAlt === 'X' && !replacedBy && ent.psiSub) obs.push('Material de reemplazo sin registro en Item Sub');
         if (exclNote) obs.push('Componente de tipo excluido (' + compMt + ') — validado en contexto');
-        if (!obs.length) obs.push('OK');
+        if (!obs.length) obs.push('SOURCEID válido en PSH | Coeficiente definido | Con arco de abastecimiento en Location Source | Habilitado en Location Product');
 
         var fill = (noCoeff || (!isSemi && !inLS && !noSrc) || (!compInLP && locid)) ? C_RED
                  : (noSrc || (isAlt === 'X' && !replacedBy && ent.psiSub)) ? C_YEL
@@ -1521,7 +1534,7 @@ async function paAnalyzeAndExport(
       'RESID+LOCID en Resource Location',
       '# Plantas con este recurso asignado','Plantas recurso (códigos)'
     ], [
-      'Color de alerta: 🔴 Alerta = problema crítico | 🟡 Advertencia = revisar | ✅ OK = sin observaciones.',
+      'Color de alerta: 🔴 Alerta = problema crítico | 🟡 Advertencia = revisar | ✅ OK = sin hallazgos.',
       'Detalle de hallazgos. 🔴 indica asignación huérfana: el SOURCEID no existe en PSH o el recurso no tiene Resource Location en esta planta.',
       'Fuente de producción (SOURCEID) a la que se asigna este recurso.',
       'Código del producto que fabrica esta fuente.',
