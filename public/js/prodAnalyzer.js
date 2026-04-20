@@ -224,15 +224,17 @@ async function paFetchMattypes() {
     : '';
 
   var tmpPrd = {};
+  // logEl dummy (off-DOM) para que fetchAndIndex/log no rompan
+  var logDummy = document.getElementById('logPA') || document.createElement('div');
   try {
-    await fetchAndIndex(baseOData + prdEnt, null, paFilter, 'PRDID,MATTYPEID',
+    await fetchAndIndex(baseOData + prdEnt, logDummy, paFilter, 'PRDID,MATTYPEID',
       function(rows) {
         rows.forEach(function(r) { var k = str(r.PRDID); if (k) tmpPrd[k] = r; });
         return Promise.resolve();
       });
     mattyeInit(tmpPrd);
   } catch(e) {
-    // silencioso — el panel mostrará el aviso de carga
+    console.warn('[paFetchMattypes] fetch falló:', e);
   }
 }
 
