@@ -603,16 +603,20 @@ async function paAnalyzeAndExport(
   var today = new Date().toISOString().slice(0, 10);
   var GOLD  = 'FFF7A800', ORANGE = 'FFE8622A', NAVY = 'FF0B1120';
   var C_RED = 'FFFFCCCC', C_YEL  = 'FFFFFFCC';
+  var NA_DASH = '\u2014', NA_FILL = 'FFE5E7EB', NA_FONT = 'FF6B7280';
+  var GRP = { control:'FFD1D5DB', ibp:'FFBAE6FD', flag:'FFFDE68A', metric:'FFA7F3D0', detail:'FF99F6E4' };
   var wb    = new ExcelJS.Workbook();
 
-  function makeSheet(name, tabArgb, hdrs, notes) {
+  function makeSheet(name, tabArgb, hdrs, notes, groups) {
     var ws = wb.addWorksheet(name, {
       views: [{ state: 'frozen', ySplit: 1 }],
       properties: { tabColor: { argb: tabArgb } }
     });
     ws.addRow(hdrs);
     ws.getRow(1).eachCell(function(cell, colNum) {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GOLD } };
+      var grpKey  = groups && groups[colNum - 1];
+      var hdrFill = grpKey ? (GRP[grpKey] || GOLD) : GOLD;
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: hdrFill } };
       cell.font = { bold: true, name: 'DM Sans', size: 10, color: { argb: NAVY } };
       cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
       cell.border = { bottom: { style: 'medium', color: { argb: ORANGE } } };
@@ -627,12 +631,18 @@ async function paAnalyzeAndExport(
       ws: ws,
       addRow: function(data, fillArgb) {
         var row = ws.addRow(data.map(cleanXml));
-        if (fillArgb) {
-          row.eachCell({ includeEmpty: true }, function(cell) {
+        row.eachCell({ includeEmpty: true }, function(cell) {
+          if (cell.value === NA_DASH) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NA_FILL } };
+            cell.font = { name: 'DM Sans', size: 10, color: { argb: NA_FONT }, italic: true };
+            return;
+          }
+          if (fillArgb) {
             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillArgb } };
-          });
-        }
+          }
+        });
         data.forEach(function(v, ci) {
+          if (v === NA_DASH) return;
           var len = v != null ? String(v).length : 0;
           if (len > (colW[ci] || 0)) colW[ci] = len;
         });
@@ -686,7 +696,8 @@ async function paAnalyzeAndExport(
       'Registros con dato para revisar o que puede impactar la planificación.',
       'Registros sin observaciones — datos consistentes.',
       'Porcentaje de registros OK sobre el total. Fórmula: OK / Total × 100.'
-    ]);
+    ],
+    ['control','control','metric','metric','metric','metric','metric']);
 
   /* ════════════════════════════════════════════════════════════════
      HOJA 1 — PRODUCT
@@ -735,6 +746,20 @@ async function paAnalyzeAndExport(
       'Códigos de los nodos origen en la red.',
       'Cantidad de plantas donde este producto es consumido como insumo en algún BOM.',
       'Códigos de las plantas consumidoras.'
+    ], [
+      'control','control',
+      'ibp','ibp','ibp',
+      'flag','flag','flag','flag',
+      'metric','detail',
+      'metric','detail',
+      'metric',
+      'metric','detail',
+      'metric','detail',
+      'metric','detail',
+      'metric','detail',
+      'metric',
+      'metric','detail',
+      'metric','detail'
     ]);
 
     Object.keys(PA_PRD).sort().forEach(function(prdid) {
@@ -830,17 +855,26 @@ async function paAnalyzeAndExport(
       })) : 'none';
       var fill = severityToFill(finalSev);
 
+      // N/A: suprimir métricas que no aplican según el tipo de material
+      var hasKnownCat = cats.indexOf('all') < 0;
+      var naPSH  = hasKnownCat && rules.requiresPSH  === 'none';
+      var naPSI  = hasKnownCat && rules.requiresPSI  === 'none';
+      var naPSR  = hasKnownCat && rules.requiresPSR  === 'none';
+      var naVend = hasKnownCat && cats.indexOf('rawmat') < 0 && cats.indexOf('trading') < 0;
+      var naCov  = hasKnownCat && rules.requiresPlantAsOrigin === 'none';
+      function na(cond, val) { return cond ? NA_DASH : val; }
+
       S1.addRow([
         statusLabel(fill), obs.join(' | '),
         prdid, pd(prdid), mattypeid,
-        yn(inLP), yn(inPSH), yn(inPSI), yn(inLS),
-        sidsPrd.length,       codes(sidsPrd),
-        plantsSet.size,       codes(plantsSet),
-        compCount,
-        resSet.size,          codes(resSet),
-        vendorSet.size,       codes(vendorSet),
-        covData.covered.size, codes(covData.covered),
-        covData.uncovered.size, codes(covData.uncovered),
+        yn(inLP), na(naPSH, yn(inPSH)), yn(inPSI), yn(inLS),
+        na(naPSH, sidsPrd.length),        na(naPSH, codes(sidsPrd)),
+        na(naPSH, plantsSet.size),        na(naPSH, codes(plantsSet)),
+        na(naPSI, compCount),
+        na(naPSR, resSet.size),           na(naPSR, codes(resSet)),
+        na(naVend, vendorSet.size),       na(naVend, codes(vendorSet)),
+        na(naCov, covData.covered.size),  na(naCov, codes(covData.covered)),
+        na(naCov, covData.uncovered.size), na(naCov, codes(covData.uncovered)),
         usedBySet.size,
         origins.size,         codes(origins),
         consLocs.size,        codes(consLocs)
@@ -929,6 +963,21 @@ async function paAnalyzeAndExport(
       'Códigos de los productos recibidos en esta ubicación.',
       'Cantidad de ubicaciones origen distintas desde las que recibe productos.',
       'Códigos de las ubicaciones origen.'
+    ], [
+      'control','control',
+      'ibp','ibp','ibp','ibp',
+      /* Planta */
+      'metric','detail','metric','detail',
+      'metric','detail','metric','detail','metric','detail',
+      'metric','detail','metric','detail',
+      'metric','metric','detail',
+      'metric','detail',
+      /* Proveedor */
+      'metric','detail','metric','detail','metric','detail','metric','detail',
+      /* Transferencia */
+      'metric','detail','metric','detail',
+      /* Receptor */
+      'metric','detail','metric','detail'
     ]);
 
     // Unión de todos los locids conocidos
@@ -1070,26 +1119,28 @@ async function paAnalyzeAndExport(
       var finalSev = fills.length ? mattypeResolveSeverity(fills) : 'none';
       var fill = finalSev === 'red' ? C_RED : finalSev === 'yellow' ? C_YEL : null;
 
+      function naL(cond, val) { return cond ? NA_DASH : val; }
+
       S9.addRow([
         statusLabel(fill), obs.join(' | '),
         locid, locdescr, loctype, rolStr,
-        plantaPrds.size,   codes(plantaPrds),
-        plantaSids.size,   codes(plantaSids),
-        resAsignados.size, codes(resAsignados),
-        resActivos.size,   codes(resActivos),
-        resOciosos.size,   codes(resOciosos),
-        bomssinPSI.size,   codes(bomssinPSI),
-        bomssinPSR.size,   codes(bomssinPSR),
-        compExternos,      compSinCov.size, codes(compSinCov),
-        sidsSinPlt.size,   codes(sidsSinPlt),
-        prdAbastecidos.size, codes(prdAbastecidos),
-        plantasAbast.size,   codes(plantasAbast),
-        sinConsumoPSI.size,  codes(sinConsumoPSI),
-        sinLocProd.size,     codes(sinLocProd),
-        prdTransferidos.size, codes(prdTransferidos),
-        destTransf.size,      codes(destTransf),
-        prdRecibidos.size,    codes(prdRecibidos),
-        origenes.size,        codes(origenes)
+        naL(!isPlanta, plantaPrds.size),    naL(!isPlanta, codes(plantaPrds)),
+        naL(!isPlanta, plantaSids.size),    naL(!isPlanta, codes(plantaSids)),
+        naL(!isPlanta, resAsignados.size),  naL(!isPlanta, codes(resAsignados)),
+        naL(!isPlanta, resActivos.size),    naL(!isPlanta, codes(resActivos)),
+        naL(!isPlanta, resOciosos.size),    naL(!isPlanta, codes(resOciosos)),
+        naL(!isPlanta, bomssinPSI.size),    naL(!isPlanta, codes(bomssinPSI)),
+        naL(!isPlanta, bomssinPSR.size),    naL(!isPlanta, codes(bomssinPSR)),
+        naL(!isPlanta, compExternos),       naL(!isPlanta, compSinCov.size), naL(!isPlanta, codes(compSinCov)),
+        naL(!isPlanta, sidsSinPlt.size),    naL(!isPlanta, codes(sidsSinPlt)),
+        naL(!isProveedor, prdAbastecidos.size), naL(!isProveedor, codes(prdAbastecidos)),
+        naL(!isProveedor, plantasAbast.size),   naL(!isProveedor, codes(plantasAbast)),
+        naL(!isProveedor, sinConsumoPSI.size),  naL(!isProveedor, codes(sinConsumoPSI)),
+        naL(!isProveedor, sinLocProd.size),     naL(!isProveedor, codes(sinLocProd)),
+        naL(!isTransferencia, prdTransferidos.size), naL(!isTransferencia, codes(prdTransferidos)),
+        naL(!isTransferencia, destTransf.size),      naL(!isTransferencia, codes(destTransf)),
+        naL(!isReceptor, prdRecibidos.size),  naL(!isReceptor, codes(prdRecibidos)),
+        naL(!isReceptor, origenes.size),      naL(!isReceptor, codes(origenes))
       ], fill);
       track('Location', fill);
     });
@@ -1123,6 +1174,13 @@ async function paAnalyzeAndExport(
       'Códigos de los SOURCEIDs a los que está asignado este recurso.',
       'Cantidad de productos distintos que fabrica a través de sus SOURCEIDs asignados.',
       'Códigos de los productos fabricados por las fuentes donde participa este recurso.'
+    ], [
+      'control','control',
+      'ibp','ibp',
+      'flag','flag',
+      'metric','detail',
+      'metric','detail',
+      'metric','detail'
     ]);
 
     // Índice: RESID → Set<LOCID> (desde Resource Location)
@@ -1196,6 +1254,10 @@ async function paAnalyzeAndExport(
       'Código de la planta donde está configurado este recurso (LOCID).',
       'Descripción de la planta del maestro de ubicaciones.',
       'Si / No — ¿Esta combinación RESID+LOCID aparece en al menos un registro de Prod Source Resource? Si No, el recurso está registrado en esa planta pero no participa en ninguna receta de producción.'
+    ], [
+      'control','control',
+      'ibp','ibp','ibp','ibp',
+      'flag'
     ]);
     Object.keys(PA_RES_LOC).sort().forEach(function(resid) {
       PA_RES_LOC[resid].forEach(function(e) {
@@ -1245,6 +1307,16 @@ async function paAnalyzeAndExport(
       'Códigos de los recursos (RESID) asignados a esta fuente de producción.',
       'Cantidad de componentes PSI marcados como material de reemplazo alternativo (ISALTITEM=X).',
       'Si / No — ¿Esta fuente tiene al menos un recurso asignado en Prod Source Resource?'
+    ], [
+      'control','control',
+      'ibp',
+      'ibp','ibp','ibp',
+      'ibp','ibp',
+      'ibp','ibp','ibp',
+      'flag',
+      'metric','metric','detail',
+      'metric',
+      'flag'
     ]);
     Object.keys(pshBySid).sort().forEach(function(sid) {
       var recs    = pshBySid[sid];
@@ -1332,6 +1404,18 @@ async function paAnalyzeAndExport(
       'Códigos de los nodos origen del componente.',
       'X = este componente es un material de reemplazo alternativo (ISALTITEM). Vacío = componente principal.',
       'Código del componente principal al que reemplaza este sustituto (si aplica).'
+    ], [
+      'control','control',
+      'ibp',
+      'ibp','ibp','ibp',
+      'ibp','ibp',
+      'ibp','ibp','ibp',
+      'ibp','metric',
+      'flag',
+      'flag',
+      'detail','detail',
+      'metric','detail',
+      'ibp','detail'
     ]);
 
     // ¿Es excluido el componente?
@@ -1447,6 +1531,14 @@ async function paAnalyzeAndExport(
       'Si / No — ¿La combinación RESID+LOCID está configurada en Resource Location? Si No, el recurso opera en esta planta sin estar registrado como tal.',
       'Cantidad de plantas donde este recurso tiene configuración en Resource Location.',
       'Códigos de las plantas donde este recurso tiene Resource Location configurado.'
+    ], [
+      'control','control',
+      'ibp',
+      'ibp','ibp','ibp',
+      'ibp','ibp',
+      'ibp','ibp',
+      'flag',
+      'metric','detail'
     ]);
 
     // RESID → plantas asignadas (Resource Location)
@@ -1503,6 +1595,12 @@ async function paAnalyzeAndExport(
       'Cantidad de combinaciones componente-planta con arco de abastecimiento configurado en Location Source.',
       'Cantidad de combinaciones componente-planta SIN arco de abastecimiento. Si > 0: revisar Location Source aunque el tipo esté excluido.',
       'Detalle: indica si el tipo aparece como componente y si hay gaps de abastecimiento detectados.'
+    ], [
+      'ibp',
+      'metric',
+      'metric','detail',
+      'metric','metric',
+      'control'
     ]);
 
     // Para cada tipo excluido, listar sus productos y dónde aparecen como componente
