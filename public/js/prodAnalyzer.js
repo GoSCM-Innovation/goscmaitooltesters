@@ -684,7 +684,9 @@ async function paAnalyzeAndExport(
   function cleanXml(v) {
     if (v == null) return v;
     if (typeof v !== 'string') return v;
-    var s = v.replace(/[^\x09\x0A\x0D\x20-\uD7FF\uE000-\uFFFD]/g, '').trim();
+    var s = v.replace(/[\uD800-\uDFFF]/g, '')
+             .replace(/[^\x09\x0A\x0D\x20-\uD7FF\uE000-\uFFFD]/g, '')
+             .trim();
     return s === '' ? null : s;
   }
 
