@@ -211,6 +211,31 @@ function togglePALogs() {
   btn.textContent = hidden ? 'Ver logs técnicos' : 'Ocultar logs';
 }
 
+/* ── Fetch ligero de Product master para poblar tipos de material ── */
+async function paFetchMattypes() {
+  var prdEnt = document.getElementById('selPAProduct').value;
+  if (!prdEnt || !CFG || !CFG.url) return;
+
+  var baseOData = CFG.url + '/sap/opu/odata/IBP/' + CFG.service + '/';
+  var paFilter  = CFG.pa
+    ? (CFG.pver
+      ? "PlanningAreaID eq '" + CFG.pa + "' and VersionID eq '" + CFG.pver + "'"
+      : "PlanningAreaID eq '" + CFG.pa + "'")
+    : '';
+
+  var tmpPrd = {};
+  try {
+    await fetchAndIndex(baseOData + prdEnt, null, paFilter, 'PRDID,MATTYPEID',
+      function(rows) {
+        rows.forEach(function(r) { var k = str(r.PRDID); if (k) tmpPrd[k] = r; });
+        return Promise.resolve();
+      });
+    mattyeInit(tmpPrd);
+  } catch(e) {
+    // silencioso — el panel mostrará el aviso de carga
+  }
+}
+
 /* ── Navegación entre paneles ── */
 function paConfirmMapping() {
   var body = document.getElementById('bodyPAMDT');
@@ -224,7 +249,12 @@ function paConfirmMapping() {
     excl.classList.remove('hidden');
     excl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
-  _paUpdateRunSummary();
+  // Fetch ligero para detectar tipos de material antes de que el usuario abra el panel
+  paFetchMattypes().then(function() {
+    mattyeRenderExclude();
+    _mattyeUpdateExcludeSummary();
+    _paUpdateRunSummary();
+  });
 }
 
 function paBackToMapping() {
