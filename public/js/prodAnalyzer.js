@@ -622,9 +622,10 @@ async function paAnalyzeAndExport(
       cell.font = { bold: true, name: 'DM Sans', size: 10, color: { argb: NAVY } };
       cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
       cell.border = { bottom: { style: 'medium', color: { argb: ORANGE } } };
-      var note = notes && notes[colNum - 1];
-      if (note) {
-        try { cell.note = note; } catch(e) {}
+      var rawNote = notes && notes[colNum - 1];
+      if (rawNote) {
+        var safeNote = cleanXml(rawNote);
+        try { if (safeNote) cell.note = safeNote; } catch(e) {}
       }
     });
     ws.getRow(1).height = 22;
@@ -658,7 +659,7 @@ async function paAnalyzeAndExport(
   }
 
   function statusLabel(fill) {
-    return fill === C_RED ? '🔴 Alerta' : fill === C_YEL ? '🟡 Advertencia' : '✅ OK';
+    return fill === C_RED ? '⛔ Alerta' : fill === C_YEL ? '⚠ Advertencia' : '✅ OK';
   }
 
   var STATS = {};
