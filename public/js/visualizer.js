@@ -49,7 +49,8 @@
         document.getElementById('vizLegend').style.display = 'block';
         document.getElementById('vizEmpty').style.display = 'block';
         document.getElementById('vizCanvas').style.height = 'calc(100vh - 230px)';
-        toggleMappingBody('bodyVizMDT', 'arrVizMDT', false);
+        var _vb1 = document.getElementById('bodyVizMDT'); if (_vb1) _vb1.style.display = 'none';
+        var _va1 = document.getElementById('arrVizMDT');  if (_va1) _va1.textContent = '▶';
       } catch (e) {
         setVizStatus('✕ Error: ' + e.message, 0);
         log(logEl, 'err', '✕ ' + e.message);
@@ -272,7 +273,8 @@
         document.getElementById('btnVizFullscreen').style.display = '';
         document.getElementById('btnVizFilter').style.display = '';
         log(logEl, 'ok', '✓ Diagrama: ' + summary);
-        toggleMappingBody('bodyVizMDT', 'arrVizMDT', false);
+        var _vb2 = document.getElementById('bodyVizMDT'); if (_vb2) _vb2.style.display = 'none';
+        var _va2 = document.getElementById('arrVizMDT');  if (_va2) _va2.textContent = '▶';
       } catch (e) {
         statusText.textContent = '✕ Error: ' + e.message;
         document.getElementById('vizStatus').textContent = '✕ Error: ' + e.message;
