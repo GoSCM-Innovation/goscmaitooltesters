@@ -723,6 +723,8 @@
         // Show UI (TREE is empty until user selects a product)
         TREE = { locids: [], roots: {}, stats: {}, cycles: [] };
         initTableUI();
+        var _bb = document.getElementById('bodyMDT'); if (_bb) _bb.style.display = 'none';
+        var _ba = document.getElementById('arrMDT');  if (_ba) _ba.textContent = '▶';
       } catch (e) {
         log(logEl, 'err', 'Error: ' + e.message);
         setStatus('err', 'Error: ' + e.message);
