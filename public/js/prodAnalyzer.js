@@ -605,17 +605,21 @@ async function paAnalyzeAndExport(
   var C_RED = 'FFFFCCCC', C_YEL  = 'FFFFFFCC';
   var wb    = new ExcelJS.Workbook();
 
-  function makeSheet(name, tabArgb, hdrs) {
+  function makeSheet(name, tabArgb, hdrs, notes) {
     var ws = wb.addWorksheet(name, {
       views: [{ state: 'frozen', ySplit: 1 }],
       properties: { tabColor: { argb: tabArgb } }
     });
     ws.addRow(hdrs);
-    ws.getRow(1).eachCell(function(cell) {
+    ws.getRow(1).eachCell(function(cell, colNum) {
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GOLD } };
       cell.font = { bold: true, name: 'DM Sans', size: 10, color: { argb: NAVY } };
       cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
       cell.border = { bottom: { style: 'medium', color: { argb: ORANGE } } };
+      var note = notes && notes[colNum - 1];
+      if (note) {
+        try { cell.note = { texts: [{ text: note }], margins: { insetmode: 'auto' } }; } catch(e) {}
+      }
     });
     ws.getRow(1).height = 22;
     var colW = hdrs.map(function(h) { return h.length; });
@@ -673,7 +677,16 @@ async function paAnalyzeAndExport(
 
   /* ── Resumen (se llena al final) ── */
   var S0 = makeSheet('Resumen', 'FF34D399',
-    ['#','Hoja','Total registros','Alertas 🔴','Advertencias 🟡','OK ✅','% Consistencia']);
+    ['#','Hoja','Total registros','Alertas 🔴','Advertencias 🟡','OK ✅','% Consistencia'],
+    [
+      'Número de hoja en el libro.',
+      'Nombre de la hoja analizada.',
+      'Total de filas procesadas en esa hoja.',
+      'Registros con problema crítico que requiere corrección inmediata.',
+      'Registros con dato para revisar o que puede impactar la planificación.',
+      'Registros sin observaciones — datos consistentes.',
+      'Porcentaje de registros OK sobre el total. Fórmula: OK / Total × 100.'
+    ]);
 
   /* ════════════════════════════════════════════════════════════════
      HOJA 1 — PRODUCT
@@ -694,6 +707,34 @@ async function paAnalyzeAndExport(
       '# Productos que lo usan',
       '# Orígenes en red','Orígenes en red (códigos)',
       '# Plantas consumidoras','Plantas consumidoras (códigos)'
+    ], [
+      'Color de alerta: 🔴 Alerta = problema crítico | 🟡 Advertencia = revisar | ✅ OK = sin observaciones.',
+      'Resumen de todos los hallazgos detectados para este producto.',
+      'Código único del producto en SAP IBP (PRDID).',
+      'Descripción del producto del maestro de materiales.',
+      'Tipo de material SAP (MATTYPEID). Determina las reglas de validación aplicadas.',
+      'Si / No — ¿El producto está habilitado en al menos una ubicación en Location Product? Requerido para que el motor de planificación lo considere.',
+      'Si / No — ¿El producto aparece como output (SOURCETYPE=P) en alguna fuente de producción (PSH)?',
+      'Si / No — ¿El producto aparece como componente en algún BOM (PSI)?',
+      'Si / No — ¿El producto tiene al menos un arco de transferencia en Location Source?',
+      'Cantidad de SOURCEIDs donde este producto es el output principal.',
+      'Códigos de los SOURCEIDs donde este producto es producido.',
+      'Cantidad de plantas distintas donde se fabrica este producto.',
+      'Códigos de las plantas de producción (LOCID) donde tiene PSH.',
+      'Total de componentes PSI definidos en todos los BOMs de este producto.',
+      'Cantidad de recursos productivos (PSR) asignados a sus fuentes de producción.',
+      'Códigos de los recursos (RESID) asignados a sus fuentes.',
+      'Cantidad de ubicaciones origen que lo abastecen como insumo vía Location Source.',
+      'Códigos de las ubicaciones de origen (LOCFR) que lo proveen.',
+      'Cantidad de plantas consumidoras con arco de abastecimiento configurado (cobertura OK).',
+      'Códigos de las plantas cubiertas con arco de abastecimiento.',
+      'Cantidad de plantas consumidoras SIN arco de abastecimiento configurado. Si > 0: revisar Location Source.',
+      'Códigos de las plantas sin cobertura de abastecimiento.',
+      'Cuántos otros productos requieren este material como componente PSI.',
+      'Cantidad de nodos origen distintos en la red de abastecimiento de este producto.',
+      'Códigos de los nodos origen en la red.',
+      'Cantidad de plantas donde este producto es consumido como insumo en algún BOM.',
+      'Códigos de las plantas consumidoras.'
     ]);
 
     Object.keys(PA_PRD).sort().forEach(function(prdid) {
@@ -842,6 +883,52 @@ async function paAnalyzeAndExport(
       /* Nodo receptor */
       '# Productos recibidos','Productos recibidos (códigos)',
       '# Orígenes desde los que recibe','Orígenes (códigos)'
+    ], [
+      'Color de alerta: 🔴 Alerta = problema crítico | 🟡 Advertencia = revisar | ✅ OK = sin observaciones.',
+      'Resumen de todos los hallazgos detectados para esta ubicación.',
+      'Código único de la ubicación en SAP IBP (LOCID).',
+      'Descripción de la ubicación del maestro de ubicaciones.',
+      'Tipo de ubicación según el campo LOCTYPE de SAP IBP.',
+      'Rol(es) inferidos a partir del comportamiento real en los datos. Posibles valores: Planta de producción | Proveedor | Nodo de transferencia | Nodo receptor | Nodo de recursos | Sin actividad.',
+      /* Planta */
+      'Cantidad de productos distintos que se fabrican en esta planta (tienen PSH con este LOCID).',
+      'Códigos de los productos fabricados en esta planta.',
+      'Cantidad de fuentes de producción (SOURCEIDs) asociadas a esta planta.',
+      'Códigos de los SOURCEIDs de producción de esta planta.',
+      'Cantidad de recursos con Resource Location configurado en esta planta.',
+      'Códigos de los recursos asignados a esta planta en Resource Location.',
+      'Cantidad de recursos asignados que aparecen en al menos un PSR en esta planta.',
+      'Códigos de los recursos activos en PSR.',
+      'Recursos asignados en Resource Location pero sin uso en ningún PSR en esta planta. Posible configuración huérfana.',
+      'Códigos de los recursos ociosos (asignados sin uso en PSR).',
+      'Cantidad de SOURCEIDs de esta planta que no tienen ningún componente PSI definido (BOMs vacíos).',
+      'Códigos de los SOURCEIDs sin componentes PSI.',
+      'Cantidad de SOURCEIDs de esta planta que no tienen ningún recurso PSR asignado.',
+      'Códigos de los SOURCEIDs sin recursos PSR.',
+      'Total de componentes externos (no semielaborados) requeridos por los BOMs de esta planta.',
+      'Cantidad de componentes externos sin arco de abastecimiento en Location Source hacia esta planta.',
+      'Códigos de los componentes sin cobertura de abastecimiento.',
+      'Cantidad de SOURCEIDs con PLEADTIME = 0 o no definido en esta planta.',
+      'Códigos de los SOURCEIDs con PLEADTIME faltante o cero.',
+      /* Proveedor */
+      'Cantidad de productos distintos que esta ubicación abastece como origen en Location Source.',
+      'Códigos de los productos abastecidos desde esta ubicación.',
+      'Cantidad de plantas destino a las que esta ubicación envía productos.',
+      'Códigos de las plantas destino abastecidas.',
+      'Productos que se envían desde aquí pero no se consumen como componente PSI en la planta destino. Puede indicar arcos de transferencia sin uso productivo.',
+      'Códigos de los productos enviados sin consumo PSI en destino.',
+      'Productos enviados que no tienen Location Product habilitado en la planta destino. Impedirá la planificación.',
+      'Códigos de los productos sin Location Product en planta destino.',
+      /* Nodo transferencia */
+      'Cantidad de productos que esta ubicación transfiere sin que sean consumidos como PSI en destino.',
+      'Códigos de los productos transferidos (sin consumo productivo en destino).',
+      'Cantidad de ubicaciones destino hacia las que se transfieren productos.',
+      'Códigos de las ubicaciones destino de transferencia.',
+      /* Nodo receptor */
+      'Cantidad de productos que esta ubicación recibe como destino en Location Source.',
+      'Códigos de los productos recibidos en esta ubicación.',
+      'Cantidad de ubicaciones origen distintas desde las que recibe productos.',
+      'Códigos de las ubicaciones origen.'
     ]);
 
     // Unión de todos los locids conocidos
@@ -1023,6 +1110,19 @@ async function paAnalyzeAndExport(
       '# Plantas asignadas','Plantas asignadas (códigos)',
       '# Fuentes prod.','Fuentes prod. (SOURCEIDs)',
       '# Productos que fabrica','Productos que fabrica (códigos)'
+    ], [
+      'Color de alerta: 🔴 Alerta = problema crítico | 🟡 Advertencia = revisar | ✅ OK = sin observaciones.',
+      'Resumen de hallazgos. Un recurso sin PSR ni Resource Location existe en el maestro pero no aporta a ningún proceso productivo.',
+      'Código único del recurso productivo en SAP IBP (RESID).',
+      'Descripción del recurso del maestro de recursos.',
+      'Si / No — ¿El recurso está asignado a al menos una fuente de producción en Prod Source Resource (PSR)?',
+      'Si / No — ¿El recurso tiene al menos una planta configurada en Resource Location?',
+      'Cantidad de plantas distintas donde este recurso tiene configuración en Resource Location.',
+      'Códigos de las plantas (LOCID) donde está configurado en Resource Location.',
+      'Cantidad de fuentes de producción (SOURCEIDs) a las que está asignado.',
+      'Códigos de los SOURCEIDs a los que está asignado este recurso.',
+      'Cantidad de productos distintos que fabrica a través de sus SOURCEIDs asignados.',
+      'Códigos de los productos fabricados por las fuentes donde participa este recurso.'
     ]);
 
     // Índice: RESID → Set<LOCID> (desde Resource Location)
@@ -1088,6 +1188,14 @@ async function paAnalyzeAndExport(
       'Estado','Observacion',
       'RESID','RESDESCR','LOCID','LOCDESCR',
       'RESID+LOCID usado en PSR'
+    ], [
+      'Color de alerta: 🔴 Alerta = problema crítico | 🟡 Advertencia = revisar | ✅ OK = sin observaciones.',
+      'Detalle del hallazgo. Si No: el recurso está ubicado en esta planta en el maestro pero no se asignó a ninguna receta productiva (PSR).',
+      'Código del recurso productivo (RESID).',
+      'Descripción del recurso del maestro de recursos.',
+      'Código de la planta donde está configurado este recurso (LOCID).',
+      'Descripción de la planta del maestro de ubicaciones.',
+      'Si / No — ¿Esta combinación RESID+LOCID aparece en al menos un registro de Prod Source Resource? Si No, el recurso está registrado en esa planta pero no participa en ninguna receta de producción.'
     ]);
     Object.keys(PA_RES_LOC).sort().forEach(function(resid) {
       PA_RES_LOC[resid].forEach(function(e) {
@@ -1119,6 +1227,24 @@ async function paAnalyzeAndExport(
       '# Componentes PSI','# Recursos PSR','Recursos PSR (códigos)',
       '# Componentes con alternativa',
       'Tiene PSR'
+    ], [
+      'Color de alerta: 🔴 Alerta = problema crítico | 🟡 Advertencia = revisar | ✅ OK = sin observaciones.',
+      'Detalle de hallazgos: PLEADTIME cero, BOM vacío, sin recursos PSR, sin Location Product, múltiples fuentes sin cuota, etc.',
+      'Identificador único de la fuente de producción (SOURCEID) en SAP IBP.',
+      'Código del producto que produce esta fuente de producción (output).',
+      'Descripción del producto output del maestro de materiales.',
+      'Tipo de material del producto output.',
+      'Código de la planta donde se ejecuta esta producción (LOCID).',
+      'Descripción de la planta del maestro de ubicaciones.',
+      'Tipo(s) de fuente: P = producción primaria | C = co-producto. Separados por / si hay varios.',
+      'Lead time de producción en días. PLEADTIME = 0 o vacío impide la planificación correcta de tiempos.',
+      'Unidades del producto terminado generadas por corrida de producción. Afecta el cálculo de necesidades.',
+      'Si / No — ¿La combinación PRDID+LOCID está habilitada en Location Product? Requerido para que el motor planifique este producto en esta planta.',
+      'Cantidad de componentes (PSI) definidos en el BOM de esta fuente. 0 = BOM vacío.',
+      'Cantidad de recursos productivos asignados a esta fuente en PSR.',
+      'Códigos de los recursos (RESID) asignados a esta fuente de producción.',
+      'Cantidad de componentes PSI marcados como material de reemplazo alternativo (ISALTITEM=X).',
+      'Si / No — ¿Esta fuente tiene al menos un recurso asignado en Prod Source Resource?'
     ]);
     Object.keys(pshBySid).sort().forEach(function(sid) {
       var recs    = pshBySid[sid];
@@ -1184,6 +1310,28 @@ async function paAnalyzeAndExport(
       'LOCFR origen','LOCDESCR origen',
       '# Orígenes comp.','Orígenes comp. (códigos)',
       'Material de reemplazo (ISALTITEM)','Reemplaza a'
+    ], [
+      'Color de alerta: 🔴 Alerta = problema crítico | 🟡 Advertencia = revisar | ✅ OK = sin observaciones.',
+      'Detalle de hallazgos: coeficiente cero, componente sin Location Product, sin arco de abastecimiento, sustitución incompleta, etc.',
+      'Fuente de producción (SOURCEID) a la que pertenece este componente del BOM.',
+      'Código del producto terminado que se fabrica con este BOM.',
+      'Descripción del producto output.',
+      'Tipo de material del producto output.',
+      'Planta donde se fabrica el producto output.',
+      'Descripción de la planta de fabricación.',
+      'Código del material consumido como componente en este BOM (PRDID componente).',
+      'Descripción del componente del maestro de materiales.',
+      'Tipo de material del componente.',
+      'Unidades del componente consumidas por unidad del producto terminado. Si = 0, la planificación del consumo de este insumo será incorrecta.',
+      'Semielaborado: el componente tiene PSH propio en esta planta (trazabilidad en PSH). Insumo: se abastece desde Location Source.',
+      'Si / No — ¿El componente está habilitado en Location Product para esta planta? Si No, el motor no puede planificar su consumo aquí.',
+      'Si / No — ¿Existe al menos un arco en Location Source que abastezca este componente hacia esta planta? N/A para semielaborados.',
+      'Código(s) de la(s) ubicación(es) origen desde donde se transfiere el componente (LOCFR).',
+      'Descripción(es) de la(s) ubicación(es) origen.',
+      'Cantidad de nodos origen distintos que abastecen este componente hacia esta planta.',
+      'Códigos de los nodos origen del componente.',
+      'X = este componente es un material de reemplazo alternativo (ISALTITEM). Vacío = componente principal.',
+      'Código del componente principal al que reemplaza este sustituto (si aplica).'
     ]);
 
     // ¿Es excluido el componente?
@@ -1285,6 +1433,20 @@ async function paAnalyzeAndExport(
       'RESID','RESDESCR',
       'RESID+LOCID en Resource Location',
       '# Plantas con este recurso asignado','Plantas recurso (códigos)'
+    ], [
+      'Color de alerta: 🔴 Alerta = problema crítico | 🟡 Advertencia = revisar | ✅ OK = sin observaciones.',
+      'Detalle de hallazgos. 🔴 indica asignación huérfana: el SOURCEID no existe en PSH o el recurso no tiene Resource Location en esta planta.',
+      'Fuente de producción (SOURCEID) a la que se asigna este recurso.',
+      'Código del producto que fabrica esta fuente.',
+      'Descripción del producto output.',
+      'Tipo de material del producto output.',
+      'Planta donde opera esta fuente de producción.',
+      'Descripción de la planta.',
+      'Código del recurso asignado a esta fuente de producción (RESID).',
+      'Descripción del recurso del maestro de recursos.',
+      'Si / No — ¿La combinación RESID+LOCID está configurada en Resource Location? Si No, el recurso opera en esta planta sin estar registrado como tal.',
+      'Cantidad de plantas donde este recurso tiene configuración en Resource Location.',
+      'Códigos de las plantas donde este recurso tiene Resource Location configurado.'
     ]);
 
     // RESID → plantas asignadas (Resource Location)
@@ -1333,6 +1495,14 @@ async function paAnalyzeAndExport(
       'SOURCEIDs donde es componente (códigos)',
       'Componentes con cobertura LocSrc','Componentes sin cobertura LocSrc',
       'Observacion'
+    ], [
+      'Código del tipo de material excluido del análisis principal por configuración del usuario.',
+      'Cantidad de productos del maestro que tienen este tipo de material.',
+      'Cuántas fuentes de producción (SOURCEIDs) usan productos de este tipo como componente PSI. Aunque estén excluidos del análisis principal, se valida su presencia como insumo.',
+      'Códigos de los SOURCEIDs donde productos de este tipo aparecen como componente en un BOM.',
+      'Cantidad de combinaciones componente-planta con arco de abastecimiento configurado en Location Source.',
+      'Cantidad de combinaciones componente-planta SIN arco de abastecimiento. Si > 0: revisar Location Source aunque el tipo esté excluido.',
+      'Detalle: indica si el tipo aparece como componente y si hay gaps de abastecimiento detectados.'
     ]);
 
     // Para cada tipo excluido, listar sus productos y dónde aparecen como componente
