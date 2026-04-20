@@ -612,7 +612,7 @@ async function paAnalyzeAndExport(
       views: [{ state: 'frozen', ySplit: 1 }],
       properties: { tabColor: { argb: tabArgb } }
     });
-    ws.addRow(hdrs);
+    ws.addRow(hdrs.map(cleanXml));
     ws.getRow(1).eachCell(function(cell, colNum) {
       var grpKey  = groups && groups[colNum - 1];
       var hdrFill = grpKey ? (GRP[grpKey] || GOLD) : GOLD;
@@ -622,7 +622,7 @@ async function paAnalyzeAndExport(
       cell.border = { bottom: { style: 'medium', color: { argb: ORANGE } } };
       var note = notes && notes[colNum - 1];
       if (note) {
-        try { cell.note = { texts: [{ text: note }], margins: { insetmode: 'auto' } }; } catch(e) {}
+        try { cell.note = note; } catch(e) {}
       }
     });
     ws.getRow(1).height = 22;
@@ -675,11 +675,14 @@ async function paAnalyzeAndExport(
     return null;
   }
 
-  /* helper: elimina caracteres inválidos para XML 1.0 (evita corrupción en sharedStrings.xlsx) */
+  /* helper: elimina caracteres inválidos para XML 1.0 y espacios extremos.
+     SAP IBP devuelve campos CHAR con padding de espacios; ExcelJS 4.x no genera
+     xml:space="preserve" correctamente para esos strings → Excel repara sharedStrings.xml. */
   function cleanXml(v) {
     if (v == null) return v;
     if (typeof v !== 'string') return v;
-    return v.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]/g, '');
+    var s = v.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]/g, '').trim();
+    return s === '' ? null : s;
   }
 
   /* helper: array → string concatenado */
