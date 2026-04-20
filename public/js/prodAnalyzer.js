@@ -238,20 +238,38 @@ async function paFetchMattypes() {
   }
 }
 
+/* ── Helpers de apertura/cierre de bodies de mattype-panel ── */
+function _paOpenMattypeBody(bodyId, arrId) {
+  var body = document.getElementById(bodyId);
+  var arr  = document.getElementById(arrId);
+  if (body) body.style.display = 'block';
+  if (arr)  arr.textContent = '▼';
+}
+function _paCloseMattypeBody(bodyId, arrId) {
+  var body = document.getElementById(bodyId);
+  var arr  = document.getElementById(arrId);
+  if (body) body.style.display = 'none';
+  if (arr)  arr.textContent = '▶';
+}
+
 /* ── Navegación entre paneles ── */
+
+/* MDT → Exclude */
 function paConfirmMapping() {
-  var body = document.getElementById('bodyPAMDT');
-  var arr  = document.getElementById('arrPAMDT');
-  if (body && !body.classList.contains('hidden')) {
-    body.classList.add('hidden');
-    if (arr) arr.textContent = '▶';
-  }
+  // Colapsar mapeo
+  var mdtBody = document.getElementById('bodyPAMDT');
+  var mdtArr  = document.getElementById('arrPAMDT');
+  if (mdtBody) { mdtBody.classList.add('hidden'); if (mdtArr) mdtArr.textContent = '▶'; }
+
+  // Mostrar y expandir panel de exclusión
   var excl = document.getElementById('panelPAExclude');
   if (excl) {
     excl.classList.remove('hidden');
+    _paOpenMattypeBody('mattypeExcludeBody', 'mattypeExcludeArr');
     excl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
-  // Fetch ligero para detectar tipos de material antes de que el usuario abra el panel
+
+  // Fetch ligero de tipos de material
   paFetchMattypes().then(function() {
     mattyeRenderExclude();
     _mattyeUpdateExcludeSummary();
@@ -259,36 +277,55 @@ function paConfirmMapping() {
   });
 }
 
+/* Exclude → MDT (volver) */
 function paBackToMapping() {
-  ['panelPAExclude','panelPACategories','panelPAExportMode'].forEach(function(id) {
+  ['panelPAExclude', 'panelPACategories', 'panelPAExportMode'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) el.classList.add('hidden');
   });
-  var body = document.getElementById('bodyPAMDT');
-  var arr  = document.getElementById('arrPAMDT');
-  if (body) {
-    body.classList.remove('hidden');
-    if (arr) arr.textContent = '▼';
+  _paCloseMattypeBody('mattypeExcludeBody', 'mattypeExcludeArr');
+  _paCloseMattypeBody('mattypeCatBody',     'mattypeCatArr');
+
+  var mdtBody = document.getElementById('bodyPAMDT');
+  var mdtArr  = document.getElementById('arrPAMDT');
+  if (mdtBody) {
+    mdtBody.classList.remove('hidden');
+    if (mdtArr) mdtArr.textContent = '▼';
     document.getElementById('panelPAMDT').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 }
 
+/* Exclude → Categories */
 function paContinueToCategories() {
+  // Colapsar exclusión
+  _paCloseMattypeBody('mattypeExcludeBody', 'mattypeExcludeArr');
+
+  // Mostrar y expandir categorización
   var cat = document.getElementById('panelPACategories');
   if (cat) {
     cat.classList.remove('hidden');
+    _paOpenMattypeBody('mattypeCatBody', 'mattypeCatArr');
+    mattyeRenderCategorize();
     cat.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
   _paUpdateRunSummary();
 }
 
+/* Categories → Exclude (volver) */
 function paBackToExclude() {
-  var cat = document.getElementById('panelPACategories');
-  if (cat) cat.classList.add('hidden');
+  // Colapsar categorización
+  _paCloseMattypeBody('mattypeCatBody', 'mattypeCatArr');
+
+  // Expandir exclusión
+  _paOpenMattypeBody('mattypeExcludeBody', 'mattypeExcludeArr');
   document.getElementById('panelPAExclude').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
+/* Categories → Run */
 function paContinueToRun() {
+  // Colapsar categorización
+  _paCloseMattypeBody('mattypeCatBody', 'mattypeCatArr');
+
   var run = document.getElementById('panelPAExportMode');
   if (run) {
     run.classList.remove('hidden');
@@ -297,9 +334,13 @@ function paContinueToRun() {
   _paUpdateRunSummary();
 }
 
+/* Run → Categories (volver) */
 function paBackToCategories() {
   var run = document.getElementById('panelPAExportMode');
   if (run) run.classList.add('hidden');
+
+  // Expandir categorización
+  _paOpenMattypeBody('mattypeCatBody', 'mattypeCatArr');
   document.getElementById('panelPACategories').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 

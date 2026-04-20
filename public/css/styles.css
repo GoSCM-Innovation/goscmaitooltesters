@@ -1946,10 +1946,10 @@ button[disabled][title]:hover::after {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   MATTYPE CONFIG — bloques opcionales drag & drop
+   MATTYPE CONFIG — paneles opcionales de exclusión y categorización
    ═══════════════════════════════════════════════════════════════ */
 
-/* Panel opcional colapsable */
+/* ── Panel colapsable ── */
 .mattype-panel {
   background: var(--bg2);
   border: 1px solid var(--border);
@@ -2012,7 +2012,7 @@ button[disabled][title]:hover::after {
 .mattype-arr { font-size: 11px; color: var(--text3); margin-left: 4px; }
 .mattype-panel-body { padding: 0 16px 16px; }
 
-/* Nota informativa */
+/* ── Nota informativa ── */
 .mattype-note {
   font-size: 11px;
   color: var(--text3);
@@ -2023,122 +2023,123 @@ button[disabled][title]:hover::after {
   border-radius: 4px;
 }
 .mattype-empty { font-size: 12px; color: var(--text3); font-style: italic; padding: 8px 0; }
+.mattype-code  { font-size: 12px; font-weight: 700; color: var(--text); font-family: var(--mono); }
 
-/* ── Bloque 1: Excluir ── */
-.mattype-exclude-layout {
-  display: grid;
-  grid-template-columns: 1fr 280px;
-  gap: 12px;
-  margin-top: 4px;
+/* ── Toggle switch ── */
+.mattype-toggle {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+  vertical-align: middle;
 }
-.mattype-zone {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px;
-  min-height: 80px;
+.mattype-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
 }
-.mattype-zone-excluded {
-  border-color: rgba(255,107,107,.3);
-  background: rgba(255,107,107,.04);
+.mattype-toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background: rgba(255,255,255,.1);
+  border-radius: 20px;
+  transition: background .2s;
 }
-.mattype-zone-title {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text2);
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.mattype-toggle-slider::before {
+  content: '';
+  position: absolute;
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  top: 3px;
+  background: var(--text3);
+  border-radius: 50%;
+  transition: transform .2s, background .2s;
 }
-.mattype-zone-excluded .mattype-zone-title { color: var(--red); }
-.mattype-cards-wrap {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  min-height: 40px;
+/* Exclusión: cyan cuando incluido */
+.mattype-toggle input:checked + .mattype-toggle-slider {
+  background: rgba(41,171,226,.3);
 }
-.mattype-drop-hint {
+.mattype-toggle input:checked + .mattype-toggle-slider::before {
+  transform: translateX(16px);
+  background: var(--cyan);
+}
+/* Categorías: color propio por categoría */
+.mattype-toggle[data-cat="finished"] input:checked + .mattype-toggle-slider { background: rgba(247,168,0,.25); }
+.mattype-toggle[data-cat="finished"] input:checked + .mattype-toggle-slider::before { background: var(--accent); }
+.mattype-toggle[data-cat="semi"]     input:checked + .mattype-toggle-slider { background: rgba(41,171,226,.25); }
+.mattype-toggle[data-cat="semi"]     input:checked + .mattype-toggle-slider::before { background: var(--cyan); }
+.mattype-toggle[data-cat="rawmat"]   input:checked + .mattype-toggle-slider { background: rgba(52,211,153,.25); }
+.mattype-toggle[data-cat="rawmat"]   input:checked + .mattype-toggle-slider::before { background: var(--green); }
+.mattype-toggle[data-cat="trading"]  input:checked + .mattype-toggle-slider { background: rgba(167,139,250,.25); }
+.mattype-toggle[data-cat="trading"]  input:checked + .mattype-toggle-slider::before { background: var(--purple); }
+
+/* ── Bloque 1: tabla de exclusión ── */
+.mattype-toggle-label {
   font-size: 11px;
   color: var(--text3);
-  font-style: italic;
-  padding: 4px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.mattype-toggle-table {
   width: 100%;
+  border-collapse: collapse;
+  margin-top: 6px;
 }
-
-/* ── Bloque 2: Categorizar ── */
-.mattype-cat-layout {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 10px;
-  margin-top: 4px;
-}
-.mattype-cat-col {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px;
-  min-height: 100px;
-  background: rgba(255,255,255,.01);
-}
-.mattype-cat-col-none { border-style: dashed; }
-.mattype-cat-col-title {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text2);
-  margin-bottom: 8px;
-  text-align: center;
-}
-.mattype-cat-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-height: 40px;
-}
-
-/* ── Tarjeta de tipo ── */
-.mattype-card {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  background: var(--bg3, #1a2540);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 6px 10px;
-  cursor: grab;
-  transition: opacity .15s, border-color .15s, box-shadow .15s;
-  user-select: none;
-}
-.mattype-card:hover { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(247,168,0,.2); }
-.mattype-card.mattype-dragging { opacity: .4; cursor: grabbing; }
-.mattype-card-excluded { border-color: rgba(255,107,107,.4); background: rgba(255,107,107,.06); }
-.mattype-code { font-size: 12px; font-weight: 700; color: var(--text); font-family: var(--mono); }
-.mattype-count { font-size: 10px; color: var(--text3); }
-.mattype-cat-badges { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
-.mattype-cat-badge {
-  font-size: 9px;
-  font-weight: 700;
-  color: #0b1120;
-  border-radius: 8px;
-  padding: 1px 5px;
-  cursor: pointer;
-}
-.mattype-cat-badge:hover { opacity: .8; }
-.mattype-count-badge {
+.mattype-toggle-table thead th {
   font-size: 10px;
-  font-weight: 700;
-  background: var(--bg3, #1a2540);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 1px 6px;
-  color: var(--text2);
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
 }
-.mattype-count-red { border-color: rgba(255,107,107,.4); color: var(--red); background: rgba(255,107,107,.08); }
+.mattype-toggle-table tbody td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+  font-size: 12px;
+  vertical-align: middle;
+}
+.mattype-toggle-table tbody tr:last-child td { border-bottom: none; }
+.mattype-toggle-table tbody tr:hover td { background: rgba(255,255,255,.015); }
+.mattype-row-excluded td { opacity: .45; }
+.mattype-col-count  { color: var(--text3); font-size: 11px; }
+.mattype-col-toggle { display: flex; align-items: center; }
 
-@media (max-width: 900px) {
-  .mattype-exclude-layout { grid-template-columns: 1fr; }
-  .mattype-cat-layout { grid-template-columns: repeat(2, 1fr); }
+/* ── Bloque 2: matriz de categorización ── */
+.mattype-matrix-scroll { overflow-x: auto; }
+.mattype-matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 6px;
 }
+.mattype-matrix-table thead th {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+  white-space: nowrap;
+}
+.mattype-matrix-th-type  { text-align: left; color: var(--text3); }
+.mattype-matrix-th-count { text-align: left; color: var(--text3); }
+.mattype-matrix-th-cat   { min-width: 110px; }
+.mattype-matrix-table tbody td {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+  font-size: 12px;
+  vertical-align: middle;
+}
+.mattype-matrix-table tbody tr:last-child td { border-bottom: none; }
+.mattype-matrix-table tbody tr:hover td { background: rgba(255,255,255,.015); }
+.mattype-matrix-cell { text-align: center; }
 
 /* ═══════════════════════════════════════════════════════════════
    ACCESSIBILITY — prefers-reduced-motion
