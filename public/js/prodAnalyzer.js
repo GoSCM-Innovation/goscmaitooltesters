@@ -607,7 +607,7 @@ async function paAnalyzeAndExport(
   var C_RED = 'FFFFCCCC', C_YEL  = 'FFFFFFCC';
   var NA_DASH = '\u2014', NA_FILL = 'FFE5E7EB', NA_FONT = 'FF6B7280';
   var GRP = { control:'FFD1D5DB', ibp:'FFBAE6FD', flag:'FFFDE68A', metric:'FFA7F3D0', detail:'FF99F6E4' };
-  var wb    = new ExcelJS.Workbook();
+  var wb    = new StreamingXlsx();
 
   function makeSheet(name, tabArgb, hdrs, notes, groups) {
     var ws = wb.addWorksheet(name, {

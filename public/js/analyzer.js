@@ -307,21 +307,25 @@
           .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
       }
 
-      // cellXfs indices (ver _styles): 0=normal 1=cabecera 2=rojo 3=amarillo
-      var _NORM = 0, _HDR = 1, _RED = 2, _YEL = 3;
+      // cellXfs indices (ver _styles): 0=normal 1=hdr-gold 2=rojo 3=amarillo 4=na-grey
+      // 5=hdr-control 6=hdr-ibp 7=hdr-flag 8=hdr-metric 9=hdr-detail
+      var _NORM = 0, _HDR = 1, _RED = 2, _YEL = 3, _NA = 4;
+      var HDR_FILL_XF  = { 'FFF7A800': 1, 'FFD1D5DB': 5, 'FFBAE6FD': 6, 'FFFDE68A': 7, 'FFA7F3D0': 8, 'FF99F6E4': 9 };
+      var DATA_FILL_XF = { 'FFFFCCCC': 2, 'FFFFFFCC': 3, 'FFE5E7EB': 4 };
       function _si(argb) {
         if (!argb) return _NORM;
-        if (argb === 'FFFFCCCC') return _RED;
-        if (argb === 'FFFFFFCC') return _YEL;
-        return _NORM;
+        return DATA_FILL_XF[argb] || _NORM;
       }
 
-      function _rowXml(data, rn, si, ht) {
+      // cellSi: array de índices xf por celda; cuando está presente, las celdas
+      // sin índice explícito usan _NORM (modo per-celda) en lugar de rowSi.
+      function _rowXml(data, rn, rowSi, ht, cellSi) {
         var p = ['<row r="', rn, '"'];
         if (ht) p.push(' ht="', ht, '" customHeight="1"');
         p.push('>');
         for (var ci = 0; ci < data.length; ci++) {
           var v = data[ci], ref = _col(ci + 1) + rn;
+          var si = (cellSi && cellSi[ci] != null) ? cellSi[ci] : (cellSi ? _NORM : rowSi);
           var sa = si ? ' s="' + si + '"' : '';
           if (typeof v === 'number' && isFinite(v))
             p.push('<c r="', ref, '" t="n"', sa, '><v>', v, '</v></c>');
@@ -335,12 +339,25 @@
       /* ── Row proxy: acumula estilos hasta el flush ── */
       function _Row(data, rn, isHdr) {
         this.data = data; this.rowNum = rn; this._h = isHdr; this._fill = null; this._ht = isHdr ? 20 : 0;
+        this._cellSi = null;
       }
-      _Row.prototype.eachCell = function (cb) {
+      _Row.prototype.eachCell = function (optOrCb, maybeCb) {
+        var cb = typeof optOrCb === 'function' ? optOrCb : maybeCb;
+        if (!cb) return;
         var self = this;
-        this.data.forEach(function () {
-          cb({ set fill(f) { if (f && f.fgColor) self._fill = f.fgColor.argb; },
-               set font(_) {}, set alignment(_) {}, set border(_) {} });
+        this.data.forEach(function (val, ci) {
+          cb({
+            get value() { return val; },
+            colNumber: ci + 1,
+            set fill(f) {
+              if (!f || !f.fgColor) return;
+              var argb = f.fgColor.argb;
+              if (!self._cellSi) self._cellSi = [];
+              var tbl = self._h ? HDR_FILL_XF : DATA_FILL_XF;
+              self._cellSi[ci] = tbl[argb] !== undefined ? tbl[argb] : (self._h ? _HDR : _NORM);
+            },
+            set font(_) {}, set alignment(_) {}, set border(_) {}
+          }, ci + 1);
         });
       };
       Object.defineProperty(_Row.prototype, 'height', { set: function (v) { this._ht = v; } });
@@ -364,7 +381,7 @@
         if (!this._pend) return;
         var p = this._pend; this._pend = null;
         var si = p._h ? _HDR : _si(p._fill);
-        this._chunks.push(_rowXml(p.data, p.rowNum, si, p._ht));
+        this._chunks.push(_rowXml(p.data, p.rowNum, si, p._ht, p._cellSi));
         var cw = this._colW, nc = this._nCols;
         p.data.forEach(function (v, ci) {
           var l = v != null ? String(v).length : 0;
@@ -447,28 +464,41 @@
       StreamingXlsx.prototype._styles = function () {
         return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
           '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
-          '<fonts count="2">' +
+          '<fonts count="3">' +
             '<font><sz val="10"/><name val="DM Sans"/></font>' +
             '<font><b/><sz val="10"/><name val="DM Sans"/><color rgb="FF0B1120"/></font>' +
+            '<font><i/><sz val="10"/><name val="DM Sans"/><color rgb="FF6B7280"/></font>' +
           '</fonts>' +
-          '<fills count="6">' +
+          '<fills count="12">' +
             '<fill><patternFill patternType="none"/></fill>' +
             '<fill><patternFill patternType="gray125"/></fill>' +
             '<fill><patternFill patternType="solid"><fgColor rgb="FFF7A800"/></patternFill></fill>' +
             '<fill><patternFill patternType="none"/></fill>' +
             '<fill><patternFill patternType="solid"><fgColor rgb="FFFFCCCC"/></patternFill></fill>' +
             '<fill><patternFill patternType="solid"><fgColor rgb="FFFFFFCC"/></patternFill></fill>' +
+            '<fill><patternFill patternType="solid"><fgColor rgb="FFE5E7EB"/></patternFill></fill>' +
+            '<fill><patternFill patternType="solid"><fgColor rgb="FFD1D5DB"/></patternFill></fill>' +
+            '<fill><patternFill patternType="solid"><fgColor rgb="FFBAE6FD"/></patternFill></fill>' +
+            '<fill><patternFill patternType="solid"><fgColor rgb="FFFDE68A"/></patternFill></fill>' +
+            '<fill><patternFill patternType="solid"><fgColor rgb="FFA7F3D0"/></patternFill></fill>' +
+            '<fill><patternFill patternType="solid"><fgColor rgb="FF99F6E4"/></patternFill></fill>' +
           '</fills>' +
           '<borders count="2">' +
             '<border><left/><right/><top/><bottom/><diagonal/></border>' +
             '<border><left/><right/><top/><bottom style="medium"><color rgb="FFE8622A"/></bottom><diagonal/></border>' +
           '</borders>' +
           '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-          '<cellXfs count="4">' +
+          '<cellXfs count="10">' +
             '<xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="0"/>' +
-            '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0"><alignment horizontal="center" vertical="middle"/></xf>' +
+            '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0"><alignment horizontal="center" vertical="middle" wrapText="1"/></xf>' +
             '<xf numFmtId="0" fontId="0" fillId="4" borderId="0" xfId="0"/>' +
             '<xf numFmtId="0" fontId="0" fillId="5" borderId="0" xfId="0"/>' +
+            '<xf numFmtId="0" fontId="2" fillId="6" borderId="0" xfId="0"/>' +
+            '<xf numFmtId="0" fontId="1" fillId="7" borderId="1" xfId="0"><alignment horizontal="center" vertical="middle" wrapText="1"/></xf>' +
+            '<xf numFmtId="0" fontId="1" fillId="8" borderId="1" xfId="0"><alignment horizontal="center" vertical="middle" wrapText="1"/></xf>' +
+            '<xf numFmtId="0" fontId="1" fillId="9" borderId="1" xfId="0"><alignment horizontal="center" vertical="middle" wrapText="1"/></xf>' +
+            '<xf numFmtId="0" fontId="1" fillId="10" borderId="1" xfId="0"><alignment horizontal="center" vertical="middle" wrapText="1"/></xf>' +
+            '<xf numFmtId="0" fontId="1" fillId="11" borderId="1" xfId="0"><alignment horizontal="center" vertical="middle" wrapText="1"/></xf>' +
           '</cellXfs>' +
           '</styleSheet>';
       };
