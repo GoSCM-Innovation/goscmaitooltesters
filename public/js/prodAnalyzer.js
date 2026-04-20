@@ -622,7 +622,7 @@ async function paAnalyzeAndExport(
     return {
       ws: ws,
       addRow: function(data, fillArgb) {
-        var row = ws.addRow(data);
+        var row = ws.addRow(data.map(cleanXml));
         if (fillArgb) {
           row.eachCell({ includeEmpty: true }, function(cell) {
             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillArgb } };
@@ -659,6 +659,13 @@ async function paAnalyzeAndExport(
     if (sev === 'red')    return C_RED;
     if (sev === 'yellow') return C_YEL;
     return null;
+  }
+
+  /* helper: elimina caracteres inválidos para XML 1.0 (evita corrupción en sharedStrings.xlsx) */
+  function cleanXml(v) {
+    if (v == null) return v;
+    if (typeof v !== 'string') return v;
+    return v.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]/g, '');
   }
 
   /* helper: array → string concatenado */
