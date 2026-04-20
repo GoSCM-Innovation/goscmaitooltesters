@@ -49,6 +49,7 @@
         document.getElementById('vizLegend').style.display = 'block';
         document.getElementById('vizEmpty').style.display = 'block';
         document.getElementById('vizCanvas').style.height = 'calc(100vh - 230px)';
+        toggleMappingBody('bodyVizMDT', 'arrVizMDT', false);
       } catch (e) {
         setVizStatus('✕ Error: ' + e.message, 0);
         log(logEl, 'err', '✕ ' + e.message);
