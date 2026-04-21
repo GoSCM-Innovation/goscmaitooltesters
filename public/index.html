@@ -99,8 +99,6 @@
         style="padding:10px 18px;font-size:12px;cursor:pointer;background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);font-weight:400;white-space:nowrap;font-family:var(--font);">Acceso a SAP IBP</button>
       <button id="treqTab-entidades" onclick="switchTechTab('entidades')"
         style="padding:10px 18px;font-size:12px;cursor:pointer;background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);font-weight:400;white-space:nowrap;font-family:var(--font);">Datos por aplicación</button>
-      <button id="treqTab-red" onclick="switchTechTab('red')"
-        style="padding:10px 18px;font-size:12px;cursor:pointer;background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);font-weight:400;white-space:nowrap;font-family:var(--font);">Conectividad</button>
     </div>
     <!-- Content -->
     <div style="padding:20px 28px;max-height:360px;overflow-y:auto;">
@@ -251,117 +249,86 @@
 
       <div id="treqContent-entidades" style="display:none;">
         <div
-          style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.6;">
-          Datos que cada aplicación lee desde SAP IBP. Las apps offline solo procesan archivos que tú subes.</div>
+          style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">
+          Entidades OData consumidas por aplicación</div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;font-size:11px;">
           <div>
             <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">📦 Production Visualizer</div>
             <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
-              <div>• Recetas de producción (cabeceras)</div>
-              <div>• Componentes de cada receta</div>
-              <div>• Recursos productivos por receta</div>
-              <div>• Catálogo de productos</div>
-              <div>• Catálogo de ubicaciones</div>
-              <div>• Catálogo de recursos</div>
+              <div>• Production Source Header</div>
+              <div>• Production Source Item</div>
+              <div>• Production Source Resource</div>
+              <div>• Product <span style="color:var(--text3);">(maestro)</span></div>
+              <div>• Location <span style="color:var(--text3);">(maestro)</span></div>
+              <div>• Resource <span style="color:var(--text3);">(maestro)</span></div>
             </div>
           </div>
           <div>
             <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">🔬 Production Analyzer</div>
             <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
-              <div>• Recetas de producción (cabeceras)</div>
-              <div>• Componentes de cada receta</div>
-              <div>• Recursos productivos por receta</div>
-              <div>• Catálogo de productos</div>
-              <div>• Catálogo de ubicaciones</div>
-              <div>• Catálogo de recursos</div>
-              <div>• Productos disponibles por ubicación</div>
-              <div>• Fuentes de abastecimiento internas</div>
+              <div>• Production Source Header</div>
+              <div>• Production Source Item</div>
+              <div>• Production Source Resource</div>
+              <div>• Product <span style="color:var(--text3);">(maestro)</span></div>
+              <div>• Location <span style="color:var(--text3);">(maestro)</span></div>
+              <div>• Resource <span style="color:var(--text3);">(maestro)</span></div>
+              <div>• Location Product</div>
+              <div>• Location Source</div>
             </div>
           </div>
           <div>
             <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">🔭 Network Visualizer</div>
             <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
-              <div>• Recetas de producción (cabeceras)</div>
-              <div>• Componentes de cada receta</div>
-              <div>• Transferencias entre ubicaciones</div>
-              <div>• Entregas a clientes</div>
-              <div>• Productos disponibles por ubicación</div>
-              <div>• Productos disponibles por cliente</div>
-              <div>• Catálogo de productos</div>
-              <div>• Catálogo de ubicaciones</div>
-              <div>• Catálogo de clientes</div>
+              <div>• Production Source Header</div>
+              <div>• Production Source Item</div>
+              <div>• Location Source</div>
+              <div>• Customer Source</div>
+              <div>• Location Product</div>
+              <div>• Customer Product</div>
+              <div>• Product <span style="color:var(--text3);">(maestro)</span></div>
+              <div>• Location <span style="color:var(--text3);">(maestro)</span></div>
+              <div>• Customer <span style="color:var(--text3);">(maestro)</span></div>
             </div>
           </div>
           <div>
             <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">🌐 Network Analyzer</div>
             <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
-              <div>• Recetas de producción (cabeceras)</div>
-              <div>• Componentes de cada receta</div>
-              <div>• Transferencias entre ubicaciones</div>
-              <div>• Entregas a clientes</div>
-              <div>• Productos disponibles por ubicación</div>
-              <div>• Productos disponibles por cliente</div>
-              <div>• Catálogo de productos</div>
-              <div>• Catálogo de ubicaciones</div>
-              <div>• Catálogo de clientes</div>
+              <div>• Production Source Header</div>
+              <div>• Production Source Item</div>
+              <div>• Location Source</div>
+              <div>• Customer Source</div>
+              <div>• Location Product</div>
+              <div>• Customer Product</div>
+              <div>• Product <span style="color:var(--text3);">(maestro)</span></div>
+              <div>• Location <span style="color:var(--text3);">(maestro)</span></div>
+              <div>• Customer <span style="color:var(--text3);">(maestro)</span></div>
             </div>
           </div>
           <div>
             <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">📄 Mapping Dataflow Generator</div>
             <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
               <div style="color:var(--text3);font-style:italic;margin-bottom:2px;">Modo ZIP — siempre</div>
-              <div>• Archivos de integración CI-DS (ZIP)</div>
-              <div style="color:var(--text3);font-style:italic;margin-top:6px;margin-bottom:2px;">Modo Application Jobs / ZIP+Jobs</div>
-              <div>• Lista de Application Jobs configurados</div>
-              <div>• Pasos de ejecución de cada job</div>
-              <div>• Tareas CI-DS asociadas a cada paso</div>
-              <div style="color:var(--text3);font-style:italic;margin-top:6px;margin-bottom:2px;">Si conectado a IBP</div>
-              <div>• Catálogo de productos</div>
-              <div>• Catálogo de ubicaciones</div>
-              <div>• Catálogo de clientes</div>
-              <div>• Recetas de producción (cabeceras)</div>
+              <div>• Procesa archivos ZIP CI-DS</div>
+              <div>• Extrae XMLs de dataflows</div>
+              <div style="color:var(--text3);font-style:italic;margin-top:6px;margin-bottom:2px;">Modo App Jobs / ZIP+Jobs</div>
+              <div>• JobTemplateSet</div>
+              <div>• JobTemplateSequenceSet</div>
+              <div>• JobTemplateParameterValueDataSet</div>
+              <div style="color:var(--text3);font-style:italic;margin-top:6px;margin-bottom:2px;">Maestros IBP (si conectado)</div>
+              <div>• Product <span style="color:var(--text3);">(maestro)</span></div>
+              <div>• Location <span style="color:var(--text3);">(maestro)</span></div>
+              <div>• Customer <span style="color:var(--text3);">(maestro)</span></div>
+              <div>• Production Source Header</div>
             </div>
           </div>
           <div>
             <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">🔎 Integration Explorer</div>
             <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
-              <div style="background:#1a1a2a;border:1px solid #2a2a3a;border-radius:4px;padding:6px 8px;color:var(--text3);font-size:10px;margin-bottom:4px;">No lee datos de SAP IBP</div>
-              <div>• Archivos de integración CI-DS (ZIP)</div>
-              <div>• Detecta dependencias entre dataflows</div>
-              <div>• Construye mapa de tablas y archivos</div>
-              <div style="color:var(--text3);margin-top:4px;font-size:10px;line-height:1.5;">100% offline. Sin conexión a SAP IBP.</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div id="treqContent-red" style="display:none;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
-          <div>
-            <div
-              style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">
-              ¿Cómo se conecta esta web a SAP IBP?</div>
-            <div style="font-size:12px;color:var(--text2);line-height:1.7;">
-              Tu navegador no puede hablar directamente con SAP IBP por restricciones de seguridad. Esta web usa un servidor intermedio que actúa como puente: recibe tu solicitud y la reenvía a SAP IBP de forma segura.
-            </div>
-            <div
-              style="margin-top:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-size:12px;color:var(--text2);text-align:center;">
-              Tu navegador → Servidor GoSCM → SAP IBP
-            </div>
-            <div style="margin-top:8px;font-size:11px;color:var(--text2);">Tus credenciales viajan cifradas y nunca se almacenan — solo se usan durante la sesión activa.</div>
-          </div>
-          <div>
-            <div
-              style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">
-              Dominios que deben ser accesibles</div>
-            <div style="font-size:12px;color:var(--text2);margin-bottom:8px;">Si tu red corporativa bloquea el tráfico saliente, pide al área de IT que habilite acceso a estos dominios:</div>
-            <div style="display:flex;flex-direction:column;gap:6px;font-size:12px;">
-              <div
-                style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:6px 10px;font-family:var(--mono);color:var(--cyan);">
-                *.scmibp.ondemand.com</div>
-              <div
-                style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:6px 10px;font-family:var(--mono);color:var(--cyan);">
-                ibp-bom-v7.vercel.app</div>
+              <div style="background:#1a1a2a;border:1px solid #2a2a3a;border-radius:4px;padding:6px 8px;color:var(--text3);font-size:10px;margin-bottom:4px;">No consume entidades OData</div>
+              <div>• Procesa archivos ZIP CI-DS</div>
+              <div>• Extrae XMLs de dataflows</div>
+              <div>• Construye índice de dependencias</div>
+              <div style="color:var(--text3);margin-top:4px;font-size:10px;line-height:1.5;">Funciona 100% offline — no requiere conexión a SAP IBP.</div>
             </div>
           </div>
         </div>
