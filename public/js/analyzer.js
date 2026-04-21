@@ -330,7 +330,7 @@
           if (typeof v === 'number' && isFinite(v))
             p.push('<c r="', ref, '" t="n"', sa, '><v>', v, '</v></c>');
           else
-            p.push('<c r="', ref, '" t="inlineStr"', sa, '><is><t>', _xe(v), '</t></is></c>');
+            p.push('<c r="', ref, '" t="inlineStr"', sa, '><is><t xml:space="preserve">', _xe(v), '</t></is></c>');
         }
         p.push('</row>');
         return p.join('');
