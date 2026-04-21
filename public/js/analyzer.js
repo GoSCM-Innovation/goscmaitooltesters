@@ -478,7 +478,7 @@
               ' fillcolor="#ffffe1" o:insetmode="auto">',
               '<v:fill color2="#ffffe1"/><v:shadow color="black" obscured="t"/>',
               '<v:path o:connecttype="none"/>',
-              '<v:textbox style="mso-direction-alt:auto"><div style="text-align:left"/></v:textbox>',
+              '<v:textbox style="mso-direction-alt:auto"><div style="text-align:left"></div></v:textbox>',
               '<x:ClientData ObjectType="Note">',
               '<x:MoveWithCells/><x:SizeWithCells/>',
               '<x:Anchor>', anchor, '</x:Anchor>',
@@ -521,7 +521,7 @@
         var chunks = this._chunks || [];
         this._chunks = null;   // libera refs → GC puede reclamar los strings de filas
         var footer = ['</sheetData>'];
-        if (this._hasNotes()) footer.push('<legacyDrawing r:id="rId1"/>');
+        if (this._hasNotes()) footer.push('<legacyDrawing r:id="rId2"/>');
         footer.push('</worksheet>');
         return new Blob(hdr.concat(chunks, footer), { type: 'application/xml' });
       };
