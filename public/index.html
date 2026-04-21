@@ -170,37 +170,81 @@
       </div>
 
       <div id="treqContent-comm" style="display:none;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
-          <div>
-            <div
-              style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">
-              Escenario requerido</div>
-            <div
-              style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-family:var(--mono);font-size:13px;color:var(--cyan);margin-bottom:8px;">
-              SAP_COM_0720</div>
-            <div style="font-size:12px;color:var(--text2);">Este escenario activa automáticamente las dos APIs que usa
-              esta web:</div>
-            <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px;font-size:12px;">
-              <div style="color:var(--green);">✓ &nbsp;/IBP/MASTER_DATA_API_SRV</div>
-              <div style="color:var(--green);">✓ &nbsp;/IBP/PLANNING_DATA_API_SRV</div>
+        <div style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">
+          Communication Arrangements por aplicación</div>
+        <!-- App cards grid -->
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;font-size:11px;margin-bottom:16px;">
+          <!-- Production Visualizer -->
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;">
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:8px;">📦 Production Visualizer</div>
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              <div style="background:#1a2a1a;border:1px solid #2a4a2a;border-radius:4px;padding:4px 8px;font-family:var(--mono);color:var(--green);font-size:10px;">SAP_COM_0720</div>
+              <div style="color:var(--text3);font-size:10px;margin-top:2px;">→ /IBP/MASTER_DATA_API_SRV</div>
+              <div style="color:var(--text3);font-size:10px;">→ /IBP/PLANNING_DATA_API_SRV</div>
             </div>
           </div>
-          <div>
-            <div
-              style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">
-              Pasos de configuración</div>
-            <div style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--text2);">
-              <div><span style="color:var(--accent);font-weight:600;">1.</span> &nbsp;Crear <strong
-                  style="color:var(--text);">Communication System</strong> (inbound)</div>
-              <div><span style="color:var(--accent);font-weight:600;">2.</span> &nbsp;Asignar el Communication User
-              </div>
-              <div><span style="color:var(--accent);font-weight:600;">3.</span> &nbsp;Crear <strong
-                  style="color:var(--text);">Communication Arrangement</strong></div>
-              <div><span style="color:var(--accent);font-weight:600;">4.</span> &nbsp;Seleccionar escenario <code
-                  style="color:var(--cyan);font-family:var(--mono);">SAP_COM_0720</code></div>
-              <div><span style="color:var(--accent);font-weight:600;">5.</span> &nbsp;Anotar la URL de integración
-                generada</div>
+          <!-- Production Analyzer -->
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;">
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:8px;">🔬 Production Analyzer</div>
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              <div style="background:#1a2a1a;border:1px solid #2a4a2a;border-radius:4px;padding:4px 8px;font-family:var(--mono);color:var(--green);font-size:10px;">SAP_COM_0720</div>
+              <div style="color:var(--text3);font-size:10px;margin-top:2px;">→ /IBP/MASTER_DATA_API_SRV</div>
+              <div style="color:var(--text3);font-size:10px;">→ /IBP/PLANNING_DATA_API_SRV</div>
             </div>
+          </div>
+          <!-- Network Visualizer -->
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;">
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:8px;">🔭 Network Visualizer</div>
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              <div style="background:#1a2a1a;border:1px solid #2a4a2a;border-radius:4px;padding:4px 8px;font-family:var(--mono);color:var(--green);font-size:10px;">SAP_COM_0720</div>
+              <div style="color:var(--text3);font-size:10px;margin-top:2px;">→ /IBP/MASTER_DATA_API_SRV</div>
+              <div style="color:var(--text3);font-size:10px;">→ /IBP/PLANNING_DATA_API_SRV</div>
+            </div>
+          </div>
+          <!-- Network Analyzer -->
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;">
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:8px;">🌐 Network Analyzer</div>
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              <div style="background:#1a2a1a;border:1px solid #2a4a2a;border-radius:4px;padding:4px 8px;font-family:var(--mono);color:var(--green);font-size:10px;">SAP_COM_0720</div>
+              <div style="color:var(--text3);font-size:10px;margin-top:2px;">→ /IBP/MASTER_DATA_API_SRV</div>
+              <div style="color:var(--text3);font-size:10px;">→ /IBP/PLANNING_DATA_API_SRV</div>
+            </div>
+          </div>
+          <!-- Mapping Dataflow Generator -->
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;">
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:8px;">📄 Mapping Dataflow Generator</div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <div>
+                <div style="color:var(--text3);font-style:italic;font-size:10px;margin-bottom:3px;">Modo ZIP — sin conexión SAP</div>
+                <div style="background:#1a1a2a;border:1px solid #2a2a3a;border-radius:4px;padding:4px 8px;color:var(--text3);font-size:10px;">Sin Communication Arrangement</div>
+              </div>
+              <div>
+                <div style="color:var(--text3);font-style:italic;font-size:10px;margin-bottom:3px;">Modo App Jobs / ZIP+Jobs</div>
+                <div style="background:#1a2a1a;border:1px solid #2a4a2a;border-radius:4px;padding:4px 8px;font-family:var(--mono);color:var(--green);font-size:10px;margin-bottom:3px;">SAP_COM_0720</div>
+                <div style="background:#2a1a2a;border:1px solid #4a2a4a;border-radius:4px;padding:4px 8px;font-family:var(--mono);color:var(--purple);font-size:10px;">SAP_COM_0326</div>
+                <div style="color:var(--text3);font-size:10px;margin-top:3px;">→ BC_EXT_APPJOB_MANAGEMENT</div>
+              </div>
+            </div>
+          </div>
+          <!-- Integration Explorer -->
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;">
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:8px;">🔎 Integration Explorer</div>
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              <div style="background:#1a1a2a;border:1px solid #2a2a3a;border-radius:4px;padding:4px 8px;color:var(--text3);font-size:10px;">Sin Communication Arrangement</div>
+              <div style="color:var(--text3);font-size:10px;margin-top:4px;line-height:1.5;">Funciona 100% offline. Solo procesa archivos ZIP exportados desde SAP CI-DS.</div>
+            </div>
+          </div>
+        </div>
+        <!-- Shared setup steps -->
+        <div style="border-top:1px solid var(--border);padding-top:12px;">
+          <div style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">
+            Pasos de configuración (aplicaciones con conexión SAP IBP)</div>
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;font-size:11px;color:var(--text2);">
+            <div><span style="color:var(--accent);font-weight:600;">1.</span> &nbsp;Crear <strong style="color:var(--text);">Communication System</strong> (inbound)</div>
+            <div><span style="color:var(--accent);font-weight:600;">2.</span> &nbsp;Asignar el Communication User</div>
+            <div><span style="color:var(--accent);font-weight:600;">3.</span> &nbsp;Crear <strong style="color:var(--text);">Communication Arrangement</strong></div>
+            <div><span style="color:var(--accent);font-weight:600;">4.</span> &nbsp;Seleccionar el escenario requerido según la aplicación</div>
+            <div><span style="color:var(--accent);font-weight:600;">5.</span> &nbsp;Anotar la URL de integración generada</div>
           </div>
         </div>
       </div>
@@ -208,10 +252,10 @@
       <div id="treqContent-entidades" style="display:none;">
         <div
           style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">
-          Entidades OData consumidas por módulo</div>
-        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;font-size:11px;">
+          Entidades OData consumidas por aplicación</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;font-size:11px;">
           <div>
-            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Production Visualizer</div>
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">📦 Production Visualizer</div>
             <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
               <div>• Production Source Header</div>
               <div>• Production Source Item</div>
@@ -222,7 +266,7 @@
             </div>
           </div>
           <div>
-            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Production Analyzer</div>
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">🔬 Production Analyzer</div>
             <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
               <div>• Production Source Header</div>
               <div>• Production Source Item</div>
@@ -235,7 +279,7 @@
             </div>
           </div>
           <div>
-            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Network Analyzer</div>
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">🔭 Network Visualizer</div>
             <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
               <div>• Production Source Header</div>
               <div>• Production Source Item</div>
@@ -249,7 +293,7 @@
             </div>
           </div>
           <div>
-            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Network Visualizer</div>
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">🌐 Network Analyzer</div>
             <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
               <div>• Production Source Header</div>
               <div>• Production Source Item</div>
@@ -263,16 +307,30 @@
             </div>
           </div>
           <div>
-            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Mapping Dataflow Generator</div>
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">📄 Mapping Dataflow Generator</div>
             <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
-              <div style="color:var(--text3);font-style:italic;margin-bottom:2px;">ZIP CIDS (siempre)</div>
-              <div>• Procesa archivos ZIP</div>
-              <div>• Extrae XMLs CIDS</div>
-              <div style="color:var(--text3);font-style:italic;margin-top:4px;margin-bottom:2px;">OData IBP (si conectado)</div>
+              <div style="color:var(--text3);font-style:italic;margin-bottom:2px;">Modo ZIP — siempre</div>
+              <div>• Procesa archivos ZIP CI-DS</div>
+              <div>• Extrae XMLs de dataflows</div>
+              <div style="color:var(--text3);font-style:italic;margin-top:6px;margin-bottom:2px;">Modo App Jobs / ZIP+Jobs</div>
+              <div>• JobTemplateSet</div>
+              <div>• JobTemplateSequenceSet</div>
+              <div>• JobTemplateParameterValueDataSet</div>
+              <div style="color:var(--text3);font-style:italic;margin-top:6px;margin-bottom:2px;">Maestros IBP (si conectado)</div>
               <div>• Product <span style="color:var(--text3);">(maestro)</span></div>
               <div>• Location <span style="color:var(--text3);">(maestro)</span></div>
               <div>• Customer <span style="color:var(--text3);">(maestro)</span></div>
               <div>• Production Source Header</div>
+            </div>
+          </div>
+          <div>
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">🔎 Integration Explorer</div>
+            <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
+              <div style="background:#1a1a2a;border:1px solid #2a2a3a;border-radius:4px;padding:6px 8px;color:var(--text3);font-size:10px;margin-bottom:4px;">No consume entidades OData</div>
+              <div>• Procesa archivos ZIP CI-DS</div>
+              <div>• Extrae XMLs de dataflows</div>
+              <div>• Construye índice de dependencias</div>
+              <div style="color:var(--text3);margin-top:4px;font-size:10px;line-height:1.5;">Funciona 100% offline — no requiere conexión a SAP IBP.</div>
             </div>
           </div>
         </div>
