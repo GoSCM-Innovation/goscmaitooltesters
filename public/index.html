@@ -94,17 +94,11 @@
       <button id="treqTab-conexion" onclick="switchTechTab('conexion')"
         style="padding:10px 18px;font-size:12px;cursor:pointer;background:none;border:none;border-bottom:2px solid var(--accent);color:var(--text);font-weight:600;white-space:nowrap;font-family:var(--font);">Conexión</button>
       <button id="treqTab-usuario" onclick="switchTechTab('usuario')"
-        style="padding:10px 18px;font-size:12px;cursor:pointer;background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);font-weight:400;white-space:nowrap;font-family:var(--font);">Usuario
-        SAP IBP</button>
+        style="padding:10px 18px;font-size:12px;cursor:pointer;background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);font-weight:400;white-space:nowrap;font-family:var(--font);">Usuario SAP IBP</button>
       <button id="treqTab-comm" onclick="switchTechTab('comm')"
-        style="padding:10px 18px;font-size:12px;cursor:pointer;background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);font-weight:400;white-space:nowrap;font-family:var(--font);">Communication
-        Arrangement</button>
+        style="padding:10px 18px;font-size:12px;cursor:pointer;background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);font-weight:400;white-space:nowrap;font-family:var(--font);">Acceso a SAP IBP</button>
       <button id="treqTab-entidades" onclick="switchTechTab('entidades')"
-        style="padding:10px 18px;font-size:12px;cursor:pointer;background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);font-weight:400;white-space:nowrap;font-family:var(--font);">Entidades
-        OData</button>
-      <button id="treqTab-red" onclick="switchTechTab('red')"
-        style="padding:10px 18px;font-size:12px;cursor:pointer;background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);font-weight:400;white-space:nowrap;font-family:var(--font);">Permisos
-        de red</button>
+        style="padding:10px 18px;font-size:12px;cursor:pointer;background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);font-weight:400;white-space:nowrap;font-family:var(--font);">Datos por aplicación</button>
     </div>
     <!-- Content -->
     <div style="padding:20px 28px;max-height:360px;overflow-y:auto;">
@@ -114,7 +108,7 @@
           <div>
             <div
               style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">
-              URL base requerida</div>
+              Dirección de tu sistema SAP IBP</div>
             <div
               style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-family:var(--mono);font-size:12px;color:var(--cyan);">
               https://{instancia}-api.scmibp.ondemand.com</div>
@@ -125,14 +119,12 @@
           <div>
             <div
               style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">
-              Requisitos de conexión</div>
+              Qué necesitas tener listo</div>
             <div style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--text2);">
-              <div>✓ &nbsp;Protocolo <strong style="color:var(--text);">HTTPS</strong> obligatorio</div>
-              <div>✓ &nbsp;Puerto <strong style="color:var(--text);">443</strong></div>
-              <div>✓ &nbsp;Autenticación <strong style="color:var(--text);">HTTP Basic Auth</strong> (usuario +
-                contraseña)</div>
+              <div>✓ &nbsp;Usuario y contraseña de acceso a la API</div>
               <div>✓ &nbsp;Planning Area configurada en SAP IBP</div>
-              <div>✓ &nbsp;Versión (opcional — vacío = Baseline)</div>
+              <div>✓ &nbsp;Versión (opcional — vacío equivale a Baseline)</div>
+              <div>✓ &nbsp;Acceso habilitado en SAP IBP (ver pestaña <em>Acceso a SAP IBP</em>)</div>
             </div>
           </div>
         </div>
@@ -145,62 +137,112 @@
               style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">
               Tipo de usuario requerido</div>
             <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;color:var(--text2);">
-              <div>✓ &nbsp;Debe ser un <strong style="color:var(--text);">Communication User</strong> (no usuario de
-                negocio)</div>
-              <div>✓ &nbsp;Requiere <strong style="color:var(--text);">rol de administrador</strong> en SAP IBP</div>
+              <div>✓ &nbsp;Debe ser un <strong style="color:var(--text);">Communication User</strong> — un usuario dedicado a la integración con sistemas externos, distinto al usuario de negocio habitual</div>
+              <div>✓ &nbsp;Debe tener permisos de lectura sobre los datos de planificación</div>
               <div>✓ &nbsp;La contraseña no debe estar vencida</div>
-              <div>✓ &nbsp;El usuario debe estar asignado al Communication Arrangement</div>
+              <div>✓ &nbsp;Debe estar vinculado al escenario de integración configurado</div>
             </div>
           </div>
           <div>
             <div
               style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">
-              Cómo crearlo</div>
+              Cómo crearlo en SAP IBP</div>
             <div style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--text2);">
-              <div><span style="color:var(--accent);font-weight:600;">1.</span> &nbsp;Ir a SAP IBP → Administration
-              </div>
+              <div><span style="color:var(--accent);font-weight:600;">1.</span> &nbsp;Ir a SAP IBP → Administration</div>
               <div><span style="color:var(--accent);font-weight:600;">2.</span> &nbsp;Communication Users → New</div>
               <div><span style="color:var(--accent);font-weight:600;">3.</span> &nbsp;Tipo: Communication User</div>
               <div><span style="color:var(--accent);font-weight:600;">4.</span> &nbsp;Asignar contraseña segura</div>
-              <div><span style="color:var(--accent);font-weight:600;">5.</span> &nbsp;Asignar rol: IBP Administrator
-              </div>
+              <div><span style="color:var(--accent);font-weight:600;">5.</span> &nbsp;Asignar rol: IBP Administrator</div>
             </div>
           </div>
         </div>
       </div>
 
       <div id="treqContent-comm" style="display:none;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
-          <div>
-            <div
-              style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">
-              Escenario requerido</div>
-            <div
-              style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-family:var(--mono);font-size:13px;color:var(--cyan);margin-bottom:8px;">
-              SAP_COM_0720</div>
-            <div style="font-size:12px;color:var(--text2);">Este escenario activa automáticamente las dos APIs que usa
-              esta web:</div>
-            <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px;font-size:12px;">
-              <div style="color:var(--green);">✓ &nbsp;/IBP/MASTER_DATA_API_SRV</div>
-              <div style="color:var(--green);">✓ &nbsp;/IBP/PLANNING_DATA_API_SRV</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.6;">
+          Cada aplicación necesita que SAP IBP tenga habilitado un <strong style="color:var(--text);">escenario de integración</strong> específico. Estos escenarios controlan a qué datos puede acceder la aplicación. Las apps marcadas como <em>sin conexión</em> no requieren ninguna configuración en SAP IBP.</div>
+        <!-- App cards grid -->
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;font-size:11px;margin-bottom:16px;">
+          <!-- Production Visualizer -->
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;">
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:8px;">📦 Production Visualizer</div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <div style="background:#1a2a1a;border:1px solid #2a4a2a;border-radius:4px;padding:6px 8px;">
+                <div style="font-family:var(--mono);color:var(--green);font-size:10px;margin-bottom:2px;">SAP_COM_0720</div>
+                <div style="color:var(--text3);font-size:10px;">Acceso a datos de producción y maestros IBP</div>
+              </div>
             </div>
           </div>
-          <div>
-            <div
-              style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">
-              Pasos de configuración</div>
-            <div style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--text2);">
-              <div><span style="color:var(--accent);font-weight:600;">1.</span> &nbsp;Crear <strong
-                  style="color:var(--text);">Communication System</strong> (inbound)</div>
-              <div><span style="color:var(--accent);font-weight:600;">2.</span> &nbsp;Asignar el Communication User
+          <!-- Production Analyzer -->
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;">
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:8px;">🔬 Production Analyzer</div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <div style="background:#1a2a1a;border:1px solid #2a4a2a;border-radius:4px;padding:6px 8px;">
+                <div style="font-family:var(--mono);color:var(--green);font-size:10px;margin-bottom:2px;">SAP_COM_0720</div>
+                <div style="color:var(--text3);font-size:10px;">Acceso a datos de producción y maestros IBP</div>
               </div>
-              <div><span style="color:var(--accent);font-weight:600;">3.</span> &nbsp;Crear <strong
-                  style="color:var(--text);">Communication Arrangement</strong></div>
-              <div><span style="color:var(--accent);font-weight:600;">4.</span> &nbsp;Seleccionar escenario <code
-                  style="color:var(--cyan);font-family:var(--mono);">SAP_COM_0720</code></div>
-              <div><span style="color:var(--accent);font-weight:600;">5.</span> &nbsp;Anotar la URL de integración
-                generada</div>
             </div>
+          </div>
+          <!-- Network Visualizer -->
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;">
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:8px;">🔭 Network Visualizer</div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <div style="background:#1a2a1a;border:1px solid #2a4a2a;border-radius:4px;padding:6px 8px;">
+                <div style="font-family:var(--mono);color:var(--green);font-size:10px;margin-bottom:2px;">SAP_COM_0720</div>
+                <div style="color:var(--text3);font-size:10px;">Acceso a datos de producción y maestros IBP</div>
+              </div>
+            </div>
+          </div>
+          <!-- Network Analyzer -->
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;">
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:8px;">🌐 Network Analyzer</div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <div style="background:#1a2a1a;border:1px solid #2a4a2a;border-radius:4px;padding:6px 8px;">
+                <div style="font-family:var(--mono);color:var(--green);font-size:10px;margin-bottom:2px;">SAP_COM_0720</div>
+                <div style="color:var(--text3);font-size:10px;">Acceso a datos de producción y maestros IBP</div>
+              </div>
+            </div>
+          </div>
+          <!-- Mapping Dataflow Generator -->
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;">
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:8px;">📄 Mapping Dataflow Generator</div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <div>
+                <div style="color:var(--text3);font-style:italic;font-size:10px;margin-bottom:3px;">Modo ZIP</div>
+                <div style="background:#1a1a2a;border:1px solid #2a2a3a;border-radius:4px;padding:6px 8px;color:var(--text3);font-size:10px;">Sin conexión a SAP IBP</div>
+              </div>
+              <div>
+                <div style="color:var(--text3);font-style:italic;font-size:10px;margin-bottom:3px;">Modo Application Jobs / ZIP+Jobs</div>
+                <div style="background:#1a2a1a;border:1px solid #2a4a2a;border-radius:4px;padding:6px 8px;margin-bottom:4px;">
+                  <div style="font-family:var(--mono);color:var(--green);font-size:10px;margin-bottom:2px;">SAP_COM_0720</div>
+                  <div style="color:var(--text3);font-size:10px;">Acceso a datos de producción y maestros IBP</div>
+                </div>
+                <div style="background:#2a1a2a;border:1px solid #4a2a4a;border-radius:4px;padding:6px 8px;">
+                  <div style="font-family:var(--mono);color:var(--purple);font-size:10px;margin-bottom:2px;">SAP_COM_0326</div>
+                  <div style="color:var(--text3);font-size:10px;">Acceso a los Application Jobs de IBP</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Integration Explorer -->
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;">
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:8px;">🔎 Integration Explorer</div>
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              <div style="background:#1a1a2a;border:1px solid #2a2a3a;border-radius:4px;padding:6px 8px;color:var(--text3);font-size:10px;">Sin conexión a SAP IBP</div>
+              <div style="color:var(--text3);font-size:10px;margin-top:4px;line-height:1.5;">Funciona completamente offline. Solo necesitas subir los archivos ZIP exportados desde SAP CI-DS.</div>
+            </div>
+          </div>
+        </div>
+        <!-- Shared setup steps -->
+        <div style="border-top:1px solid var(--border);padding-top:12px;">
+          <div style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">
+            Cómo configurar el acceso en SAP IBP</div>
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;font-size:11px;color:var(--text2);">
+            <div><span style="color:var(--accent);font-weight:600;">1.</span> &nbsp;Crear un sistema de comunicación en SAP IBP</div>
+            <div><span style="color:var(--accent);font-weight:600;">2.</span> &nbsp;Asignarle el Communication User</div>
+            <div><span style="color:var(--accent);font-weight:600;">3.</span> &nbsp;Crear un acuerdo de integración (Communication Arrangement)</div>
+            <div><span style="color:var(--accent);font-weight:600;">4.</span> &nbsp;Seleccionar el escenario que corresponde a tu aplicación</div>
+            <div><span style="color:var(--accent);font-weight:600;">5.</span> &nbsp;Guardar la URL de integración generada</div>
           </div>
         </div>
       </div>
@@ -208,10 +250,10 @@
       <div id="treqContent-entidades" style="display:none;">
         <div
           style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">
-          Entidades OData consumidas por módulo</div>
-        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;font-size:11px;">
+          Entidades OData consumidas por aplicación</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;font-size:11px;">
           <div>
-            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Production Visualizer</div>
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">📦 Production Visualizer</div>
             <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
               <div>• Production Source Header</div>
               <div>• Production Source Item</div>
@@ -222,7 +264,7 @@
             </div>
           </div>
           <div>
-            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Production Analyzer</div>
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">🔬 Production Analyzer</div>
             <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
               <div>• Production Source Header</div>
               <div>• Production Source Item</div>
@@ -235,7 +277,7 @@
             </div>
           </div>
           <div>
-            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Network Analyzer</div>
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">🔭 Network Visualizer</div>
             <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
               <div>• Production Source Header</div>
               <div>• Production Source Item</div>
@@ -249,7 +291,7 @@
             </div>
           </div>
           <div>
-            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Network Visualizer</div>
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">🌐 Network Analyzer</div>
             <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
               <div>• Production Source Header</div>
               <div>• Production Source Item</div>
@@ -263,52 +305,31 @@
             </div>
           </div>
           <div>
-            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">Mapping Dataflow Generator</div>
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">📄 Mapping Dataflow Generator</div>
             <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
-              <div style="color:var(--text3);font-style:italic;margin-bottom:2px;">ZIP CIDS (siempre)</div>
-              <div>• Procesa archivos ZIP</div>
-              <div>• Extrae XMLs CIDS</div>
-              <div style="color:var(--text3);font-style:italic;margin-top:4px;margin-bottom:2px;">OData IBP (si conectado)</div>
+              <div style="color:var(--text3);font-style:italic;margin-bottom:2px;">Modo ZIP — siempre</div>
+              <div>• Procesa archivos ZIP CI-DS</div>
+              <div>• Extrae XMLs de dataflows</div>
+              <div style="color:var(--text3);font-style:italic;margin-top:6px;margin-bottom:2px;">Modo App Jobs / ZIP+Jobs</div>
+              <div>• JobTemplateSet</div>
+              <div>• JobTemplateSequenceSet</div>
+              <div>• JobTemplateParameterValueDataSet</div>
+              <div style="color:var(--text3);font-style:italic;margin-top:6px;margin-bottom:2px;">Maestros IBP (si conectado)</div>
               <div>• Product <span style="color:var(--text3);">(maestro)</span></div>
               <div>• Location <span style="color:var(--text3);">(maestro)</span></div>
               <div>• Customer <span style="color:var(--text3);">(maestro)</span></div>
               <div>• Production Source Header</div>
             </div>
           </div>
-        </div>
-      </div>
-
-      <div id="treqContent-red" style="display:none;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
           <div>
-            <div
-              style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">
-              ¿Por qué se usa un proxy?</div>
-            <div style="font-size:12px;color:var(--text2);line-height:1.6;">
-              Los navegadores bloquean llamadas directas a dominios externos por política <strong
-                style="color:var(--text);">CORS</strong>. Esta web usa un servidor proxy intermedio (<code
-                style="color:var(--cyan);font-family:var(--mono);">/api/proxy</code>) que reenvía las solicitudes a SAP
-              IBP desde el servidor, evitando el bloqueo del navegador.
+            <div style="color:var(--cyan);font-weight:600;margin-bottom:6px;">🔎 Integration Explorer</div>
+            <div style="display:flex;flex-direction:column;gap:4px;color:var(--text2);">
+              <div style="background:#1a1a2a;border:1px solid #2a2a3a;border-radius:4px;padding:6px 8px;color:var(--text3);font-size:10px;margin-bottom:4px;">No consume entidades OData</div>
+              <div>• Procesa archivos ZIP CI-DS</div>
+              <div>• Extrae XMLs de dataflows</div>
+              <div>• Construye índice de dependencias</div>
+              <div style="color:var(--text3);margin-top:4px;font-size:10px;line-height:1.5;">Funciona 100% offline — no requiere conexión a SAP IBP.</div>
             </div>
-            <div
-              style="margin-top:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-family:var(--mono);font-size:11px;color:var(--text2);">
-              Navegador → /api/proxy → SAP IBP
-            </div>
-          </div>
-          <div>
-            <div
-              style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">
-              Dominios que deben ser accesibles</div>
-            <div style="display:flex;flex-direction:column;gap:6px;font-size:12px;">
-              <div
-                style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:6px 10px;font-family:var(--mono);color:var(--cyan);">
-                *.scmibp.ondemand.com</div>
-              <div
-                style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:6px 10px;font-family:var(--mono);color:var(--cyan);">
-                ibp-bom-v7.vercel.app</div>
-            </div>
-            <div style="margin-top:8px;font-size:11px;color:var(--text2);">Las credenciales nunca se almacenan — solo se
-              usan durante la sesión activa.</div>
           </div>
         </div>
       </div>
