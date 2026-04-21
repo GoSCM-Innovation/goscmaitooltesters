@@ -443,7 +443,7 @@
           var row = notes[rn];
           Object.keys(row).forEach(function (ci) {
             var ref = _col(parseInt(ci, 10) + 1) + rn;
-            parts.push('<comment ref="', ref, '" authorId="0"><text><r><t xml:space="preserve">',
+            parts.push('<comment ref="', ref, '" authorId="0"><text><r><t>',
               _xe(row[ci]), '</t></r></text></comment>');
           });
         });
