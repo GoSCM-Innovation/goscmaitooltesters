@@ -1309,28 +1309,24 @@
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
         <div class="panel-title" style="margin-bottom:0;">📄 ¿Qué contiene el archivo de salida?</div>
         <button onclick="guideMinimize('panelPAGuide',this)"
-          style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:11px;cursor:pointer;padding:2px 10px;line-height:1.6;">▲ Minimizar</button>
+          style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:11px;cursor:pointer;padding:2px 10px;line-height:1.6;">▼ Expandir</button>
       </div>
-      <div class="guide-panel-body" id="panelPAGuideBody">
-      <p style="font-size:12px;color:var(--text2);margin:0 0 14px;">El Excel generado contiene <strong style="color:var(--text);">7 hojas</strong>. Expande cada una para ver el detalle de sus columnas.</p>
+      <div class="guide-panel-body hidden" id="panelPAGuideBody">
+      <p style="font-size:12px;color:var(--text2);margin:0 0 14px;">El Excel generado contiene <strong style="color:var(--text);">hasta 9 hojas</strong>. En todas las hojas (excepto Resumen y Tipos Excluidos), <strong style="color:var(--text);">Estado</strong> muestra el semáforo y <strong style="color:var(--text);">Observacion</strong> explica qué falló o qué validaciones pasaron correctamente.</p>
 
       <div class="guide-accordion">
 
         <!-- Resumen -->
         <div class="guide-item">
           <div class="guide-item-header" onclick="guideToggle(this)">
-            <span>📊 Resumen</span><span class="guide-arr">▶</span>
+            <span>📊 1 · Resumen</span><span class="guide-arr">▶</span>
           </div>
           <div class="guide-item-body hidden">
-            <p>Una fila por cada hoja analizada. Permite ver de un vistazo la calidad global de los datos de producción.</p>
+            <p>Una fila por hoja analizada. Permite ver de un vistazo cuántos registros tienen problemas en cada entidad.</p>
             <ul>
-              <li><strong>#</strong> — Número de hoja.</li>
-              <li><strong>Hoja</strong> — Nombre de la hoja a la que corresponde la fila.</li>
-              <li><strong>Total registros</strong> — Cantidad de filas analizadas en esa hoja.</li>
-              <li><strong>Alertas 🔴</strong> — Registros con problema crítico que requiere corrección.</li>
-              <li><strong>Advertencias 🟡</strong> — Registros con dato para revisar.</li>
-              <li><strong>OK ✅</strong> — Registros sin observaciones.</li>
-              <li><strong>% Consistencia</strong> — <code>OK / Total × 100</code>.</li>
+              <li><strong>Total registros</strong> — Filas procesadas en esa hoja. <em>Ej: 350 = se analizaron 350 productos.</em></li>
+              <li><strong>Alertas 🔴 / Advertencias 🟡 / OK ✅</strong> — Conteo por nivel de severidad.</li>
+              <li><strong>% Consistencia</strong> — Porcentaje de registros OK sobre el total. <em>Ej: 85 de 100 productos OK = 85%.</em></li>
             </ul>
           </div>
         </div>
@@ -1338,20 +1334,61 @@
         <!-- Product -->
         <div class="guide-item">
           <div class="guide-item-header" onclick="guideToggle(this)">
-            <span>📦 Product</span><span class="guide-arr">▶</span>
+            <span>📦 2 · Product</span><span class="guide-arr">▶</span>
           </div>
           <div class="guide-item-body hidden">
-            <p>Un producto por fila. Verifica que cada material del maestro esté correctamente integrado en la cadena de producción.</p>
+            <p>Un producto por fila. Verifica que cada material esté correctamente configurado para la planificación. Las métricas se calculan para todos los productos; las validaciones activas dependen del tipo de material configurado.</p>
             <ul>
-              <li><strong>Estado</strong> — Color de alerta.</li>
-              <li><strong>PRDID</strong> — Código del producto.</li>
-              <li><strong>PRDDESCR</strong> — Descripción del producto.</li>
-              <li><strong>MATTYPEID</strong> — Tipo de material.</li>
-              <li><strong>En PSH (output)?</strong> — ¿El producto es el output de alguna fuente de producción?</li>
-              <li><strong>En PSI (componente)?</strong> — ¿El producto aparece como componente en algún BOM?</li>
-              <li><strong>En Location Product?</strong> — ¿Está habilitado como manejable en alguna ubicación?</li>
-              <li><strong>En Location Source?</strong> — ¿Tiene arcos de transferencia entre ubicaciones?</li>
-              <li><strong>Observacion</strong> — Resumen de hallazgos: producto solo en maestro, sin PSH ni PSI, etc.</li>
+              <li><strong>MATTYPEID</strong> — Tipo de material SAP. Determina qué validaciones se aplican. <em>Ej: FERT = terminado, HALB = semielaborado, ROH = materia prima.</em></li>
+              <li><strong>En Location Product</strong> — ¿IBP sabe en qué plantas puede existir este material? Sin esto, el producto no entra a ningún plan. <em>Ej: PROD-001 sin Location Product → IBP lo ignora completamente.</em></li>
+              <li><strong>En PSH (output)</strong> — ¿Tiene una receta de producción propia? Sin PSH no hay instrucciones de fabricación. <em>Ej: PROD-001 sin PSH → IBP no sabe cómo producirlo → 🔴.</em></li>
+              <li><strong>En PSI (componente)</strong> — ¿Este producto es ingrediente en el BOM de algún otro? <em>Ej: SEMI-001 = Sí porque aparece como componente en el BOM de PROD-001.</em></li>
+              <li><strong>En Location Source</strong> — ¿Tiene rutas de transferencia configuradas entre ubicaciones? <em>Ej: MAT-A = Sí porque se transfiere desde PROV-01 a P001.</em></li>
+              <li><strong># Opciones prod. / Opciones prod. (SOURCEIDs)</strong> — Cuántas recetas de producción distintas tiene y sus códigos. <em>Ej: 2 / SRC-001, SRC-002 = puede fabricarse de dos maneras diferentes.</em></li>
+              <li><strong># Plantas prod. / Plantas prod. (códigos)</strong> — En cuántas plantas se fabrica y cuáles son. <em>Ej: 3 / P001, P002, P003.</em></li>
+              <li><strong># Componentes BOM</strong> — Total de ingredientes en todas sus recetas. <em>Ej: 5 = suma de PSI en todos sus SOURCEIDs.</em></li>
+              <li><strong># Recursos prod. / Recursos prod. (códigos)</strong> — Cuántas máquinas o líneas están asignadas a sus recetas. <em>Ej: 2 / LINEA-01, HORNO-A.</em></li>
+              <li><strong># Proveedores / Proveedores (códigos)</strong> — Cuántas ubicaciones origen lo abastecen vía Location Source. <em>Ej: 2 / PROV-01, PROV-02.</em></li>
+              <li><strong># Plantas cubiertas / sin cobertura</strong> — De las plantas que consumen este material como insumo, cuántas tienen ruta de abastecimiento configurada y cuántas no. <em>Ej: MAT-A se usa en P001 y P002. P001 tiene arco desde PROV-01 (cubierta), P002 no (sin cobertura) → 🔴.</em></li>
+              <li><strong># Productos que lo usan</strong> — Cuántos productos distintos requieren este material como ingrediente. <em>Ej: 3 = MAT-A es componente en PROD-001, PROD-002 y PROD-003.</em></li>
+              <li><strong># Orígenes en red / Orígenes en red (códigos)</strong> — Desde cuántas ubicaciones puede llegar este producto en la red. <em>Ej: 2 / PROV-01, P002.</em></li>
+              <li><strong># Plantas consumidoras / Plantas consumidoras (códigos)</strong> — En cuántas plantas se usa como ingrediente de algún BOM. <em>Ej: 2 / P001, P002.</em></li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Location -->
+        <div class="guide-item">
+          <div class="guide-item-header" onclick="guideToggle(this)">
+            <span>🗺️ 3 · Location</span><span class="guide-arr">▶</span>
+          </div>
+          <div class="guide-item-body hidden">
+            <p>Una ubicación por fila. El analizador infiere el rol de cada nodo a partir de su comportamiento real en los datos, independientemente del campo LOCTYPE de SAP.</p>
+            <ul>
+              <li><strong>LOCTYPE</strong> — Tipo de ubicación según el maestro de SAP IBP. Campo informativo; el rol real se infiere del comportamiento. <em>Ej: 1010, 1020.</em></li>
+              <li><strong>Rol(es) inferido(s)</strong> — Función que cumple la ubicación según los datos:
+                <ul style="margin-top:4px;">
+                  <li><em>Planta de producción</em> — tiene recetas PSH propias. <em>Ej: P001 fabrica PROD-001 y SEMI-A.</em></li>
+                  <li><em>Proveedor</em> — abastece componentes PSI a otras plantas vía Location Source. <em>Ej: PROV-01 envía MAT-A a P001 y P001 lo usa en su BOM.</em></li>
+                  <li><em>Nodo de transferencia</em> — envía productos vía Location Source pero sin consumo PSI en destino. <em>Ej: DC-NORTE reenvía PROD-001 a DC-SUR sin uso productivo.</em></li>
+                  <li><em>Nodo receptor</em> — solo aparece como destino en Location Source, sin producción ni transferencias propias.</li>
+                  <li><em>Nodo de recursos</em> — tiene Resource Location configurado pero sin PSH ni arcos activos.</li>
+                  <li><em>Sin actividad</em> — existe en el maestro pero no aparece en ningún otro dato → 🟡.</li>
+                </ul>
+              </li>
+              <li><strong>Métricas Planta</strong> — Productos fabricados, SOURCEIDs, recursos asignados vs. activos en PSR, recursos ociosos, BOMs sin PSI, BOMs sin PSR, insumos externos sin arco de abastecimiento, SOURCEIDs con PLEADTIME = 0.
+                <ul style="margin-top:4px;">
+                  <li><em>Ej Recursos ociosos: HORNO-B aparece en Resource Location de P001 pero ningún SOURCEID de P001 lo usa en PSR → 🟡.</em></li>
+                  <li><em>Ej Insumos sin cobertura: P001 necesita MAT-A en su BOM pero no hay arco de abastecimiento en Location Source hacia P001 → 🔴.</em></li>
+                </ul>
+              </li>
+              <li><strong>Métricas Proveedor</strong> — Productos y plantas abastecidas, productos enviados sin consumo PSI en destino, productos enviados sin Location Product en planta destino.
+                <ul style="margin-top:4px;">
+                  <li><em>Ej Sin consumo PSI: PROV-01 envía MAT-X a P001 pero ningún BOM de P001 usa MAT-X → arco sin uso productivo → 🟡.</em></li>
+                  <li><em>Ej Sin Location Product: PROV-01 envía MAT-Y a P002 pero MAT-Y no tiene Location Product en P002 → IBP no puede planificarlo → 🔴.</em></li>
+                </ul>
+              </li>
+              <li><strong>Métricas Transferencia / Receptor</strong> — Productos transferidos, destinos de transferencia, productos recibidos y ubicaciones origen. <em>Ej: DC-NORTE transfiere PROD-001 a DC-SUR y recibe desde P001 y P002.</em></li>
             </ul>
           </div>
         </div>
@@ -1359,17 +1396,16 @@
         <!-- Resource -->
         <div class="guide-item">
           <div class="guide-item-header" onclick="guideToggle(this)">
-            <span>🔧 Resource</span><span class="guide-arr">▶</span>
+            <span>🔧 4 · Resource</span><span class="guide-arr">▶</span>
           </div>
           <div class="guide-item-body hidden">
-            <p>Un recurso productivo (puesto de trabajo o máquina) por fila. Verifica que cada recurso declarado esté asignado a procesos de producción y tenga ubicación configurada.</p>
+            <p>Un recurso (máquina o puesto de trabajo) por fila. Detecta recursos en el maestro que no participan en ningún proceso productivo o que no tienen planta asignada.</p>
             <ul>
-              <li><strong>Estado</strong> — Color de alerta.</li>
-              <li><strong>RESID</strong> — Código del recurso.</li>
-              <li><strong>RESDESCR</strong> — Descripción del recurso.</li>
-              <li><strong>En PSR?</strong> — ¿El recurso está asignado a al menos una fuente de producción (Production Source Resource)?</li>
-              <li><strong>En Resource Location?</strong> — ¿Tiene una ubicación física configurada?</li>
-              <li><strong>Observacion</strong> — Un recurso 🔴 sin PSR ni Resource Location existe en el maestro pero no aporta a ningún proceso productivo.</li>
+              <li><strong>En PSR</strong> — ¿Este recurso está asignado a alguna receta de producción? Si No, IBP nunca lo considera para planificar capacidad. <em>Ej: HORNO-B = No → recurso declarado pero sin uso → 🔴.</em></li>
+              <li><strong>En Resource Location</strong> — ¿Tiene al menos una planta asignada? Sin esto, IBP no sabe dónde opera físicamente. <em>Ej: LINEA-01 = No → recurso sin ubicación conocida → 🟡.</em></li>
+              <li><strong># Plantas asignadas / Plantas asignadas (códigos)</strong> — En cuántas plantas tiene Resource Location configurado. <em>Ej: 2 / P001, P002.</em></li>
+              <li><strong># Fuentes prod. / Fuentes prod. (SOURCEIDs)</strong> — Cuántas recetas usa este recurso. <em>Ej: 3 / SRC-001, SRC-002, SRC-003.</em></li>
+              <li><strong># Productos que fabrica / Productos que fabrica (códigos)</strong> — Cuántos productos distintos produce a través de sus recetas. <em>Ej: 2 / PROD-001, PROD-002.</em></li>
             </ul>
           </div>
         </div>
@@ -1377,16 +1413,13 @@
         <!-- Resource Location -->
         <div class="guide-item">
           <div class="guide-item-header" onclick="guideToggle(this)">
-            <span>📍 Resource Location</span><span class="guide-arr">▶</span>
+            <span>📍 5 · Resource Location</span><span class="guide-arr">▶</span>
           </div>
           <div class="guide-item-body hidden">
-            <p>Un par <code>RESID + LOCID</code> por fila. Valida que cada combinación recurso-ubicación tenga uso real en alguna receta de producción.</p>
+            <p>Un par recurso + planta por fila. Valida que cada combinación tenga uso real en alguna receta de producción de esa planta.</p>
             <ul>
-              <li><strong>Estado</strong> — Color de alerta.</li>
-              <li><strong>RESID</strong> — Código del recurso.</li>
-              <li><strong>LOCID</strong> — Código de la ubicación (planta) donde está el recurso.</li>
-              <li><strong>RESID+LOCID usado en PSR?</strong> — ¿Esta combinación recurso-planta está asignada a al menos una fuente de producción? Si es No, el recurso está ubicado en esa planta en el maestro pero no se asignó a ninguna receta productiva.</li>
-              <li><strong>Observacion</strong> — Detalle del hallazgo.</li>
+              <li><strong>RESID + LOCID</strong> — Recurso y la planta donde está configurado en el maestro. <em>Ej: LINEA-01 + P001.</em></li>
+              <li><strong>RESID+LOCID usado en PSR</strong> — ¿Esta combinación aparece en algún PSR de esa planta? Si No, el recurso está registrado en esa planta en el maestro pero nunca fue asignado a ninguna receta. <em>Ej: HORNO-B en P002 según Resource Location, pero ningún SOURCEID de P002 usa HORNO-B → 🟡 configuración sin uso productivo.</em></li>
             </ul>
           </div>
         </div>
@@ -1394,22 +1427,21 @@
         <!-- PSH -->
         <div class="guide-item">
           <div class="guide-item-header" onclick="guideToggle(this)">
-            <span>🏭 Prod Source Header (PSH)</span><span class="guide-arr">▶</span>
+            <span>🏭 6 · Prod Source Header (PSH)</span><span class="guide-arr">▶</span>
           </div>
           <div class="guide-item-body hidden">
-            <p>Un <code>SOURCEID</code> (fuente de producción) por fila. Analiza la consistencia de cada receta de producción registrada en SAP IBP.</p>
+            <p>Una receta de producción (SOURCEID) por fila. Cada receta define qué producto se fabrica, en qué planta, con qué ingredientes y en cuánto tiempo.</p>
             <ul>
-              <li><strong>Estado</strong> — Color de alerta.</li>
-              <li><strong>SOURCEID</strong> — Identificador único de la fuente de producción.</li>
-              <li><strong>PRDID output</strong> — Producto terminado que produce esta fuente.</li>
-              <li><strong>LOCID planta</strong> — Planta donde se ejecuta la producción.</li>
-              <li><strong>SOURCETYPE(s)</strong> — <code>P</code> = producción primaria · <code>C</code> = co-producto.</li>
-              <li><strong>PLEADTIME</strong> — Lead time de producción en días. Se alerta si está vacío o en cero.</li>
-              <li><strong>OUTPUTCOEFFICIENT</strong> — Unidades del producto terminado generadas por corrida de producción.</li>
-              <li><strong>PRDID+LOCID en Location Product?</strong> — ¿El producto está habilitado en esa planta en Location Product?</li>
-              <li><strong>Tiene items PSI (BOM)?</strong> — ¿Hay componentes definidos para esta fuente? Si es No, la fuente existe pero sin BOM: no se puede planificar el consumo de materiales.</li>
-              <li><strong>Tiene recursos PSR?</strong> — ¿Hay recursos asignados a esta fuente?</li>
-              <li><strong>Observacion</strong> — Detalle de hallazgos: PLEADTIME cero, sin BOM, sin recursos, etc.</li>
+              <li><strong>SOURCEID</strong> — Código único de la receta de producción en SAP IBP. <em>Ej: SRC-001.</em></li>
+              <li><strong>PRDID output / LOCID planta</strong> — Qué producto fabrica y en qué planta. <em>Ej: PROD-001 en P001.</em></li>
+              <li><strong>SOURCETYPE(s)</strong> — <code>P</code> = producción primaria (output principal) · <code>C</code> = co-producto obtenido en el mismo proceso. <em>Ej: P/C = esta receta produce PROD-001 como primario y SEMI-X como co-producto.</em></li>
+              <li><strong>PLEADTIME</strong> — Días de fabricación desde lanzamiento hasta producto listo. Si es 0 o vacío, IBP planifica como producción instantánea. <em>Ej: 5 = 5 días. Si es 0 → 🔴.</em></li>
+              <li><strong>OUTPUTCOEFFICIENT</strong> — Unidades producidas por corrida. <em>Ej: 100 = cada corrida entrega 100 unidades de PROD-001.</em></li>
+              <li><strong>PRDID+LOCID en Location Product</strong> — ¿El producto está habilitado en esa planta? Si No, existe una receta para algo que IBP no reconoce en ese lugar. <em>Ej: PROD-001 en P001 = No → receta sin efecto en la planificación → 🔴.</em></li>
+              <li><strong># Componentes PSI</strong> — Cuántos ingredientes tiene esta receta. 0 = BOM vacío → IBP no planifica compra de insumos. <em>Ej: 4 ingredientes.</em></li>
+              <li><strong># Recursos PSR / Recursos PSR (códigos)</strong> — Cuántas máquinas/líneas están asignadas y cuáles son. Sin recursos, IBP no puede planificar capacidad. <em>Ej: 2 / LINEA-01, HORNO-A.</em></li>
+              <li><strong>Tiene PSR</strong> — Sí/No: ¿Esta receta tiene al menos un recurso asignado? <em>Ej: No → sin restricción de capacidad modelada → 🔴.</em></li>
+              <li><strong># Componentes con alternativa</strong> — Ingredientes marcados como sustitutos de otro (ISALTITEM=X). <em>Ej: 1 = MAT-A-PREMIUM puede reemplazar a MAT-A en esta receta.</em></li>
             </ul>
           </div>
         </div>
@@ -1417,26 +1449,21 @@
         <!-- PSI -->
         <div class="guide-item">
           <div class="guide-item-header" onclick="guideToggle(this)">
-            <span>🔩 Prod Source Item (PSI)</span><span class="guide-arr">▶</span>
+            <span>🔩 7 · Prod Source Item (PSI)</span><span class="guide-arr">▶</span>
           </div>
           <div class="guide-item-body hidden">
-            <p>Un componente del BOM por fila. Valida la consistencia de cada ítem de la lista de materiales.</p>
+            <p>Un ingrediente del BOM por fila. Verifica que cada componente esté bien configurado para que IBP pueda planificar su abastecimiento y consumo.</p>
             <ul>
-              <li><strong>Estado</strong> — Color de alerta.</li>
-              <li><strong>SOURCEID</strong> — Fuente de producción a la que pertenece este componente.</li>
-              <li><strong>PRDID output</strong> — Producto terminado que se fabrica con este BOM.</li>
-              <li><strong>LOCID planta</strong> — Planta donde se fabrica.</li>
-              <li><strong>PRDID componente</strong> — Material que se consume como insumo.</li>
-              <li><strong>COMPONENTCOEFFICIENT</strong> — Unidades del componente consumidas por unidad producida. Si está en cero, la planificación de demanda del insumo será incorrecta.</li>
-              <li><strong>Tipo componente</strong> — Principal o alternativo (sustituto).</li>
-              <li><strong>PRDID comp+LOCID en Location Product?</strong> — ¿El componente está habilitado en la planta de producción?</li>
-              <li><strong>En Location Source (insumo)?</strong> — ¿El componente tiene arcos de transferencia que podrían abastecerlo?</li>
-              <li><strong>LOCFR origen</strong> — Ubicación de origen desde donde se transfiere el insumo (si existe).</li>
-              <li><strong>LOCTYPE origen</strong> — Tipo de la ubicación de origen.</li>
-              <li><strong>LOCFR+PRDID en Location Product?</strong> — ¿El insumo está habilitado en la ubicación de origen?</li>
-              <li><strong>Material de reemplazo (ISALTITEM)?</strong> — ¿Este componente es un sustituto alternativo?</li>
-              <li><strong>Reemplaza a</strong> — Código del componente principal al que reemplaza (si aplica).</li>
-              <li><strong>Observacion</strong> — Coeficiente cero, sin Location Product, cadena de sustitución incompleta, etc.</li>
+              <li><strong>SOURCEID / PRDID output / LOCID planta</strong> — A qué receta pertenece este ingrediente, qué producto fabrica y en qué planta. <em>Ej: SRC-001 / PROD-001 / P001.</em></li>
+              <li><strong>PRDID componente</strong> — El material que se consume como ingrediente en esta receta. <em>Ej: MAT-A.</em></li>
+              <li><strong>COMPONENTCOEFFICIENT</strong> — Unidades del componente por unidad de producto terminado. Si es 0, IBP no planifica la compra de este insumo. <em>Ej: 2.5 = se consumen 2.5 kg de MAT-A por cada unidad de PROD-001 fabricada. Si es 0 → 🔴.</em></li>
+              <li><strong>Tipo componente</strong> — <em>Semielaborado</em>: tiene PSH propio en esta planta, se fabrica antes de usarse. <em>Insumo</em>: debe llegar desde un proveedor u otra planta vía Location Source. <em>Ej: SEMI-B = Semielaborado | MAT-A = Insumo.</em></li>
+              <li><strong>PRDID comp+LOCID en Location Product</strong> — ¿El componente está habilitado en esta planta? Si No, IBP no puede planificar su consumo ahí. <em>Ej: MAT-A en P001 = No → componente desconocido para IBP en esa planta → 🔴.</em></li>
+              <li><strong>En Location Source (insumo)</strong> — ¿Hay arco de abastecimiento que traiga este insumo a la planta? Muestra N/A para semielaborados. <em>Ej: MAT-A en P001 = No → no hay ruta desde ningún proveedor → 🔴. MAT-A en P001 = Sí → llega desde PROV-01.</em></li>
+              <li><strong>LOCFR origen / LOCDESCR origen</strong> — Código(s) y descripción(es) de las ubicaciones desde donde llega este componente. <em>Ej: PROV-01, PROV-02 / "Proveedor Nacional 01", "Proveedor Nacional 02".</em></li>
+              <li><strong># Orígenes comp. / Orígenes comp. (códigos)</strong> — Cuántos nodos origen distintos abastecen este componente hacia esta planta. <em>Ej: 2 / PROV-01, PROV-02 = doble fuente.</em></li>
+              <li><strong>Material de reemplazo (ISALTITEM)</strong> — X = este componente es sustituto alternativo de otro. Vacío = componente principal. <em>Ej: MAT-A-PREMIUM con X = puede sustituir a MAT-A.</em></li>
+              <li><strong>Reemplaza a</strong> — Código del componente principal al que reemplaza este sustituto. <em>Ej: MAT-A.</em></li>
             </ul>
           </div>
         </div>
@@ -1444,18 +1471,33 @@
         <!-- PSR -->
         <div class="guide-item">
           <div class="guide-item-header" onclick="guideToggle(this)">
-            <span>⚙️ Prod Source Resource (PSR)</span><span class="guide-arr">▶</span>
+            <span>⚙️ 8 · Prod Source Resource (PSR)</span><span class="guide-arr">▶</span>
           </div>
           <div class="guide-item-body hidden">
-            <p>Asignaciones recurso → fuente de producción. Un par <code>RESID + SOURCEID</code> por fila.</p>
+            <p>Un par recurso + receta por fila. Muestra qué máquinas o puestos de trabajo están asignados a cada proceso de producción y verifica que estén correctamente registrados en Resource Location.</p>
             <ul>
-              <li><strong>Estado</strong> — Color de alerta.</li>
-              <li><strong>SOURCEID</strong> — Fuente de producción a la que se asigna el recurso.</li>
-              <li><strong>PRDID output</strong> — Producto que fabrica esa fuente.</li>
-              <li><strong>LOCID planta</strong> — Planta donde opera la fuente.</li>
-              <li><strong>RESID</strong> — Recurso asignado a esta fuente.</li>
-              <li><strong>RESID+LOCID en Resource Location?</strong> — ¿La combinación recurso-planta está configurada en Resource Location? Si es No, el recurso no tiene ubicación en esa planta.</li>
-              <li><strong>Observacion</strong> — Registros 🔴 indican asignaciones huérfanas: el recurso o la fuente no existen en sus respectivos maestros, lo que puede causar errores en el motor de planificación.</li>
+              <li><strong>SOURCEID / PRDID output / LOCID planta</strong> — La receta a la que está asignado el recurso, el producto que fabrica y la planta donde opera. <em>Ej: SRC-001 / PROD-001 / P001.</em></li>
+              <li><strong>RESID / RESDESCR</strong> — Código y descripción del recurso asignado. <em>Ej: LINEA-01 / "Línea de envasado 1".</em></li>
+              <li><strong>RESID+LOCID en Resource Location</strong> — ¿Este recurso tiene planta asignada en el maestro para la planta donde opera? Si No, el recurso está en la receta pero IBP no lo reconoce como ubicado en esa planta. <em>Ej: LINEA-01 en P001 = No → inconsistencia PSR vs Resource Location → 🟡.</em></li>
+              <li><strong># Plantas con este recurso asignado / Plantas recurso (códigos)</strong> — En cuántas plantas tiene Resource Location configurado y cuáles son. <em>Ej: 2 / P001, P002.</em></li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Tipos Excluidos -->
+        <div class="guide-item">
+          <div class="guide-item-header" onclick="guideToggle(this)">
+            <span>🚫 9 · Tipos Excluidos <em style="font-weight:400;font-size:11px;">(condicional)</em></span><span class="guide-arr">▶</span>
+          </div>
+          <div class="guide-item-body hidden">
+            <p>Aparece solo cuando hay tipos de material marcados como excluidos del análisis principal en la configuración de tipos. Un tipo excluido no genera filas en las hojas anteriores, pero si sus productos aparecen como componentes en BOMs activos, se valida su cobertura de abastecimiento.</p>
+            <ul>
+              <li><strong>MATTYPEID</strong> — Código del tipo excluido. <em>Ej: VERP = embalajes, NLAG = no planificados.</em></li>
+              <li><strong># Productos</strong> — Cuántos productos del maestro tienen este tipo. <em>Ej: 45 productos de tipo VERP.</em></li>
+              <li><strong>Aparece como componente PSI en # SOURCEIDs</strong> — Cuántas recetas activas usan productos de este tipo como ingrediente. <em>Ej: 12 = 12 recetas distintas requieren un VERP como componente.</em></li>
+              <li><strong>SOURCEIDs donde es componente (códigos)</strong> — Códigos de esas recetas. <em>Ej: SRC-001, SRC-005.</em></li>
+              <li><strong>Componentes con cobertura LocSrc</strong> — Pares producto-planta de este tipo con arco de abastecimiento configurado. <em>Ej: 8 combinaciones con ruta ok.</em></li>
+              <li><strong>Componentes sin cobertura LocSrc</strong> — Pares producto-planta SIN arco de abastecimiento. Si &gt; 0 hay insumos excluidos sin ruta de llegada a la planta que los consume. <em>Ej: 3 → aunque el tipo esté excluido del análisis principal, el gap existe → 🟡.</em></li>
             </ul>
           </div>
         </div>
@@ -1581,40 +1623,60 @@
       </div>
     </div>
 
-    <!-- ═══ PA: MODO DE EXPORTACIÓN ═══ -->
+    <!-- ═══ PA: EXCLUIR TIPOS DE MATERIAL (opcional) ═══ -->
+    <div class="mattype-panel hidden" id="panelPAExclude">
+      <div class="mattype-panel-header" onclick="mattypeToggleExcludePanel()">
+        <div class="mattype-panel-title">
+          ② Excluir tipos de material
+          <span class="mattype-optional-badge">Opcional</span>
+        </div>
+        <div class="mattype-panel-actions">
+          <span class="mattype-summary" id="mattypeExcludeSummary">Todos los tipos incluidos — sin configurar</span>
+          <button class="mattype-reset-btn" onclick="event.stopPropagation();mattypeResetExclude()">Restablecer</button>
+          <span class="mattype-arr" id="mattypeExcludeArr">▶</span>
+        </div>
+      </div>
+      <div class="mattype-panel-body" id="mattypeExcludeBody" style="display:none;">
+        <div id="mattypeExcludeWrap"></div>
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="btn btn-primary btn-small" onclick="paContinueToCategories()">Continuar &#8594;</button>
+          <button class="btn btn-secondary btn-small" onclick="paBackToMapping()">&#8592; Volver al mapeo</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ PA: CATEGORIZAR TIPOS (opcional) ═══ -->
+    <div class="mattype-panel hidden" id="panelPACategories">
+      <div class="mattype-panel-header" onclick="mattypeToggleCatPanel()">
+        <div class="mattype-panel-title">
+          ③ Categorizar tipos de material
+          <span class="mattype-optional-badge">Opcional</span>
+        </div>
+        <div class="mattype-panel-actions">
+          <span class="mattype-summary" id="mattypeCatSummary">Sin categorización — análisis estándar</span>
+          <button class="mattype-reset-btn" onclick="event.stopPropagation();mattypeResetCat()">Restablecer</button>
+          <span class="mattype-arr" id="mattypeCatArr">▶</span>
+        </div>
+      </div>
+      <div class="mattype-panel-body" id="mattypeCatBody" style="display:none;">
+        <div id="mattypeCatWrap"></div>
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="btn btn-primary btn-small" onclick="paContinueToRun()">Continuar &#8594;</button>
+          <button class="btn btn-secondary btn-small" onclick="paBackToExclude()">&#8592; Volver</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ PA: EJECUTAR ANÁLISIS ═══ -->
     <div class="panel hidden" id="panelPAExportMode">
-      <div class="panel-title">③ Modo de exportación</div>
+      <div class="panel-title">④ Ejecutar análisis</div>
       <div id="bodyPAExportMode">
-        <p style="font-size:12px;color:var(--text2);margin-bottom:12px;">
-          Selecciona cómo deseas exportar el análisis de jerarquía de producción.
-        </p>
-        <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
-
-          <!-- LIGHT -->
-          <label for="modeLightPA" style="flex:1;min-width:240px;cursor:pointer;display:block;border:2px solid var(--accent);border-radius:8px;padding:14px 16px;background:rgba(247,168,0,0.06);transition:border-color .2s;" id="cardLightPA">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-              <input type="radio" name="paExportMode" value="light" id="modeLightPA" checked onchange="paModeChange()">
-              <span style="font-weight:700;font-size:13px;color:var(--accent);">Light — CSV comprimido</span>
-              <span style="font-size:10px;background:var(--accent);color:#0b1120;padding:1px 6px;border-radius:10px;font-weight:700;">Recomendado</span>
-            </div>
-            <p style="font-size:12px;color:var(--text2);margin:0 0 6px;">Genera un archivo <strong>.zip</strong> con 7 archivos <strong>.csv</strong> (Resumen, Product, Resource, Resource Location, Prod Source Header, Prod Source Item, Prod Source Resource). Sin formato ni colores. Ideal para volúmenes de datos altos o procesamiento posterior en Excel / Python / BI.</p>
-            <p style="font-size:11px;color:var(--green);margin:0;"><strong>Uso de memoria: muy bajo.</strong> Los datos se construyen como texto plano y se comprimen con JSZip sin mantener todo en RAM simultáneamente.</p>
-          </label>
-
-          <!-- HEAVY -->
-          <label for="modeHeavyPA" style="flex:1;min-width:240px;cursor:pointer;display:block;border:2px solid var(--border,#1e2d45);border-radius:8px;padding:14px 16px;background:rgba(41,171,226,0.04);transition:border-color .2s;" id="cardHeavyPA">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-              <input type="radio" name="paExportMode" value="heavy" id="modeHeavyPA" onchange="paModeChange()">
-              <span style="font-weight:700;font-size:13px;color:var(--cyan);">Heavy — Excel formateado</span>
-            </div>
-            <p style="font-size:12px;color:var(--text2);margin:0 0 6px;">Genera un archivo <strong>.xlsx</strong> con 7 hojas formateadas: colores por severidad (🔴/🟡/✅), encabezados congelados, anchos automáticos y hoja de Resumen con estadísticas de consistencia.</p>
-            <p style="font-size:11px;color:var(--amber,#f59e0b);margin:0;"><strong>Uso de memoria: alto.</strong> ExcelJS mantiene cada celda con metadatos de estilo en memoria; en datasets grandes puede superar varios cientos de MB en el navegador.</p>
-          </label>
-
+        <div id="paRunSummary" style="font-size:12px;color:var(--text2);margin-bottom:14px;padding:10px 12px;background:rgba(41,171,226,.05);border-left:3px solid var(--cyan);border-radius:4px;">
+          Configuración por defecto — análisis estándar
         </div>
         <div class="btn-row">
-          <button class="btn btn-primary" id="btnFetchPA" onclick="doProductionAnalysis()">Iniciar análisis</button>
-          <button class="btn btn-secondary btn-small" onclick="paBackToMapping()">&#8592; Volver al mapeo</button>
+          <button class="btn btn-primary" id="btnFetchPA" onclick="doProductionAnalysis()">▶ Ejecutar análisis</button>
+          <button class="btn btn-secondary btn-small" onclick="paBackToCategories()">&#8592; Volver</button>
         </div>
         <div class="progress-bar hidden" id="progBarPA">
           <div class="fill" id="progFillPA" style="width:0%"></div>
@@ -1940,6 +2002,7 @@
   <script src="js/bom.js"></script>
   <script src="js/analyzer.js"></script>
   <script src="js/visualizer.js"></script>
+  <script src="js/mattype-config.js"></script>
   <script src="js/prodAnalyzer.js"></script>
   <script src="js/main.js"></script>
   <script src="js/docs.js"></script>
