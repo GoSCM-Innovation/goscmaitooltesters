@@ -358,6 +358,11 @@
               var tbl = self._h ? HDR_FILL_XF : DATA_FILL_XF;
               self._cellSi[ci] = tbl[argb] !== undefined ? tbl[argb] : (self._h ? _HDR : _NORM);
             },
+            set note(n) {
+              if (!n) return;
+              if (!self._notes) self._notes = {};
+              self._notes[ci] = n;
+            },
             set font(_) {}, set alignment(_) {}, set border(_) {}
           }, ci + 1);
         });
@@ -377,6 +382,7 @@
         this._nCols  = 0;
         this._rn     = 0;
         this._pend   = null;
+        this._notes  = {};
       }
 
       _Sheet.prototype._flush = function () {
@@ -384,6 +390,7 @@
         var p = this._pend; this._pend = null;
         var si = p._h ? _HDR : _si(p._fill);
         this._chunks.push(_rowXml(p.data, p.rowNum, si, p._ht, p._cellSi));
+        if (p._notes) this._notes[p.rowNum] = p._notes;
         var cw = this._colW, nc = this._nCols;
         p.data.forEach(function (v, ci) {
           var l = v != null ? String(v).length : 0;
@@ -419,6 +426,73 @@
         }
       });
 
+      _Sheet.prototype._hasNotes = function () {
+        var n = this._notes;
+        for (var k in n) { if (Object.prototype.hasOwnProperty.call(n, k)) return true; }
+        return false;
+      };
+
+      _Sheet.prototype._commentsXml = function () {
+        var parts = [
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+          '<comments xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">',
+          '<authors><author>GoSCM</author></authors><commentList>'
+        ];
+        var notes = this._notes;
+        Object.keys(notes).forEach(function (rn) {
+          var row = notes[rn];
+          Object.keys(row).forEach(function (ci) {
+            var ref = _col(parseInt(ci, 10) + 1) + rn;
+            parts.push('<comment ref="', ref, '" authorId="0"><text><r><t xml:space="preserve">',
+              _xe(row[ci]), '</t></r></text></comment>');
+          });
+        });
+        parts.push('</commentList></comments>');
+        return parts.join('');
+      };
+
+      _Sheet.prototype._vmlXml = function () {
+        var parts = [
+          '<xml xmlns:v="urn:schemas-microsoft-com:vml"',
+          ' xmlns:o="urn:schemas-microsoft-com:office:office"',
+          ' xmlns:x="urn:schemas-microsoft-com:office:excel">',
+          '<o:shapelayout v:ext="edit"><o:idmap v:ext="edit" data="1"/></o:shapelayout>',
+          '<v:shapetype id="_x0000_t202" coordsize="21600,21600" o:spt="202"',
+          ' path="m,l,21600r21600,l21600,xe">',
+          '<v:stroke joinstyle="miter"/>',
+          '<v:path gradientshapeok="t" o:connecttype="rect"/>',
+          '</v:shapetype>'
+        ];
+        var sid = 1025;
+        var notes = this._notes;
+        Object.keys(notes).forEach(function (rn) {
+          var row = notes[rn];
+          var rowIdx = parseInt(rn, 10) - 1;
+          Object.keys(row).forEach(function (ci) {
+            var colIdx = parseInt(ci, 10);
+            var lc = colIdx + 1, rc = colIdx + 6;
+            var anchor = lc + ', 15, ' + rowIdx + ', 2, ' + rc + ', 15, ' + (rowIdx + 5) + ', 16';
+            parts.push(
+              '<v:shape id="_x0000_s', sid++, '" type="#_x0000_t202"',
+              ' style="position:absolute;margin-left:59.25pt;margin-top:1.5pt;width:108pt;height:59.25pt;z-index:1;visibility:hidden"',
+              ' fillcolor="#ffffe1" o:insetmode="auto">',
+              '<v:fill color2="#ffffe1"/><v:shadow color="black" obscured="t"/>',
+              '<v:path o:connecttype="none"/>',
+              '<v:textbox style="mso-direction-alt:auto"><div style="text-align:left"/></v:textbox>',
+              '<x:ClientData ObjectType="Note">',
+              '<x:MoveWithCells/><x:SizeWithCells/>',
+              '<x:Anchor>', anchor, '</x:Anchor>',
+              '<x:AutoFill>False</x:AutoFill>',
+              '<x:Row>', rowIdx, '</x:Row>',
+              '<x:Column>', colIdx, '</x:Column>',
+              '</x:ClientData></v:shape>'
+            );
+          });
+        });
+        parts.push('</xml>');
+        return parts.join('');
+      };
+
       _Sheet.prototype._toXml = function () {
         this._flush();
         var hdr = [
@@ -446,8 +520,10 @@
         hdr.push('<sheetData>');
         var chunks = this._chunks || [];
         this._chunks = null;   // libera refs → GC puede reclamar los strings de filas
-        return new Blob(hdr.concat(chunks, ['</sheetData></worksheet>']),
-                        { type: 'application/xml' });
+        var footer = ['</sheetData>'];
+        if (this._hasNotes()) footer.push('<legacyDrawing r:id="rId1"/>');
+        footer.push('</worksheet>');
+        return new Blob(hdr.concat(chunks, footer), { type: 'application/xml' });
       };
 
       /* ── Workbook ── */
@@ -508,17 +584,35 @@
       StreamingXlsx.prototype.toBlob = async function () {
         var sheets = this._sheets, n = sheets.length, zip = new JSZip();
 
+        // Serializar hojas primero (dispara _flush → captura notas)
+        var hasNotes = new Array(n).fill(false);
+        for (var i = 0; i < n; i++) {
+          zip.file('xl/worksheets/sheet' + (i + 1) + '.xml', sheets[i]._toXml());
+          hasNotes[i] = sheets[i]._hasNotes();
+          await new Promise(function (r) { setTimeout(r, 0); }); // yield al GC
+        }
+        var anyNotes = hasNotes.some(Boolean);
+
+        // Content-Types — se construye después de conocer qué hojas tienen notas
         var ct = [
           '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
           '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">',
           '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>',
-          '<Default Extension="xml" ContentType="application/xml"/>',
+          '<Default Extension="xml" ContentType="application/xml"/>'
+        ];
+        if (anyNotes)
+          ct.push('<Default Extension="vml" ContentType="application/vnd.openxmlformats-officedocument.vmlDrawing"/>');
+        ct.push(
           '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>',
           '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
-        ];
-        for (var i = 0; i < n; i++)
+        );
+        for (var i = 0; i < n; i++) {
           ct.push('<Override PartName="/xl/worksheets/sheet', (i + 1), '.xml"',
             ' ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>');
+          if (hasNotes[i])
+            ct.push('<Override PartName="/xl/comments', (i + 1), '.xml"',
+              ' ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.comments+xml"/>');
+        }
         ct.push('</Types>');
         zip.file('[Content_Types].xml', ct.join(''));
 
@@ -552,10 +646,19 @@
 
         zip.file('xl/styles.xml', this._styles());
 
-        // Serializar una hoja a la vez — libera _chunks antes de pasar a la siguiente
+        // Archivos de comentarios y VML para hojas que los tienen
         for (var i = 0; i < n; i++) {
-          zip.file('xl/worksheets/sheet' + (i + 1) + '.xml', sheets[i]._toXml());
-          await new Promise(function (r) { setTimeout(r, 0); }); // yield al GC
+          if (!hasNotes[i]) continue;
+          zip.file('xl/worksheets/_rels/sheet' + (i + 1) + '.xml.rels',
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments"' +
+            ' Target="../comments' + (i + 1) + '.xml"/>' +
+            '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing"' +
+            ' Target="../drawings/vmlDrawing' + (i + 1) + '.vml"/>' +
+            '</Relationships>');
+          zip.file('xl/comments' + (i + 1) + '.xml', sheets[i]._commentsXml());
+          zip.file('xl/drawings/vmlDrawing' + (i + 1) + '.vml', sheets[i]._vmlXml());
         }
 
         return zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
