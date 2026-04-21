@@ -330,7 +330,7 @@
           if (typeof v === 'number' && isFinite(v))
             p.push('<c r="', ref, '" t="n"', sa, '><v>', v, '</v></c>');
           else { var txt = _xe(v);
-            if (txt) p.push('<c r="', ref, '" t="inlineStr"', sa, '><is><t xml:space="preserve">', txt, '</t></is></c>');
+            if (txt) p.push('<c r="', ref, '" t="inlineStr"', sa, '><is><t>', txt, '</t></is></c>');
             else     p.push('<c r="', ref, '"', sa, '/>');
           }
         }
