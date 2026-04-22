@@ -1210,7 +1210,7 @@
     <!-- Rutas panel (aparece cuando se carga un producto) -->
     <div id="vizRutasPanel" style="display:none;border-top:1px solid var(--border);background:var(--bg2);padding:10px 24px;">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-        <div style="display:flex;align-items:center;gap:10px;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
           <button id="btnVizRutasToggle" onclick="vizRutasToggle()"
             style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:11px;cursor:pointer;padding:2px 10px;line-height:1.6;white-space:nowrap;">▶ Rutas</button>
           <span id="vizRutasSummary" style="font-size:11px;color:var(--text2);"></span>
@@ -1218,8 +1218,19 @@
         <button id="btnVizRutasCsv" onclick="vizRutasCsv()"
           class="btn btn-secondary btn-small" style="display:none;font-size:11px;">↓ Exportar CSV</button>
       </div>
-      <div id="vizRutasBody" style="display:none;margin-top:10px;max-height:360px;overflow-y:auto;">
-        <div id="vizRutasTable"></div>
+      <div id="vizRutasBody" style="display:none;margin-top:10px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+          <span style="font-size:11px;color:var(--text2);">Tipo:</span>
+          <button id="vizRutasBtn_all"      onclick="vizRutasSetTipo('all')"      style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--accent);font-weight:700;">Todas</button>
+          <button id="vizRutasBtn_complete" onclick="vizRutasSetTipo('complete')" style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--text2);font-weight:400;">Completas</button>
+          <button id="vizRutasBtn_partial"  onclick="vizRutasSetTipo('partial')"  style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--text2);font-weight:400;">Parciales</button>
+          <input id="vizRutasSearch" type="text" placeholder="Buscar planta o cliente…"
+            oninput="vizRutasSetQ(this.value,'vizRutasSearch')"
+            style="font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);width:180px;">
+        </div>
+        <div style="max-height:360px;overflow-y:auto;">
+          <div id="vizRutasTable"></div>
+        </div>
       </div>
     </div>
 
@@ -1276,6 +1287,33 @@
               style="width:12px;height:12px;transform:rotate(45deg);background:#a78bfa;display:inline-block;flex-shrink:0;"></span>
             <span>Proveedor</span>
           </label>
+        </div>
+      </div>
+      <!-- Fullscreen — Rutas panel (overlay inferior) -->
+      <div id="vizFsRutasPanel"
+        style="display:none;position:absolute;bottom:0;left:0;right:0;z-index:5;background:rgba(11,17,32,0.97);border-top:1px solid var(--border);padding:8px 20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <button id="btnVizFsRutasToggle" onclick="vizFsRutasToggle()"
+              style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:11px;cursor:pointer;padding:2px 10px;line-height:1.6;white-space:nowrap;">▶ Rutas</button>
+            <span id="vizFsRutasSummary" style="font-size:11px;color:var(--text2);"></span>
+          </div>
+          <button id="btnVizFsRutasCsv" onclick="vizRutasCsv()"
+            class="btn btn-secondary btn-small" style="display:none;font-size:11px;">↓ Exportar CSV</button>
+        </div>
+        <div id="vizFsRutasBody" style="display:none;margin-top:8px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+            <span style="font-size:11px;color:var(--text2);">Tipo:</span>
+            <button id="vizFsRutasBtn_all"      onclick="vizRutasSetTipo('all')"      style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--accent);font-weight:700;">Todas</button>
+            <button id="vizFsRutasBtn_complete"  onclick="vizRutasSetTipo('complete')" style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--text2);font-weight:400;">Completas</button>
+            <button id="vizFsRutasBtn_partial"   onclick="vizRutasSetTipo('partial')"  style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--text2);font-weight:400;">Parciales</button>
+            <input id="vizFsRutasSearch" type="text" placeholder="Buscar planta o cliente…"
+              oninput="vizRutasSetQ(this.value,'vizFsRutasSearch')"
+              style="font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);width:180px;">
+          </div>
+          <div style="max-height:220px;overflow-y:auto;">
+            <div id="vizFsRutasTable"></div>
+          </div>
         </div>
       </div>
     </dialog>
