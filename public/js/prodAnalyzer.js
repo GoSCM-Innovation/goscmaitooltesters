@@ -1611,7 +1611,7 @@ async function paAnalyzeAndExport(
       '# Plantas con este recurso asignado','Plantas recurso (códigos)'
     ], [
       'Color de alerta: 🟡 Advertencia = recurso asignado a una receta pero sin Resource Location en esa planta | ✅ OK = asignación válida y consistente.',
-      'Detalle de la validación. Ej ✅: "OK". Ej 🟡: "Recurso en producción sin asignación en Resource Location para planta P001" — el recurso opera en una receta de P001 pero no figura en el maestro de esa planta.',
+      'Detalle de la validación. Ej ✅: "Recurso LINEA-01 asignado en Resource Location para planta P001 | Asociado a SOURCEID SRC-001". Ej 🟡: "Recurso en producción sin asignación en Resource Location para planta P001" — el recurso opera en una receta de P001 pero no figura en el maestro de esa planta.',
       'Fuente de producción (SOURCEID) a la que está asignado este recurso. Ej: SRC-001.',
       'Código del producto que fabrica esta fuente. Ej: PROD-001.',
       'Descripción del producto output. Ej: "Aceite refinado 1L".',
@@ -1649,7 +1649,7 @@ async function paAnalyzeAndExport(
       var noSrc  = !locid;
       var resPlants = resLocMapByResid[resid] || new Set();
       var obs    = noSrc ? 'SOURCEID no encontrado en PSH'
-                 : inRL  ? 'OK'
+                 : inRL  ? 'Recurso ' + resid + ' asignado en Resource Location para planta ' + locid + ' | Asociado a SOURCEID ' + sid
                  :          'Recurso en producción sin asignación en Resource Location para planta ' + locid;
       var fill   = noSrc ? C_YEL : inRL ? null : C_YEL;
       S8.addRow([
