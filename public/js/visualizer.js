@@ -970,9 +970,10 @@
     var _vizRutasFiltro = { tipo: 'all', q: '' };
     var _RUTAS_CAP     = 500;
 
-    /* DFS desde cada planta; captura rutas completas (→ cliente) y
-       parciales (nodo sin más salidas disponibles, sin cliente). */
-    function vizFindAllRoutesWithPartial(graph) {
+    /* DFS desde cada planta; captura todas las rutas posibles y las categoriza:
+       hasCustomer=true  → Con llegada a cliente
+       hasCustomer=false → Sin llegada a cliente (dead-end) */
+    function vizFindAllRoutes(graph) {
       var results = [];
       var MAX = 50000;
 
@@ -981,12 +982,12 @@
         var custNext = graph.custEdges[node] || [];
         var locNext  = (graph.locEdges[node] || []).filter(function(n) { return !visited[n]; });
         if (custNext.length === 0 && locNext.length === 0) {
-          results.push({ plant: path[0], nodes: path.slice(), customer: null, complete: false });
+          results.push({ plant: path[0], nodes: path.slice(), customer: null, hasCustomer: false });
           return;
         }
         custNext.forEach(function(cust) {
           if (results.length < MAX)
-            results.push({ plant: path[0], nodes: path.slice(), customer: cust, complete: true });
+            results.push({ plant: path[0], nodes: path.slice(), customer: cust, hasCustomer: true });
         });
         locNext.forEach(function(loc) {
           if (results.length < MAX) {
@@ -1016,7 +1017,7 @@
       if (!panel) return;
 
       var graph = vizBuildGraphFromData(vizCurrentPrd, VIZ_DATA);
-      _vizRutas = vizFindAllRoutesWithPartial(graph);
+      _vizRutas = vizFindAllRoutes(graph);
 
       // Reset filtros
       _vizRutasFiltro = { tipo: 'all', q: '' };
@@ -1025,10 +1026,10 @@
       });
       _vizRutasBtnSync('all');
 
-      var nC = _vizRutas.filter(function(r) { return  r.complete; }).length;
-      var nP = _vizRutas.filter(function(r) { return !r.complete; }).length;
+      var nC = _vizRutas.filter(function(r) { return  r.hasCustomer; }).length;
+      var nP = _vizRutas.filter(function(r) { return !r.hasCustomer; }).length;
       var truncNote = _vizRutas._truncated ? ' (truncadas a 50.000)' : '';
-      var summText  = nC + ' completa(s)' + (nP ? ' · ' + nP + ' parcial(es)' : '') + truncNote;
+      var summText  = nC + ' con cliente' + (nP ? ' · ' + nP + ' sin cliente' : '') + truncNote;
 
       ['vizRutasSummary', 'vizFsRutasSummary'].forEach(function(id) {
         var el = document.getElementById(id); if (el) el.textContent = summText;
@@ -1051,7 +1052,7 @@
 
     /* Sincroniza estilos activo/inactivo de los botones Tipo en ambos paneles */
     function _vizRutasBtnSync(tipo) {
-      ['all', 'complete', 'partial'].forEach(function(t) {
+      ['all', 'customer', 'nocustomer'].forEach(function(t) {
         ['vizRutasBtn_' + t, 'vizFsRutasBtn_' + t].forEach(function(id) {
           var el = document.getElementById(id);
           if (!el) return;
@@ -1106,8 +1107,8 @@
 
       var filtered = [];
       _vizRutas.forEach(function(r, origIdx) {
-        if (tipo === 'complete' && !r.complete) return;
-        if (tipo === 'partial'  &&  r.complete) return;
+        if (tipo === 'customer'   && !r.hasCustomer) return;
+        if (tipo === 'nocustomer' &&  r.hasCustomer) return;
         if (q) {
           var hay = (r.plant + ' ' + r.nodes.join(' ') + ' ' + (r.customer || '')).toLowerCase();
           if (hay.indexOf(q) === -1) return;
@@ -1142,9 +1143,9 @@
 
       filtered.slice(0, _RUTAS_CAP).forEach(function(item, i) {
         var r = item.r, origIdx = item.origIdx;
-        var label = r.complete
-          ? '<span style="color:var(--green);font-weight:600;">✓ Completa</span>'
-          : '<span style="color:#F59E0B;font-weight:600;">⚠ Parcial</span>';
+        var label = r.hasCustomer
+          ? '<span style="color:var(--green);font-weight:600;">✓ Con cliente</span>'
+          : '<span style="color:#F59E0B;font-weight:600;">⚠ Sin cliente</span>';
         var nodesStr = r.nodes.join(' → ') + (r.customer ? ' → ' + r.customer : '');
         var saltos   = r.nodes.length - 1 + (r.customer ? 1 : 0);
         var bg = i % 2 === 0 ? 'var(--bg)' : 'var(--bg2)';
@@ -1162,8 +1163,8 @@
     }
 
     /* Resalta una ruta en ambos networks. Si algún nodo del path está oculto
-       por filtro (VIZ_HIDDEN_LOC / VIZ_HIDDEN_CUST) lo agrega a la vista
-       sin tocar el resto de filtros activos. */
+       por filtro (VIZ_HIDDEN_LOC / VIZ_HIDDEN_CUST), lo desactiva del filtro
+       y reconstruye el grafo para que el nodo exista en el DataSet. */
     function vizRutasHighlight(origIdx) {
       var r = _vizRutas[origIdx];
       if (!r) return;
@@ -1175,27 +1176,23 @@
         if (VIZ_HIDDEN_LOC.has(nid))  { VIZ_HIDDEN_LOC.delete(nid);  changed = true; }
         if (VIZ_HIDDEN_CUST.has(nid)) { VIZ_HIDDEN_CUST.delete(nid); changed = true; }
       });
+
+      // Si se removieron filtros, reconstruir ambos grafos (los nodos no existían en el DataSet)
       if (changed) {
-        [vizNetwork, vizNetworkFull].forEach(function(net) {
-          if (!net) return;
-          var ds  = net.body.data.nodes;
-          var upd = [];
-          allNodes.forEach(function(nid) {
-            var node = ds.get(nid);
-            if (node && node.hidden) upd.push({ id: nid, hidden: false });
-          });
-          if (upd.length) ds.update(upd);
-        });
-        // Actualizar badge de filtros si existe
-        var badge = document.getElementById('vizFilterBadge');
-        if (badge) {
-          var tot = VIZ_HIDDEN_LOC.size + VIZ_HIDDEN_CUST.size;
-          badge.textContent = tot || '';
-          badge.style.display = tot ? '' : 'none';
+        vizUpdateFilterBtn();
+        vizRerender();
+        var dlg = document.getElementById('vizFullscreenDlg');
+        if (dlg && dlg.open && vizCurrentPrd && VIZ_DATA) {
+          var graph = vizBuildGraph(vizCurrentPrd, VIZ_DATA);
+          if (vizNetworkFull) vizNetworkFull.destroy();
+          vizNetworkFull = vizMakeNetwork(document.getElementById('vizCanvasFull'), graph.nodes, graph.edges);
         }
       }
 
-      // Seleccionar y enfocar en ambos networks
+      _vizRutasSelectInNetwork(r, allNodes);
+    }
+
+    function _vizRutasSelectInNetwork(r, allNodes) {
       [vizNetwork, vizNetworkFull].forEach(function(net) {
         if (!net) return;
         var edgeIds = [];
@@ -1220,7 +1217,7 @@
       var prd   = vizCurrentPrd || 'producto';
       var lines = ['"#","Tipo","Planta","Ruta","Cliente","# Saltos"'];
       _vizRutas.forEach(function(r, i) {
-        var tipo = r.complete ? 'Completa' : 'Parcial';
+        var tipo = r.hasCustomer ? 'Con cliente' : 'Sin cliente';
         var ruta = r.nodes.join(' -> ') + (r.customer ? ' -> ' + r.customer : '');
         lines.push([(i + 1), tipo, r.plant, '"' + ruta + '"', r.customer || '', r.nodes.length - 1 + (r.customer ? 1 : 0)].join(','));
       });
