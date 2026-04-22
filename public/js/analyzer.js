@@ -1047,22 +1047,6 @@
         'metric','metric'
       ]);
 
-      var gPSH = makeGroup('Prod Source Header', 'FFa78bfa', [
-        'Estado','Observacion',
-        'PRDID','PRDDESCR','LOCID','LOCID Descripcion','PLEADTIME','PRATIO'
-      ],[
-        'Color: \u26d4 Alerta | \u26a0 Advertencia | \u2705 OK.',
-        'Detalle de validaciones. En estado OK lista las que pasaron.',
-        'Producto fabricado en esta fuente de produccion.',
-        'Descripcion del producto.',
-        'Ubicacion (planta) donde se fabrica el producto.',
-        'Descripcion de la planta.',
-        'Lead time de produccion en dias. 0 o vacio = \u26a0 Advertencia.',
-        'Ratio de produccion. Vacio = \u26a0 Advertencia.'
-      ],[
-        'control','control',
-        'ibp','ibp','ibp','ibp','metric','metric'
-      ]);
 
       /* ════════════════════════════════════════════════════════════════
          FASE 2 — Pre-índices globales (cursor IDB, sin acumular arrays)
@@ -1555,31 +1539,6 @@
       if (onProgress) onProgress(96);
 
       /* ════════════════════════════════════════════════════════════════
-         FASE 7b — Hoja Prod Source Header (cursor IDB)
-         ════════════════════════════════════════════════════════════════ */
-      if (onStatus) onStatus('Escribiendo hoja Prod Source Header...');
-
-      await idbCursorEach('sn_plant', function (r) {
-        var p   = str(r.PRDID), loc = str(r.LOCID);
-        var plt = str(r.PLEADTIME != null ? r.PLEADTIME : '');
-        var prt = str(r.PRATIO    != null ? r.PRATIO    : '');
-        if (!p) return;
-        if (typeof mattypeIsExcluded === 'function' && mattypeIsExcluded(pm(p))) return;
-
-        var pshObs = [];
-        if (!plt) pshObs.push('PLEADTIME vacio');
-        if (!prt) pshObs.push('PRATIO vacio');
-
-        var pshFill = (!plt || !prt) ? C_YEL : null;
-        var pshObsStr = pshObs.length ? pshObs.join(' | ') : 'PLEADTIME y PRATIO definidos';
-
-        gPSH.addRow([
-          stLabel(pshFill), pshObsStr,
-          p, pd(p), loc, ld(loc), plt, prt
-        ], pshFill);
-      });
-
-      /* ════════════════════════════════════════════════════════════════
          FASE 7c — Hoja Tipos Excluidos
          ════════════════════════════════════════════════════════════════ */
       if (onStatus) onStatus('Escribiendo hoja Tipos Excluidos...');
@@ -1621,8 +1580,7 @@
       if (onStatus) onStatus('Generando Resumen...');
 
       [{ key: 'Product', num: 1 }, { key: 'Location', num: 2 }, { key: 'Customer', num: 3 },
-       { key: 'Location Source', num: 4 }, { key: 'Customer Source', num: 5 },
-       { key: 'Prod Source Header', num: 6 }
+       { key: 'Location Source', num: 4 }, { key: 'Customer Source', num: 5 }
       ].forEach(function (d) {
         var s = STATS[d.key]; if (!s) return;
         var pct  = s.total > 0 ? Math.round((s.ok / s.total) * 100) : 100;
@@ -1658,7 +1616,7 @@
         if (len1 > s0colW[1]) s0colW[1] = len1;
       });
 
-      [gPrd, gLoc, gCust, gLS, gCS, gPSH].forEach(function (g) { g.finalize(); });
+      [gPrd, gLoc, gCust, gLS, gCS].forEach(function (g) { g.finalize(); });
 
       s0ws.columns.forEach(function (col, ci) { col.width = Math.min(Math.max((s0colW[ci] || 10) + 2, 10), 60); });
       if (onProgress) onProgress(97);

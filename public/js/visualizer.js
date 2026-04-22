@@ -960,7 +960,7 @@
       var csvBtn  = document.getElementById('btnVizRutasCsv');
       if (!panel) return;
 
-      var graph = vizBuildGraph(vizCurrentPrd, VIZ_DATA);
+      var graph = vizBuildGraphFromData(vizCurrentPrd, VIZ_DATA);
       var paths = snFindAllPaths(graph);
 
       var plantsWithPaths = {};
