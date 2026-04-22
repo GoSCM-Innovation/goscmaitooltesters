@@ -11,6 +11,9 @@
 
 var MATTYPE_CFG = {};   // mattypeid → { excluded: bool, categories: Set, count: number }
 
+/* ── Prefijo de contexto: '' para PA, 'sn' para SN ── */
+var _mattypePfx = '';
+
 /* ── Categorías disponibles ── */
 var MATTYPE_CATS = [
   {
@@ -136,8 +139,9 @@ function mattyeReset() {
    Toggle ON  = incluido en el análisis (estado inicial)
    Toggle OFF = excluido del análisis
    ═══════════════════════════════════════════════════════════════ */
-function mattyeRenderExclude() {
-  var wrap = document.getElementById('mattypeExcludeWrap');
+function mattyeRenderExclude(pfx) {
+  if (pfx !== undefined) _mattypePfx = pfx;
+  var wrap = document.getElementById(_mattypePfx + 'mattypeExcludeWrap');
   if (!wrap) return;
 
   var types = Object.keys(MATTYPE_CFG).sort();
@@ -184,7 +188,7 @@ function mattypeToggleExclude(mt, included) {
 function _mattyeUpdateExcludeSummary() {
   var excl   = Object.keys(MATTYPE_CFG).filter(function(k) { return MATTYPE_CFG[k].excluded; });
   var nProds = excl.reduce(function(s, k) { return s + (MATTYPE_CFG[k].count || 0); }, 0);
-  var sumEl  = document.getElementById('mattypeExcludeSummary');
+  var sumEl  = document.getElementById(_mattypePfx + 'mattypeExcludeSummary');
   if (!sumEl) return;
   if (!excl.length) {
     sumEl.textContent = 'Todos los tipos incluidos — sin configurar';
@@ -198,8 +202,9 @@ function _mattyeUpdateExcludeSummary() {
    Filas = tipos incluidos · Columnas = 4 categorías
    Estado inicial: todos desactivados (sin categorización)
    ═══════════════════════════════════════════════════════════════ */
-function mattyeRenderCategorize() {
-  var wrap = document.getElementById('mattypeCatWrap');
+function mattyeRenderCategorize(pfx) {
+  if (pfx !== undefined) _mattypePfx = pfx;
+  var wrap = document.getElementById(_mattypePfx + 'mattypeCatWrap');
   if (!wrap) return;
 
   var types = Object.keys(MATTYPE_CFG).filter(function(k) { return !MATTYPE_CFG[k].excluded; }).sort();
@@ -296,7 +301,7 @@ function _mattyeUpdateCatSummary() {
   var types   = Object.keys(MATTYPE_CFG).filter(function(k) { return !MATTYPE_CFG[k].excluded; });
   var catted  = types.filter(function(k) { return MATTYPE_CFG[k].categories.size > 0; });
   var uncatted = types.length - catted.length;
-  var sumEl   = document.getElementById('mattypeCatSummary');
+  var sumEl   = document.getElementById(_mattypePfx + 'mattypeCatSummary');
   if (!sumEl) return;
   if (!catted.length) {
     sumEl.textContent = 'Sin categorización — análisis estándar para todos los tipos';
@@ -310,8 +315,8 @@ function _mattyeUpdateCatSummary() {
    PANELES OPCIONALES — toggle de expansión/colapso
    ═══════════════════════════════════════════════════════════════ */
 function mattypeToggleExcludePanel() {
-  var body = document.getElementById('mattypeExcludeBody');
-  var arr  = document.getElementById('mattypeExcludeArr');
+  var body = document.getElementById(_mattypePfx + 'mattypeExcludeBody');
+  var arr  = document.getElementById(_mattypePfx + 'mattypeExcludeArr');
   if (!body || !arr) return;
   var open = body.style.display !== 'none';
   body.style.display = open ? 'none' : 'block';
@@ -320,8 +325,8 @@ function mattypeToggleExcludePanel() {
 }
 
 function mattypeToggleCatPanel() {
-  var body = document.getElementById('mattypeCatBody');
-  var arr  = document.getElementById('mattypeCatArr');
+  var body = document.getElementById(_mattypePfx + 'mattypeCatBody');
+  var arr  = document.getElementById(_mattypePfx + 'mattypeCatArr');
   if (!body || !arr) return;
   var open = body.style.display !== 'none';
   body.style.display = open ? 'none' : 'block';
@@ -340,6 +345,24 @@ function mattypeResetCat() {
   Object.keys(MATTYPE_CFG).forEach(function(k) { MATTYPE_CFG[k].categories = new Set(); });
   mattypeSave();
   mattyeRenderCategorize();
+  _mattyeUpdateCatSummary();
+}
+
+/* ── Wrappers para SN: establecen prefijo y delegan ── */
+function snMattypeToggleExcludePanel() { _mattypePfx = 'sn'; mattypeToggleExcludePanel(); }
+function snMattypeToggleCatPanel()     { _mattypePfx = 'sn'; mattypeToggleCatPanel(); }
+function snMattypeResetExclude() {
+  _mattypePfx = 'sn';
+  Object.keys(MATTYPE_CFG).forEach(function(k) { MATTYPE_CFG[k].excluded = false; });
+  mattypeSave();
+  mattyeRenderExclude('sn');
+  _mattyeUpdateExcludeSummary();
+}
+function snMattypeResetCat() {
+  _mattypePfx = 'sn';
+  Object.keys(MATTYPE_CFG).forEach(function(k) { MATTYPE_CFG[k].categories = new Set(); });
+  mattypeSave();
+  mattyeRenderCategorize('sn');
   _mattyeUpdateCatSummary();
 }
 

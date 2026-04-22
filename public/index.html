@@ -577,9 +577,9 @@
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
         <div class="panel-title" style="margin-bottom:0;">📄 ¿Qué contiene el archivo de salida?</div>
         <button onclick="guideMinimize('panelSNGuide',this)"
-          style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:11px;cursor:pointer;padding:2px 10px;line-height:1.6;">▲ Minimizar</button>
+          style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:11px;cursor:pointer;padding:2px 10px;line-height:1.6;">▼ Expandir</button>
       </div>
-      <div class="guide-panel-body" id="panelSNGuideBody">
+      <div class="guide-panel-body hidden" id="panelSNGuideBody">
       <p style="font-size:12px;color:var(--text2);margin:0 0 14px;">El Excel generado contiene <strong style="color:var(--text);">6 hojas</strong>. Expande cada una para ver el detalle de sus columnas.</p>
 
       <div class="guide-accordion">
@@ -891,40 +891,60 @@
       </div>
     </div>
 
-    <!-- ═══ SUPPLY NETWORK: MODO DE EXPORTACIÓN ═══ -->
+    <!-- ═══ SN: EXCLUIR TIPOS DE MATERIAL (opcional) ═══ -->
+    <div class="mattype-panel hidden" id="panelSNExclude">
+      <div class="mattype-panel-header" onclick="snMattypeToggleExcludePanel()">
+        <div class="mattype-panel-title">
+          ② Excluir tipos de material
+          <span class="mattype-optional-badge">Opcional</span>
+        </div>
+        <div class="mattype-panel-actions">
+          <span class="mattype-summary" id="snmattypeExcludeSummary">Todos los tipos incluidos — sin configurar</span>
+          <button class="mattype-reset-btn" onclick="event.stopPropagation();snMattypeResetExclude()">Restablecer</button>
+          <span class="mattype-arr" id="snmattypeExcludeArr">▶</span>
+        </div>
+      </div>
+      <div class="mattype-panel-body" id="snmattypeExcludeBody" style="display:none;">
+        <div id="snmattypeExcludeWrap"></div>
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="btn btn-primary btn-small" onclick="snContinueToCategories()">Continuar &#8594;</button>
+          <button class="btn btn-secondary btn-small" onclick="doBackToMapping()">&#8592; Volver al mapeo</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ SN: CATEGORIZAR TIPOS DE MATERIAL (opcional) ═══ -->
+    <div class="mattype-panel hidden" id="panelSNCategories">
+      <div class="mattype-panel-header" onclick="snMattypeToggleCatPanel()">
+        <div class="mattype-panel-title">
+          ③ Categorizar tipos de material
+          <span class="mattype-optional-badge">Opcional</span>
+        </div>
+        <div class="mattype-panel-actions">
+          <span class="mattype-summary" id="snmattypeCatSummary">Sin categorización — análisis estándar</span>
+          <button class="mattype-reset-btn" onclick="event.stopPropagation();snMattypeResetCat()">Restablecer</button>
+          <span class="mattype-arr" id="snmattypeCatArr">▶</span>
+        </div>
+      </div>
+      <div class="mattype-panel-body" id="snmattypeCatBody" style="display:none;">
+        <div id="snmattypeCatWrap"></div>
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="btn btn-primary btn-small" onclick="snContinueToRun()">Continuar &#8594;</button>
+          <button class="btn btn-secondary btn-small" onclick="snBackToExclude()">&#8592; Volver</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ SN: EJECUTAR ANÁLISIS ═══ -->
     <div class="panel hidden" id="panelSNExportMode">
-      <div class="panel-title">③ Modo de exportación</div>
+      <div class="panel-title">④ Ejecutar análisis</div>
       <div id="bodySNExportMode">
-        <p style="font-size:12px;color:var(--text2);margin-bottom:12px;">
-          Selecciona cómo deseas exportar el análisis de la red de suministro.
-        </p>
-        <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
-
-          <!-- LIGHT -->
-          <label for="modeLightSN" style="flex:1;min-width:240px;cursor:pointer;display:block;border:2px solid var(--accent);border-radius:8px;padding:14px 16px;background:rgba(247,168,0,0.06);transition:border-color .2s;" id="cardLightSN">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-              <input type="radio" name="snExportMode" value="light" id="modeLightSN" checked onchange="snModeChange()">
-              <span style="font-weight:700;font-size:13px;color:var(--accent);">Light — CSV comprimido</span>
-              <span style="font-size:10px;background:var(--accent);color:#0b1120;padding:1px 6px;border-radius:10px;font-weight:700;">Recomendado</span>
-            </div>
-            <p style="font-size:12px;color:var(--text2);margin:0 0 6px;">Genera un archivo <strong>.zip</strong> con 6 archivos <strong>.csv</strong> (Resumen, Product, Location, Customer, Location Source, Customer Source). Sin formato ni colores. Ideal para volúmenes de datos altos o procesamiento posterior en Excel / Python / BI.</p>
-            <p style="font-size:11px;color:var(--green);margin:0;"><strong>Uso de memoria: muy bajo.</strong> Los datos se construyen como texto plano y se comprimen con JSZip sin mantener todo en RAM simultáneamente.</p>
-          </label>
-
-          <!-- HEAVY -->
-          <label for="modeHeavySN" style="flex:1;min-width:240px;cursor:pointer;display:block;border:2px solid var(--border,#1e2d45);border-radius:8px;padding:14px 16px;background:rgba(41,171,226,0.04);transition:border-color .2s;" id="cardHeavySN">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-              <input type="radio" name="snExportMode" value="heavy" id="modeHeavySN" onchange="snModeChange()">
-              <span style="font-weight:700;font-size:13px;color:var(--cyan);">Heavy — Excel formateado</span>
-            </div>
-            <p style="font-size:12px;color:var(--text2);margin:0 0 6px;">Genera un archivo <strong>.xlsx</strong> con 6 hojas formateadas: colores por severidad (🔴/🟡/✅), encabezados congelados, anchos automáticos y hoja de Resumen con estadísticas de consistencia.</p>
-            <p style="font-size:11px;color:var(--green,#34d399);margin:0;"><strong>Uso de memoria: bajo.</strong> Genera un Excel unificado que puede superar los cientos de MB.</p>
-          </label>
-
+        <div id="snRunSummary" style="font-size:12px;color:var(--text2);margin-bottom:14px;padding:10px 12px;background:rgba(41,171,226,.05);border-left:3px solid var(--cyan);border-radius:4px;">
+          Configuración por defecto — análisis estándar para todos los tipos
         </div>
         <div class="btn-row">
-          <button class="btn btn-primary" id="btnFetchSN" onclick="doAnalyzeAndExport()">Iniciar análisis</button>
-          <button class="btn btn-secondary btn-small" onclick="doBackToMapping()">← Volver al mapeo</button>
+          <button class="btn btn-primary" id="btnFetchSN" onclick="doAnalyzeAndExport()">&#9654; Ejecutar análisis</button>
+          <button class="btn btn-secondary btn-small" onclick="snBackToCategories()">&#8592; Volver</button>
         </div>
         <div class="progress-bar hidden" id="progBarSN">
           <div class="fill" id="progFillSN" style="width:0%"></div>
@@ -1187,6 +1207,32 @@
       <div id="vizCanvas" style="width:100%;height:0;background:var(--bg);"></div>
     </div>
 
+    <!-- Rutas panel (aparece cuando se carga un producto) -->
+    <div id="vizRutasPanel" style="display:none;border-top:1px solid var(--border);background:var(--bg2);padding:10px 24px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <button id="btnVizRutasToggle" onclick="vizRutasToggle()"
+            style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:11px;cursor:pointer;padding:2px 10px;line-height:1.6;white-space:nowrap;">▶ Rutas</button>
+          <span id="vizRutasSummary" style="font-size:11px;color:var(--text2);"></span>
+        </div>
+        <button id="btnVizRutasCsv" onclick="vizRutasCsv()"
+          class="btn btn-secondary btn-small" style="display:none;font-size:11px;">↓ Exportar CSV</button>
+      </div>
+      <div id="vizRutasBody" style="display:none;margin-top:10px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+          <span style="font-size:11px;color:var(--text2);">Tipo:</span>
+          <button id="vizRutasBtn_all"      onclick="vizRutasSetTipo('all')"      style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--accent);font-weight:700;">Todas</button>
+          <button id="vizRutasBtn_complete" onclick="vizRutasSetTipo('complete')" style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--text2);font-weight:400;">Completas</button>
+          <button id="vizRutasBtn_partial"  onclick="vizRutasSetTipo('partial')"  style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--text2);font-weight:400;">Parciales</button>
+          <input id="vizRutasSearch" type="text" placeholder="Buscar planta o cliente…"
+            oninput="vizRutasSetQ(this.value,'vizRutasSearch')"
+            style="font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);width:180px;">
+        </div>
+        <div style="max-height:360px;overflow-y:auto;">
+          <div id="vizRutasTable"></div>
+        </div>
+      </div>
+    </div>
 
     <!-- Fullscreen dialog -->
     <dialog id="vizFullscreenDlg"
@@ -1241,6 +1287,33 @@
               style="width:12px;height:12px;transform:rotate(45deg);background:#a78bfa;display:inline-block;flex-shrink:0;"></span>
             <span>Proveedor</span>
           </label>
+        </div>
+      </div>
+      <!-- Fullscreen — Rutas panel (overlay inferior) -->
+      <div id="vizFsRutasPanel"
+        style="display:none;position:absolute;bottom:0;left:0;right:0;z-index:5;background:rgba(11,17,32,0.97);border-top:1px solid var(--border);padding:8px 20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <button id="btnVizFsRutasToggle" onclick="vizFsRutasToggle()"
+              style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:11px;cursor:pointer;padding:2px 10px;line-height:1.6;white-space:nowrap;">▶ Rutas</button>
+            <span id="vizFsRutasSummary" style="font-size:11px;color:var(--text2);"></span>
+          </div>
+          <button id="btnVizFsRutasCsv" onclick="vizRutasCsv()"
+            class="btn btn-secondary btn-small" style="display:none;font-size:11px;">↓ Exportar CSV</button>
+        </div>
+        <div id="vizFsRutasBody" style="display:none;margin-top:8px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+            <span style="font-size:11px;color:var(--text2);">Tipo:</span>
+            <button id="vizFsRutasBtn_all"      onclick="vizRutasSetTipo('all')"      style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--accent);font-weight:700;">Todas</button>
+            <button id="vizFsRutasBtn_complete"  onclick="vizRutasSetTipo('complete')" style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--text2);font-weight:400;">Completas</button>
+            <button id="vizFsRutasBtn_partial"   onclick="vizRutasSetTipo('partial')"  style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--text2);font-weight:400;">Parciales</button>
+            <input id="vizFsRutasSearch" type="text" placeholder="Buscar planta o cliente…"
+              oninput="vizRutasSetQ(this.value,'vizFsRutasSearch')"
+              style="font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);width:180px;">
+          </div>
+          <div style="max-height:220px;overflow-y:auto;">
+            <div id="vizFsRutasTable"></div>
+          </div>
         </div>
       </div>
     </dialog>

@@ -111,6 +111,11 @@
     async function vizLoadNetwork() {
       var prdid = vizCurrentPrd;
       if (!prdid) return;
+      // Reset Rutas panel for new product
+      _vizRutas = [];
+      var _rp = document.getElementById('vizRutasPanel'); if (_rp) _rp.style.display = 'none';
+      var _rb = document.getElementById('vizRutasBody');  if (_rb) _rb.style.display = 'none';
+      var _bt = document.getElementById('btnVizRutasToggle'); if (_bt) _bt.textContent = '▶ Rutas';
       var cfg = {
         base: CFG.url + '/sap/opu/odata/IBP/' + CFG.service + '/',
         location: document.getElementById('selVizLocation').value,
@@ -273,6 +278,7 @@
         document.getElementById('btnVizFullscreen').style.display = '';
         document.getElementById('btnVizFilter').style.display = '';
         log(logEl, 'ok', '✓ Diagrama: ' + summary);
+        try { vizRenderRutas(); } catch (eR) { console.error('[vizRenderRutas]', eR); log(logEl, 'warn', '⚠ Panel Rutas: ' + eR.message); }
         var _vb2 = document.getElementById('bodyVizMDT'); if (_vb2) _vb2.style.display = 'none';
         var _va2 = document.getElementById('arrVizMDT');  if (_va2) _va2.textContent = '▶';
       } catch (e) {
@@ -866,6 +872,21 @@
         var el = document.getElementById('vizFsChk' + t);
         if (el) el.checked = VIZ_VISIBLE[t.toLowerCase()];
       });
+      // Sincronizar panel de rutas fullscreen
+      var fsp = document.getElementById('vizFsRutasPanel');
+      if (fsp && _vizRutas.length) {
+        fsp.style.display = '';
+        var ms = document.getElementById('vizRutasSummary');
+        var fs = document.getElementById('vizFsRutasSummary');
+        if (ms && fs) fs.textContent = ms.textContent;
+        var mainQ = document.getElementById('vizRutasSearch');
+        var fsQ   = document.getElementById('vizFsRutasSearch');
+        if (mainQ && fsQ) fsQ.value = mainQ.value;
+        _vizRutasBtnSync(_vizRutasFiltro.tipo);
+        var csvBtn = document.getElementById('btnVizFsRutasCsv');
+        if (csvBtn) csvBtn.style.display = '';
+        vizRutasRenderTable('vizFsRutasTable');
+      }
       setTimeout(function () {
         var graph = vizBuildGraph(vizCurrentPrd, VIZ_DATA);
         vizNetworkFull = vizMakeNetwork(
@@ -939,6 +960,276 @@
 
     function setProgress(pct) {
       document.getElementById('progFill').style.width = pct + '%';
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
+       RUTAS PANEL — computa y muestra rutas completas y parciales
+       para el producto activo en el Visualizer.
+       ══════════════════════════════════════════════════════════════════ */
+    var _vizRutas      = [];
+    var _vizRutasFiltro = { tipo: 'all', q: '' };
+    var _RUTAS_CAP     = 500;
+
+    /* DFS desde cada planta; captura rutas completas (→ cliente) y
+       parciales (nodo sin más salidas disponibles, sin cliente). */
+    function vizFindAllRoutesWithPartial(graph) {
+      var results = [];
+      var MAX = 50000;
+
+      function dfs(node, path, visited) {
+        if (results.length >= MAX) return;
+        var custNext = graph.custEdges[node] || [];
+        var locNext  = (graph.locEdges[node] || []).filter(function(n) { return !visited[n]; });
+        if (custNext.length === 0 && locNext.length === 0) {
+          results.push({ plant: path[0], nodes: path.slice(), customer: null, complete: false });
+          return;
+        }
+        custNext.forEach(function(cust) {
+          if (results.length < MAX)
+            results.push({ plant: path[0], nodes: path.slice(), customer: cust, complete: true });
+        });
+        locNext.forEach(function(loc) {
+          if (results.length < MAX) {
+            visited[loc] = true;
+            path.push(loc);
+            dfs(loc, path, visited);
+            path.pop();
+            visited[loc] = false;
+          }
+        });
+      }
+
+      graph.plants.forEach(function(plant) {
+        if (results.length < MAX) {
+          var visited = {};
+          visited[plant] = true;
+          dfs(plant, [plant], visited);
+        }
+      });
+      if (results.length >= MAX) results._truncated = true;
+      return results;
+    }
+
+    function vizRenderRutas() {
+      if (!VIZ_DATA || !vizCurrentPrd) return;
+      var panel = document.getElementById('vizRutasPanel');
+      if (!panel) return;
+
+      var graph = vizBuildGraphFromData(vizCurrentPrd, VIZ_DATA);
+      _vizRutas = vizFindAllRoutesWithPartial(graph);
+
+      // Reset filtros
+      _vizRutasFiltro = { tipo: 'all', q: '' };
+      ['vizRutasSearch', 'vizFsRutasSearch'].forEach(function(id) {
+        var el = document.getElementById(id); if (el) el.value = '';
+      });
+      _vizRutasBtnSync('all');
+
+      var nC = _vizRutas.filter(function(r) { return  r.complete; }).length;
+      var nP = _vizRutas.filter(function(r) { return !r.complete; }).length;
+      var truncNote = _vizRutas._truncated ? ' (truncadas a 50.000)' : '';
+      var summText  = nC + ' completa(s)' + (nP ? ' · ' + nP + ' parcial(es)' : '') + truncNote;
+
+      ['vizRutasSummary', 'vizFsRutasSummary'].forEach(function(id) {
+        var el = document.getElementById(id); if (el) el.textContent = summText;
+      });
+      var showCsv = !!_vizRutas.length;
+      ['btnVizRutasCsv', 'btnVizFsRutasCsv'].forEach(function(id) {
+        var el = document.getElementById(id); if (el) el.style.display = showCsv ? '' : 'none';
+      });
+
+      panel.style.display = '';
+      vizRutasRenderTable('vizRutasTable');
+
+      // Si el fullscreen ya está abierto, sincroniza su panel también
+      var dlg = document.getElementById('vizFullscreenDlg');
+      if (dlg && dlg.open) {
+        var fsp = document.getElementById('vizFsRutasPanel');
+        if (fsp) { fsp.style.display = ''; vizRutasRenderTable('vizFsRutasTable'); }
+      }
+    }
+
+    /* Sincroniza estilos activo/inactivo de los botones Tipo en ambos paneles */
+    function _vizRutasBtnSync(tipo) {
+      ['all', 'complete', 'partial'].forEach(function(t) {
+        ['vizRutasBtn_' + t, 'vizFsRutasBtn_' + t].forEach(function(id) {
+          var el = document.getElementById(id);
+          if (!el) return;
+          el.style.fontWeight = t === tipo ? '700' : '400';
+          el.style.color      = t === tipo ? 'var(--accent)' : 'var(--text2)';
+        });
+      });
+    }
+
+    function vizRutasToggle() {
+      var body = document.getElementById('vizRutasBody');
+      var btn  = document.getElementById('btnVizRutasToggle');
+      if (!body) return;
+      var open = body.style.display === 'none';
+      body.style.display = open ? 'block' : 'none';
+      btn.textContent = open ? '▼ Rutas' : '▶ Rutas';
+    }
+
+    function vizFsRutasToggle() {
+      var body = document.getElementById('vizFsRutasBody');
+      var btn  = document.getElementById('btnVizFsRutasToggle');
+      if (!body) return;
+      var open = body.style.display === 'none';
+      body.style.display = open ? 'block' : 'none';
+      btn.textContent = open ? '▼ Rutas' : '▶ Rutas';
+    }
+
+    function vizRutasSetTipo(tipo) {
+      _vizRutasFiltro.tipo = tipo;
+      _vizRutasBtnSync(tipo);
+      vizRutasRenderTable('vizRutasTable');
+      vizRutasRenderTable('vizFsRutasTable');
+    }
+
+    function vizRutasSetQ(q, srcId) {
+      _vizRutasFiltro.q = q.trim().toLowerCase();
+      // Sincroniza el otro input
+      ['vizRutasSearch', 'vizFsRutasSearch'].forEach(function(id) {
+        if (id === srcId) return;
+        var el = document.getElementById(id); if (el) el.value = q;
+      });
+      vizRutasRenderTable('vizRutasTable');
+      vizRutasRenderTable('vizFsRutasTable');
+    }
+
+    function vizRutasRenderTable(tblId) {
+      var tbl = document.getElementById(tblId);
+      if (!tbl) return;
+
+      var tipo = _vizRutasFiltro.tipo;
+      var q    = _vizRutasFiltro.q;
+
+      var filtered = [];
+      _vizRutas.forEach(function(r, origIdx) {
+        if (tipo === 'complete' && !r.complete) return;
+        if (tipo === 'partial'  &&  r.complete) return;
+        if (q) {
+          var hay = (r.plant + ' ' + r.nodes.join(' ') + ' ' + (r.customer || '')).toLowerCase();
+          if (hay.indexOf(q) === -1) return;
+        }
+        filtered.push({ r: r, origIdx: origIdx });
+      });
+
+      if (!filtered.length) {
+        tbl.innerHTML = '<p style="color:var(--text2);font-size:12px;margin:0;">'
+          + (_vizRutas.length ? 'Sin rutas que coincidan con el filtro.' : 'No hay rutas configuradas para este producto.')
+          + '</p>';
+        return;
+      }
+
+      var total   = filtered.length;
+      var showing = Math.min(total, _RUTAS_CAP);
+      var note = total > _RUTAS_CAP
+        ? '<p style="color:var(--text2);font-size:11px;margin:0 0 8px 0;">Mostrando '
+          + showing + ' de ' + total + ' rutas — exporta el CSV para verlas todas.</p>'
+        : '';
+
+      var rows = [
+        note,
+        '<table style="width:100%;border-collapse:collapse;font-size:12px;">',
+        '<thead><tr>',
+        '<th style="text-align:left;padding:4px 8px;color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.05em;">#</th>',
+        '<th style="text-align:left;padding:4px 8px;color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.05em;">Tipo</th>',
+        '<th style="text-align:left;padding:4px 8px;color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.05em;">Ruta</th>',
+        '<th style="text-align:right;padding:4px 8px;color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.05em;">Saltos</th>',
+        '</tr></thead><tbody>'
+      ];
+
+      filtered.slice(0, _RUTAS_CAP).forEach(function(item, i) {
+        var r = item.r, origIdx = item.origIdx;
+        var label = r.complete
+          ? '<span style="color:var(--green);font-weight:600;">✓ Completa</span>'
+          : '<span style="color:#F59E0B;font-weight:600;">⚠ Parcial</span>';
+        var nodesStr = r.nodes.join(' → ') + (r.customer ? ' → ' + r.customer : '');
+        var saltos   = r.nodes.length - 1 + (r.customer ? 1 : 0);
+        var bg = i % 2 === 0 ? 'var(--bg)' : 'var(--bg2)';
+        rows.push(
+          '<tr style="background:' + bg + ';cursor:pointer;" onclick="vizRutasHighlight(' + origIdx + ')" title="Click para resaltar en el grafo">',
+          '<td style="padding:4px 8px;color:var(--text2);">' + (i + 1) + '</td>',
+          '<td style="padding:4px 8px;">' + label + '</td>',
+          '<td style="padding:4px 8px;color:var(--text);font-family:var(--mono);font-size:11px;">' + escH(nodesStr) + '</td>',
+          '<td style="padding:4px 8px;text-align:right;color:var(--text2);">' + saltos + '</td>',
+          '</tr>'
+        );
+      });
+      rows.push('</tbody></table>');
+      tbl.innerHTML = rows.join('');
+    }
+
+    /* Resalta una ruta en ambos networks. Si algún nodo del path está oculto
+       por filtro (VIZ_HIDDEN_LOC / VIZ_HIDDEN_CUST) lo agrega a la vista
+       sin tocar el resto de filtros activos. */
+    function vizRutasHighlight(origIdx) {
+      var r = _vizRutas[origIdx];
+      if (!r) return;
+      var allNodes = r.nodes.concat(r.customer ? [r.customer] : []);
+
+      // Desesconder nodos del path que estuvieran ocultos por filtro
+      var changed = false;
+      allNodes.forEach(function(nid) {
+        if (VIZ_HIDDEN_LOC.has(nid))  { VIZ_HIDDEN_LOC.delete(nid);  changed = true; }
+        if (VIZ_HIDDEN_CUST.has(nid)) { VIZ_HIDDEN_CUST.delete(nid); changed = true; }
+      });
+      if (changed) {
+        [vizNetwork, vizNetworkFull].forEach(function(net) {
+          if (!net) return;
+          var ds  = net.body.data.nodes;
+          var upd = [];
+          allNodes.forEach(function(nid) {
+            var node = ds.get(nid);
+            if (node && node.hidden) upd.push({ id: nid, hidden: false });
+          });
+          if (upd.length) ds.update(upd);
+        });
+        // Actualizar badge de filtros si existe
+        var badge = document.getElementById('vizFilterBadge');
+        if (badge) {
+          var tot = VIZ_HIDDEN_LOC.size + VIZ_HIDDEN_CUST.size;
+          badge.textContent = tot || '';
+          badge.style.display = tot ? '' : 'none';
+        }
+      }
+
+      // Seleccionar y enfocar en ambos networks
+      [vizNetwork, vizNetworkFull].forEach(function(net) {
+        if (!net) return;
+        var edgeIds = [];
+        var eds = net.body.data.edges;
+        function checkArc(fr, to) {
+          eds.forEach(function(e) {
+            if ((e.from === fr && e.to === to) || (e.from === to && e.to === fr)) edgeIds.push(e.id);
+          });
+        }
+        for (var k = 0; k < r.nodes.length - 1; k++) checkArc(r.nodes[k], r.nodes[k + 1]);
+        if (r.customer) checkArc(r.nodes[r.nodes.length - 1], r.customer);
+        net.selectNodes(allNodes);
+        net.selectEdges(edgeIds);
+        if (allNodes.length > 0) {
+          try { net.focus(allNodes[0], { animation: { duration: 500, easingFunction: 'easeInOutQuad' }, scale: 0.85 }); } catch(e) {}
+        }
+      });
+    }
+
+    function vizRutasCsv() {
+      if (!_vizRutas.length) return;
+      var prd   = vizCurrentPrd || 'producto';
+      var lines = ['"#","Tipo","Planta","Ruta","Cliente","# Saltos"'];
+      _vizRutas.forEach(function(r, i) {
+        var tipo = r.complete ? 'Completa' : 'Parcial';
+        var ruta = r.nodes.join(' -> ') + (r.customer ? ' -> ' + r.customer : '');
+        lines.push([(i + 1), tipo, r.plant, '"' + ruta + '"', r.customer || '', r.nodes.length - 1 + (r.customer ? 1 : 0)].join(','));
+      });
+      var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'Rutas_' + prd + '.csv';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
     }
 
 
