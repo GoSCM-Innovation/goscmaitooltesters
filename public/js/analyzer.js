@@ -1184,6 +1184,8 @@
           var inCP  = !!prdInCustProd[prdid];
           var onlyMaster = !inPSH && !inPSI && !inLS && !inCS && !inLP && !inCP;
 
+          if (typeof mattypeIsExcluded === 'function' && mattypeIsExcluded(pm(prdid))) continue;
+
           var graph     = await snBuildProductGraph(prdid);
           var paths     = snFindAllPaths(graph);
           var sets      = snComputeNetworkSets(graph);
@@ -1474,6 +1476,7 @@
       await idbCursorEach('sn_loc', function (r) {
         var p  = str(r.PRDID), fr = str(r.LOCFR), to = str(r.LOCID), tlt = str(r.TLEADTIME || '');
         if (!p || !fr || !to) return;
+        if (typeof mattypeIsExcluded === 'function' && mattypeIsExcluded(pm(p))) return;
 
         var arcKey   = p + '|' + fr + '|' + to;
         var isDup    = lsSeenArcs.has(arcKey);
@@ -1519,6 +1522,7 @@
       await idbCursorEach('sn_cust', function (r) {
         var p   = str(r.PRDID), loc = str(r.LOCID), c = str(r.CUSTID), clt = str(r.CLEADTIME || '');
         if (!p || !loc || !c) return;
+        if (typeof mattypeIsExcluded === 'function' && mattypeIsExcluded(pm(p))) return;
 
         var inLPLoc  = locProdSet.has(loc + '|' + p);
         var inCPCust = custProdSet.has(c + '|' + p);
@@ -1560,6 +1564,7 @@
         var plt = str(r.PLEADTIME != null ? r.PLEADTIME : '');
         var prt = str(r.PRATIO    != null ? r.PRATIO    : '');
         if (!p) return;
+        if (typeof mattypeIsExcluded === 'function' && mattypeIsExcluded(pm(p))) return;
 
         var pshObs = [];
         if (!plt) pshObs.push('PLEADTIME vacio');
