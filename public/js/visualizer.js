@@ -1177,10 +1177,16 @@
         if (VIZ_HIDDEN_CUST.has(nid)) { VIZ_HIDDEN_CUST.delete(nid); changed = true; }
       });
 
-      // Si se removieron filtros, reconstruir el grafo (los nodos no existían en el DataSet)
+      // Si se removieron filtros, reconstruir ambos grafos (los nodos no existían en el DataSet)
       if (changed) {
         vizUpdateFilterBtn();
         vizRerender();
+        var dlg = document.getElementById('vizFullscreenDlg');
+        if (dlg && dlg.open && vizCurrentPrd && VIZ_DATA) {
+          var graph = vizBuildGraph(vizCurrentPrd, VIZ_DATA);
+          if (vizNetworkFull) vizNetworkFull.destroy();
+          vizNetworkFull = vizMakeNetwork(document.getElementById('vizCanvasFull'), graph.nodes, graph.edges);
+        }
       }
 
       _vizRutasSelectInNetwork(r, allNodes);
