@@ -909,7 +909,7 @@
         'Ubicaciones que reciben producto pero cuyas salidas no llegan a ningun cliente.',
         'Ubicaciones que reciben producto pero no tienen ninguna salida configurada.',
         'Puntaje de salud 0-100 calculado en base a completitud de rutas, anomalias y lead times.',
-        'Clasificacion del puntaje: Excelente >=90 | Bueno >=70 | Regular >=50 | Critico <50.',
+        'Clasificacion del puntaje: Healthy (\u226580) | Acceptable (\u226560) | Weak (\u226540) | Critical (<40).',
         'Cantidad de ubicaciones origen distintas (LOCFR) en Location Source para este producto.',
         'Codigos de las ubicaciones origen separados por coma.',
         'Cantidad de ubicaciones destino distintas (LOCID) en Location Source para este producto.',
@@ -943,7 +943,7 @@
         'Codigo unico de la ubicacion (LOCID).',
         'Descripcion de la ubicacion segun maestro.',
         'Tipo de ubicacion SAP (LOCTYPE). Informativo; el rol real se infiere del comportamiento en los datos.',
-        'Rol inferido del comportamiento en los datos: Planta = tiene PSH | DC con Entrega = LocSrc + CustSrc | DC = solo LocSrc | Punto de Entrega = solo CustSrc | Sin rol activo = solo maestro.',
+        'Rol inferido del comportamiento en los datos: Planta con Entrega = PSH + CustSrc | Planta = solo PSH | DC con Entrega Directa = LocSrc + CustSrc | DC = solo LocSrc | Punto de Entrega = solo CustSrc | Sin rol activo = sin presencia en red.',
         'Si/No — tiene al menos una fuente de produccion (PSH) en esta ubicacion.',
         'Si/No — aparece como origen o destino en Location Source.',
         'Si/No — aparece como ubicacion de entrega en Customer Source.',
@@ -956,7 +956,7 @@
         'Si/No — su eliminacion cortaria rutas de multiples productos a clientes.',
         'Numero de productos cuyas rutas pasan por este nodo critico.',
         'Numero de clientes cuyo abastecimiento depende de este nodo.',
-        'Critical = >3 productos | High = 2-3 | Medium = 1.'
+        'Critical (\u22654 productos) | High (2\u20133) | Medium (1).'
       ],[
         'control','control',
         'ibp','ibp','ibp','ibp',
@@ -1218,6 +1218,7 @@
           });
           if (!inLP && (inPSH || inLS)) obs.push('Sin Location Product');
           if (!inCP && inCS)            obs.push('Sin Customer Product');
+          if (health.score < 60)        obs.push('Health score bajo: ' + health.score + '/100 (' + health.category + ')');
 
           /* ── Semáforo Product ── */
           var RED_ST  = { 'Hu\u00e9rfano': 1, 'Sin Distribuci\u00f3n': 1, 'Sin Abastecimiento': 1, 'Sin Entrega a Cliente': 1 };
@@ -1924,8 +1925,8 @@
       if (metrics.plants === 1) score -= 15;
       score = Math.max(0, Math.min(100, score));
 
-      var cat = score >= 80 ? 'Healthy Network' : score >= 60 ? 'Acceptable Network'
-        : score >= 40 ? 'Weak Network' : 'Critical Network';
+      var cat = score >= 80 ? 'Healthy' : score >= 60 ? 'Acceptable'
+        : score >= 40 ? 'Weak' : 'Critical';
       var cmts = [];
       if (paths.length === 0) cmts.push('No valid plant-to-customer paths');
       if (ghosts.length > 0) cmts.push(ghosts.length + ' ghost DC(s)');
