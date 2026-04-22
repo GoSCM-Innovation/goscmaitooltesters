@@ -253,6 +253,32 @@ function mattyeRenderCategorize() {
   html += '<p class="mattype-note">ℹ️ Un tipo puede estar en más de una categoría. Sin categoría = todas las métricas con reglas en modo 🟡.</p>';
   wrap.innerHTML = html;
   _mattyeUpdateCatSummary();
+  _mattypeCatBindTooltips(wrap);
+}
+
+function _mattypeCatBindTooltips(wrap) {
+  wrap.querySelectorAll('.mattype-cat-help').forEach(function(el) {
+    el.addEventListener('mouseenter', function() {
+      var inner = el.querySelector('.mattype-cat-tooltip');
+      if (!inner) return;
+      var tip = document.createElement('div');
+      tip.id = 'mattype-floating-tooltip';
+      tip.innerHTML = inner.innerHTML;
+      document.body.appendChild(tip);
+      var rect = el.getBoundingClientRect();
+      var tipW = 240;
+      var left = rect.left + rect.width / 2 - tipW / 2;
+      left = Math.max(8, Math.min(left, window.innerWidth - tipW - 8));
+      var top  = rect.top - tip.offsetHeight - 10;
+      if (top < 8) top = rect.bottom + 10;
+      tip.style.left = left + 'px';
+      tip.style.top  = top  + 'px';
+    });
+    el.addEventListener('mouseleave', function() {
+      var t = document.getElementById('mattype-floating-tooltip');
+      if (t) t.parentNode.removeChild(t);
+    });
+  });
 }
 
 function mattypeToggleCat(mt, catId, checked) {

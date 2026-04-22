@@ -2134,7 +2134,6 @@ button[disabled][title]:hover::after {
 
 /* ── Tooltip de categoría (icono ?) ── */
 .mattype-cat-help {
-  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2156,12 +2155,10 @@ button[disabled][title]:hover::after {
   background: rgba(255,255,255,.22);
   color: var(--text);
 }
-.mattype-cat-help .mattype-cat-tooltip {
-  display: none;
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
+
+/* Tooltip flotante — inyectado en <body> por JS para escapar overflow:hidden */
+#mattype-floating-tooltip {
+  position: fixed;
   width: 240px;
   background: #1a2540;
   border: 1px solid var(--border2);
@@ -2175,10 +2172,10 @@ button[disabled][title]:hover::after {
   white-space: normal;
   line-height: 1.55;
   box-shadow: var(--shadow-lg);
-  z-index: 9999;
+  z-index: 99999;
   pointer-events: none;
 }
-.mattype-cat-help .mattype-cat-tooltip::after {
+#mattype-floating-tooltip::after {
   content: '';
   position: absolute;
   top: 100%;
@@ -2187,7 +2184,7 @@ button[disabled][title]:hover::after {
   border: 5px solid transparent;
   border-top-color: var(--border2);
 }
-.mattype-cat-help:hover .mattype-cat-tooltip { display: block; }
+.mattype-cat-tooltip { display: none; }
 .mattype-cat-tooltip-title {
   font-weight: 700;
   margin-bottom: 4px;
