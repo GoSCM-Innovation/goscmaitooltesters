@@ -2131,6 +2131,80 @@ button[disabled][title]:hover::after {
 .mattype-matrix-th-type  { text-align: left; color: var(--text3); }
 .mattype-matrix-th-count { text-align: left; color: var(--text3); }
 .mattype-matrix-th-cat   { min-width: 110px; }
+
+/* ── Tooltip de categoría (icono ?) ── */
+.mattype-cat-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 5px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.12);
+  color: var(--text2);
+  font-size: 9px;
+  font-weight: 700;
+  font-style: normal;
+  cursor: help;
+  vertical-align: middle;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.mattype-cat-help:hover {
+  background: rgba(255,255,255,.22);
+  color: var(--text);
+}
+
+/* Tooltip flotante — inyectado en <body> por JS para escapar overflow:hidden */
+#mattype-floating-tooltip {
+  position: fixed;
+  width: 240px;
+  background: #1a2540;
+  border: 1px solid var(--border2);
+  border-radius: var(--r);
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 400;
+  text-transform: none;
+  color: var(--text);
+  text-align: left;
+  white-space: normal;
+  line-height: 1.55;
+  box-shadow: var(--shadow-lg);
+  z-index: 99999;
+  pointer-events: none;
+}
+#mattype-floating-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: var(--border2);
+}
+.mattype-cat-tooltip { display: none; }
+.mattype-cat-tooltip-title {
+  font-weight: 700;
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+.mattype-cat-tooltip-rules {
+  margin: 5px 0 0;
+  padding-left: 12px;
+  color: var(--text2);
+}
+.mattype-cat-tooltip-rules li { margin-bottom: 2px; }
+.mattype-cat-tooltip-ex {
+  margin-top: 6px;
+  padding: 4px 7px;
+  background: rgba(255,255,255,.05);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text2);
+}
 .mattype-matrix-table tbody td {
   padding: 8px 12px;
   border-bottom: 1px solid rgba(255,255,255,.04);

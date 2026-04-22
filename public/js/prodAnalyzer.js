@@ -487,6 +487,15 @@ async function paAnalyzeAndExport(
     }
   });
 
+  /* Índice LS por PRDID — para check de TLEADTIME */
+  var locSrcRowsByPrd = {};
+  allLocSrc.forEach(function(r) {
+    var prd = str(r.PRDID);
+    if (!prd) return;
+    if (!locSrcRowsByPrd[prd]) locSrcRowsByPrd[prd] = [];
+    locSrcRowsByPrd[prd].push(r);
+  });
+
   /* Resource Location */
   var resLocSet      = new Set();
   var resLocResidSet = new Set();
@@ -776,7 +785,8 @@ async function paAnalyzeAndExport(
       var isExcl    = mattypeIsExcluded(mattypeid);
       if (isExcl) return; // excluidos no se analizan aquí
 
-      var rules = mattypeGetRules(cats);
+      var rules           = mattypeGetRules(cats);
+      var isUncategorized = cats[0] === 'uncategorized';
 
       var inLP  = locPrdPrdSet.has(prdid);
       var inPSH = !!pshPrdSetP[prdid];
@@ -835,6 +845,9 @@ async function paAnalyzeAndExport(
         if (covData.uncovered.size > 0) {
           obs.push('Sin arco de abastecimiento hacia: ' + codes(covData.uncovered));
           fills.push(rules.requiresVendorArc);
+        } else if (!inLS) {
+          obs.push('Sin arco de abastecimiento (no registrado en Location Source)');
+          fills.push(rules.requiresVendorArc);
         }
       }
 
@@ -855,20 +868,86 @@ async function paAnalyzeAndExport(
         }
       }
 
+      // OUTPUTCOEFFICIENT = 0 en PSH
+      if (rules.outputCoeffZero !== 'none' && inPSH) {
+        var sidsMissingCoeff = sidsPrd.filter(function(sid) {
+          var recs = pshBySid[sid] || [];
+          return recs.some(function(r) { return !r.OUTPUTCOEFFICIENT || r.OUTPUTCOEFFICIENT === '0'; });
+        });
+        if (sidsMissingCoeff.length) {
+          obs.push('OUTPUTCOEFFICIENT ausente o cero en ' + sidsMissingCoeff.length + ' SOURCEID(s)');
+          fills.push(rules.outputCoeffZero);
+        }
+      }
+
+      // Solo co-producto: aparece en PSH pero nunca como SOURCETYPE=P
+      if (rules.isCoproductOnly !== 'none') {
+        if (pshPrdSet[prdid] && !inPSH) {
+          obs.push('Configurado solo como co-producto (SOURCETYPE=C) — falta PSH primario');
+          fills.push(rules.isCoproductOnly);
+        }
+      }
+
+      // Tiene PSH cuando no debería (rawmat / trading)
+      if (rules.hasPSHUnexpected !== 'none') {
+        if (pshPrdSet[prdid]) {
+          obs.push('Tiene BOM de fabricación (PSH) — verificar categorización');
+          fills.push(rules.hasPSHUnexpected);
+        }
+      }
+
+      // No consumido como componente en ningún BOM
+      if (rules.notConsumedInBOM !== 'none') {
+        if (consLocs.size === 0) {
+          obs.push('No consumido como componente en ningún BOM');
+          fills.push(rules.notConsumedInBOM);
+        }
+      }
+
+      // TLEADTIME = 0 en todos los arcos de Location Source
+      if (rules.tleadtimeZero !== 'none' && inLS) {
+        var lsRows = locSrcRowsByPrd[prdid] || [];
+        if (lsRows.length > 0) {
+          var allZeroTlt = lsRows.every(function(r) {
+            return !r.TLEADTIME || str(r.TLEADTIME) === '0';
+          });
+          if (allZeroTlt) {
+            obs.push('TLEADTIME = 0 en todos los arcos de Location Source');
+            fills.push(rules.tleadtimeZero);
+          }
+        }
+      }
+
+      var uncatLabel = isUncategorized
+        ? 'Sin categoría [' + (mattypeid || 'sin MATTYPEID') + ']'
+        : null;
+
       if (!obs.length) {
-        var okParts = ['Habilitado en Location Product'];
-        if (reqPSH !== 'none' && inPSH)                     okParts.push('Con PSH, PSI y PSR');
-        if (rules.requiresPlantAsOrigin !== 'none' && inPSH) okParts.push('Planta es origen en Location Source');
-        if (rules.requiresVendorArc !== 'none')              okParts.push('Arcos de abastecimiento completos');
-        if (rules.requiresAnyOriginDest !== 'none')          okParts.push('Con arcos en Location Source');
-        if (rules.pleadtimeZero !== 'none' && inPSH)         okParts.push('Lead time definido en todos los SOURCEIDs');
-        obs.push(okParts.join(' | '));
+        if (isUncategorized) {
+          obs.push(uncatLabel + ' — sin hallazgos en modo permisivo');
+        } else {
+          var okParts = ['Habilitado en Location Product'];
+          if (reqPSH !== 'none' && inPSH)                      okParts.push('Con PSH, PSI y PSR');
+          if (rules.requiresPlantAsOrigin !== 'none' && inPSH) okParts.push('Planta es origen en Location Source');
+          if (rules.requiresVendorArc !== 'none')               okParts.push('Arcos de abastecimiento completos');
+          if (rules.requiresAnyOriginDest !== 'none')           okParts.push('Con arcos en Location Source');
+          if (rules.pleadtimeZero !== 'none' && inPSH)          okParts.push('PLEADTIME definido en todos los SOURCEIDs');
+          if (rules.outputCoeffZero !== 'none' && inPSH)        okParts.push('Coeficiente de salida definido');
+          if (rules.isCoproductOnly !== 'none' && inPSH)        okParts.push('PSH con SOURCETYPE=P presente');
+          if (rules.hasPSHUnexpected !== 'none')                okParts.push('Sin BOM de fabricación');
+          if (rules.notConsumedInBOM !== 'none')                okParts.push('Consumido como componente en BOM');
+          if (rules.tleadtimeZero !== 'none' && inLS)           okParts.push('TLEADTIME definido en Location Source');
+          obs.push(okParts.join(' | '));
+        }
+      } else if (isUncategorized) {
+        obs.unshift(uncatLabel);
       }
 
       // Severidad final
       var finalSev = fills.length ? mattypeResolveSeverity(fills.map(function(f){
         if(f==='red') return 'red'; if(f==='yellow') return 'yellow'; return 'none';
       })) : 'none';
+      if (isUncategorized && finalSev === 'none') finalSev = 'yellow';
       var fill = severityToFill(finalSev);
 
       S1.addRow([
@@ -1105,26 +1184,106 @@ async function paAnalyzeAndExport(
         if (row.LOCFR) origenes.add(row.LOCFR);
       });
 
+      /* ── Métricas por categoría de producto ── */
+      var hasSomeCategorized = Object.keys(MATTYPE_CFG).some(function(k) {
+        return MATTYPE_CFG[k].categories.size > 0;
+      });
+
+      var transfCompPlanta = new Set();
+      var transfCompNoPl   = new Set();
+      var transfDistrib    = new Set();
+      var transfUncatSet   = new Set();
+      if (isTransferencia) {
+        locfrRows.forEach(function(row) {
+          if (!row.PRDID || !row.LOCID) return;
+          if (psiCompByLocPrd[row.LOCID + '|' + row.PRDID]) return;
+          var cats        = mattypeGetCategories(pm(row.PRDID));
+          var isComp      = cats.indexOf('rawmat') >= 0 || cats.indexOf('semi') >= 0;
+          var isDist      = cats.indexOf('finished') >= 0 || cats.indexOf('trading') >= 0;
+          var isUncat     = cats.indexOf('uncategorized') >= 0;
+          var destIsPlanta = (pshSidsByLoc[row.LOCID] || []).length > 0;
+          if (isComp) {
+            if (destIsPlanta) transfCompPlanta.add(row.PRDID);
+            else              transfCompNoPl.add(row.PRDID);
+          } else if (isDist) {
+            transfDistrib.add(row.PRDID);
+          } else if (isUncat) {
+            transfUncatSet.add(row.PRDID);
+          }
+        });
+      }
+
+      var receptorSinLP = new Set();
+      var receptorComp  = new Set();
+      if (isReceptor) {
+        locidRows.forEach(function(row) {
+          if (!row.PRDID) return;
+          if (!locPrdSet.has(locid + '|' + row.PRDID)) receptorSinLP.add(row.PRDID);
+          var cats = mattypeGetCategories(pm(row.PRDID));
+          if (cats.indexOf('rawmat') >= 0 || cats.indexOf('semi') >= 0) receptorComp.add(row.PRDID);
+        });
+      }
+
+      var plantaPrdsWrongCat = new Set();
+      if (isPlanta) {
+        plantaPrds.forEach(function(prd) {
+          var cats = mattypeGetCategories(pm(prd));
+          if (cats.indexOf('rawmat') >= 0 || cats.indexOf('trading') >= 0) plantaPrdsWrongCat.add(prd);
+        });
+      }
+
       /* ── Validaciones ── */
       var obs   = [];
       var fills = [];
 
       if (isPlanta) {
-        if (bomssinPSI.size)  { obs.push(bomssinPSI.size + ' SOURCEID(s) sin PSI');  fills.push('red');    }
-        if (bomssinPSR.size)  { obs.push(bomssinPSR.size + ' SOURCEID(s) sin PSR');  fills.push('red');    }
-        if (compSinCov.size)  { obs.push(compSinCov.size + ' componente(s) sin arco de abastecimiento'); fills.push('red'); }
-        if (sidsSinPlt.size)  { obs.push(sidsSinPlt.size + ' SOURCEID(s) con PLEADTIME = 0'); fills.push('red'); }
-        if (resOciosos.size)  { obs.push(resOciosos.size + ' recurso(s) asignados sin uso en PSR'); fills.push('yellow'); }
+        if (bomssinPSI.size)         { obs.push(bomssinPSI.size + ' SOURCEID(s) sin PSI');  fills.push('red');    }
+        if (bomssinPSR.size)         { obs.push(bomssinPSR.size + ' SOURCEID(s) sin PSR');  fills.push('red');    }
+        if (compSinCov.size)         { obs.push(compSinCov.size + ' componente(s) sin arco de abastecimiento'); fills.push('red'); }
+        if (sidsSinPlt.size)         { obs.push(sidsSinPlt.size + ' SOURCEID(s) con PLEADTIME = 0'); fills.push('red'); }
+        if (resOciosos.size)         { obs.push(resOciosos.size + ' recurso(s) asignados sin uso en PSR'); fills.push('yellow'); }
+        if (plantaPrdsWrongCat.size) { obs.push(plantaPrdsWrongCat.size + ' producto(s) rawmat/trading con BOM de fabricación en esta planta — verificar categorización'); fills.push('yellow'); }
       }
       if (isProveedor) {
         if (sinConsumoPSI.size) { obs.push(sinConsumoPSI.size + ' producto(s) abastecidos sin consumo PSI en destino'); fills.push('yellow'); }
         if (sinLocProd.size)    { obs.push(sinLocProd.size + ' producto(s) sin Location Product en planta destino'); fills.push('red'); }
       }
+      if (isTransferencia) {
+        if (transfCompPlanta.size) {
+          obs.push(transfCompPlanta.size + ' componente(s) rawmat/semi transferido(s) a planta sin consumo PSI — verificar BOM');
+          fills.push('red');
+        }
+        if (transfCompNoPl.size) {
+          obs.push(transfCompNoPl.size + ' componente(s) rawmat/semi transferido(s) a nodo sin producción');
+          fills.push('yellow');
+        }
+        if (transfUncatSet.size && hasSomeCategorized) {
+          obs.push(transfUncatSet.size + ' producto(s) sin categoría transferidos sin consumo PSI en destino');
+          fills.push('yellow');
+        }
+      }
+      if (isReceptor) {
+        if (receptorSinLP.size) {
+          obs.push(receptorSinLP.size + ' producto(s) recibidos sin cobertura en Location Product');
+          fills.push('red');
+        }
+        if (receptorComp.size) {
+          obs.push(receptorComp.size + ' componente(s) rawmat/semi recibidos en ubicación sin producción asociada');
+          fills.push('yellow');
+        }
+      }
       if (roles[0] === 'Sin actividad') { obs.push('Ubicación en maestro sin actividad en otros datos'); fills.push('info'); }
       if (!obs.length) {
         var okParts = [];
-        if (isPlanta)    okParts.push('BOMs con PSI, PSR y lead time | Sin componentes descubiertos | Sin recursos ociosos');
-        if (isProveedor) okParts.push('Abastecimiento con consumo PSI y cobertura LP en destino');
+        if (isPlanta)        okParts.push('BOMs con PSI, PSR y lead time | Sin componentes descubiertos | Sin recursos ociosos');
+        if (isProveedor)     okParts.push('Abastecimiento con consumo PSI y cobertura LP en destino');
+        if (isTransferencia) okParts.push(transfDistrib.size > 0
+          ? 'Distribuye ' + transfDistrib.size + ' producto(s) terminado(s)/mercadería sin hallazgos'
+          : 'Nodo de transferencia sin hallazgos');
+        if (isReceptor)      okParts.push(prdRecibidos.size > 0
+          ? 'Recibe ' + prdRecibidos.size + ' producto(s) | Location Product OK | Sin componentes sin producción'
+          : 'Nodo receptor sin hallazgos');
+        if (!okParts.length) okParts.push('Ubicación activa sin hallazgos');
         obs.push(okParts.join(' | '));
       }
 
@@ -1529,7 +1688,7 @@ async function paAnalyzeAndExport(
       '# Plantas con este recurso asignado','Plantas recurso (códigos)'
     ], [
       'Color de alerta: 🟡 Advertencia = recurso asignado a una receta pero sin Resource Location en esa planta | ✅ OK = asignación válida y consistente.',
-      'Detalle de la validación. Ej ✅: "OK". Ej 🟡: "Recurso en producción sin asignación en Resource Location para planta P001" — el recurso opera en una receta de P001 pero no figura en el maestro de esa planta.',
+      'Detalle de la validación. Ej ✅: "Recurso LINEA-01 asignado en Resource Location para planta P001 | Asociado a SOURCEID SRC-001". Ej 🟡: "Recurso en producción sin asignación en Resource Location para planta P001" — el recurso opera en una receta de P001 pero no figura en el maestro de esa planta.',
       'Fuente de producción (SOURCEID) a la que está asignado este recurso. Ej: SRC-001.',
       'Código del producto que fabrica esta fuente. Ej: PROD-001.',
       'Descripción del producto output. Ej: "Aceite refinado 1L".',
@@ -1567,7 +1726,7 @@ async function paAnalyzeAndExport(
       var noSrc  = !locid;
       var resPlants = resLocMapByResid[resid] || new Set();
       var obs    = noSrc ? 'SOURCEID no encontrado en PSH'
-                 : inRL  ? 'OK'
+                 : inRL  ? 'Recurso ' + resid + ' asignado en Resource Location para planta ' + locid + ' | Asociado a SOURCEID ' + sid
                  :          'Recurso en producción sin asignación en Resource Location para planta ' + locid;
       var fill   = noSrc ? C_YEL : inRL ? null : C_YEL;
       S8.addRow([

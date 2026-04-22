@@ -162,7 +162,7 @@
           setStatusSN('info', 'Descargando Production Source Header → IDB...');
           log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + sourceProdEntity);
           var nSrc = await fetchAndIndex(baseOData + sourceProdEntity, logEl, paFilter,
-            'PRDID,LOCID,PLEADTIME',
+            'PRDID,LOCID,PLEADTIME,PRATIO',
             function (rows) {
               rows.forEach(function (r) { var p = str(r.PRDID); if (p) { SN_IDX.allPrds[p] = true; SN_IDX.pshPrds[p] = true; } });
               return idbBulkPut('sn_plant', rows);
@@ -329,7 +329,9 @@
           var sa = si ? ' s="' + si + '"' : '';
           if (typeof v === 'number' && isFinite(v))
             p.push('<c r="', ref, '" t="n"', sa, '><v>', v, '</v></c>');
-          else { var txt = _xe(v);
+          else { var raw = v != null ? String(v) : '';
+            if (raw.length > 32767) raw = raw.slice(0, 32750) + '\u2026';
+            var txt = _xe(raw);
             if (txt) p.push('<c r="', ref, '" t="inlineStr"', sa, '><is><t>', txt, '</t></is></c>');
             else     p.push('<c r="', ref, '"', sa, '/>');
           }
@@ -822,6 +824,9 @@
         'LOCID+PRDID en Location Product?','CUSTID+PRDID en Customer Product?','PRDID en PSH?',
         'Entrega alcanzable desde producción?','Lead Time Status','Observaciones'
       ]);
+      var gPSH = grpFactory('Prod Source Header', 'FFa78bfa', [
+        'Estado','PRDID','PRDDESCR','LOCID','LOCID Descripción','PLEADTIME','PRATIO','Observaciones'
+      ]);
 
       /* ════════════════════════════════════════════════════════════════
          FASE 2 — Pre-índices globales (cursor IDB, sin acumular arrays)
@@ -1209,12 +1214,36 @@
       if (onProgress) onProgress(96);
 
       /* ════════════════════════════════════════════════════════════════
+         FASE 7b — Hoja Prod Source Header (cursor IDB)
+         ════════════════════════════════════════════════════════════════ */
+      if (onStatus) onStatus('Escribiendo hoja Prod Source Header...');
+
+      await idbCursorEach('sn_plant', function (r) {
+        var p   = str(r.PRDID), loc = str(r.LOCID);
+        var plt = str(r.PLEADTIME != null ? r.PLEADTIME : '');
+        var prt = str(r.PRATIO    != null ? r.PRATIO    : '');
+        if (!p) return;
+
+        var pshObs = [];
+        if (!plt) pshObs.push('PLEADTIME vacío');
+        if (!prt) pshObs.push('PRATIO vacío');
+
+        var pshFill = (!plt || !prt) ? C_YEL : null;
+
+        gPSH.addRow([
+          stLabel(pshFill), p, pd(p), loc, ld(loc), plt, prt,
+          pshObs.join(' | ') || 'OK'
+        ], pshFill);
+      });
+
+      /* ════════════════════════════════════════════════════════════════
          FASE 8 — Hoja Resumen + column widths + export
          ════════════════════════════════════════════════════════════════ */
       if (onStatus) onStatus('Generando Resumen...');
 
       [{ key: 'Product', num: 1 }, { key: 'Location', num: 2 }, { key: 'Customer', num: 3 },
-       { key: 'Location Source', num: 4 }, { key: 'Customer Source', num: 5 }
+       { key: 'Location Source', num: 4 }, { key: 'Customer Source', num: 5 },
+       { key: 'Prod Source Header', num: 6 }
       ].forEach(function (d) {
         var s = STATS[d.key]; if (!s) return;
         var pct  = s.total > 0 ? Math.round((s.ok / s.total) * 100) : 100;
@@ -1229,7 +1258,7 @@
         }
       });
 
-      [gPrd, gLoc, gCust, gLS, gCS].forEach(function (g) { g.finalize(); });
+      [gPrd, gLoc, gCust, gLS, gCS, gPSH].forEach(function (g) { g.finalize(); });
 
       if (isCSV) {
         if (onProgress) onProgress(97);
@@ -1239,8 +1268,9 @@
         zip.file('01_Product.csv',        gPrd.getLines().join('\r\n'));
         zip.file('02_Location.csv',       gLoc.getLines().join('\r\n'));
         zip.file('03_Customer.csv',       gCust.getLines().join('\r\n'));
-        zip.file('04_Location_Source.csv', gLS.getLines().join('\r\n'));
-        zip.file('05_Customer_Source.csv', gCS.getLines().join('\r\n'));
+        zip.file('04_Location_Source.csv',   gLS.getLines().join('\r\n'));
+        zip.file('05_Customer_Source.csv',   gCS.getLines().join('\r\n'));
+        zip.file('06_Prod_Source_Header.csv', gPSH.getLines().join('\r\n'));
         var content = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
         var dlUrl = URL.createObjectURL(content);
         var a = document.createElement('a');

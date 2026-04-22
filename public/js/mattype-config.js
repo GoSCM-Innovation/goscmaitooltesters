@@ -13,10 +13,60 @@ var MATTYPE_CFG = {};   // mattypeid → { excluded: bool, categories: Set, coun
 
 /* ── Categorías disponibles ── */
 var MATTYPE_CATS = [
-  { id: 'finished', label: 'Producto Terminado', color: 'var(--accent)'  },
-  { id: 'semi',     label: 'Semiterminado',       color: 'var(--cyan)'    },
-  { id: 'rawmat',   label: 'Mat. Prima / Insumo', color: 'var(--green)'   },
-  { id: 'trading',  label: 'Mercadería',          color: 'var(--purple)'  }
+  {
+    id: 'finished', label: 'Producto Terminado', color: 'var(--accent)',
+    tooltip: {
+      desc: 'Producto fabricado internamente mediante un proceso de producción.',
+      rules: [
+        'Requiere BOM completo (PSH + componentes PSI)',
+        'Requiere recurso productivo (PSR)',
+        'Debe tener ruta desde planta de origen',
+        'Lead time de producción (PLEADTIME) obligatorio — si es 0 se marca 🔴',
+        'Falta de Location Source = 🔴 crítico'
+      ],
+      example: 'FG_BOTELLA_500ML, PT_SHAMPOO_1L'
+    }
+  },
+  {
+    id: 'semi', label: 'Semiterminado', color: 'var(--cyan)',
+    tooltip: {
+      desc: 'Componente fabricado internamente que alimenta otro proceso productivo; no se entrega directamente al cliente.',
+      rules: [
+        'Requiere BOM (PSH + PSI) y recurso (PSR)',
+        'No exige ruta directa a cliente — ausencia = 🟡 advertencia',
+        'Falta de Location Source = 🟡 advertencia (no crítico)',
+        'PLEADTIME = 0 se marca 🟡',
+        'Sin origen de planta no se penaliza'
+      ],
+      example: 'SF_TAPA_ROSCA, WIP_MEZCLA_BASE'
+    }
+  },
+  {
+    id: 'rawmat', label: 'Mat. Prima / Insumo', color: 'var(--green)',
+    tooltip: {
+      desc: 'Ítem adquirido externamente; no se fabrica ni transforma internamente.',
+      rules: [
+        'No requiere BOM (PSH/PSI) ni recurso (PSR)',
+        'Debe existir arco de proveedor/origen en la red — si falta = 🔴',
+        'No se evalúa PLEADTIME ni ruta a cliente',
+        'No necesita estar asociado a una planta como origen'
+      ],
+      example: 'RM_RESINA_PET, INS_COLORANTE_AZUL'
+    }
+  },
+  {
+    id: 'trading', label: 'Mercadería', color: 'var(--purple)',
+    tooltip: {
+      desc: 'Producto comprado y revendido sin transformación (trading / reventa).',
+      rules: [
+        'No requiere BOM (PSH/PSI) ni recurso (PSR)',
+        'Debe tener Location Source definida — si falta = 🔴',
+        'Debe existir ruta de abastecimiento completa (origen → destino) — si falta = 🔴',
+        'PLEADTIME no se evalúa'
+      ],
+      example: 'TR_ACCESORIO_VALVULA, MER_FILTRO_REPUESTO'
+    }
+  }
 ];
 
 /* ── Clave de localStorage por planning area ── */
@@ -162,7 +212,21 @@ function mattyeRenderCategorize() {
     '<th class="mattype-matrix-th-type">Tipo</th>' +
     '<th class="mattype-matrix-th-count">Productos</th>';
   MATTYPE_CATS.forEach(function(cat) {
-    html += '<th class="mattype-matrix-th-cat" style="color:' + cat.color + '">' + escH(cat.label) + '</th>';
+    var tip = cat.tooltip;
+    var rulesHtml = tip.rules.map(function(r) {
+      return '<li>' + escH(r) + '</li>';
+    }).join('');
+    var tooltipHtml =
+      '<span class="mattype-cat-help">?' +
+        '<span class="mattype-cat-tooltip">' +
+          '<div class="mattype-cat-tooltip-title">' + escH(cat.label) + '</div>' +
+          '<div>' + escH(tip.desc) + '</div>' +
+          '<ul class="mattype-cat-tooltip-rules">' + rulesHtml + '</ul>' +
+          '<div class="mattype-cat-tooltip-ex">Ej: ' + escH(tip.example) + '</div>' +
+        '</span>' +
+      '</span>';
+    html += '<th class="mattype-matrix-th-cat" style="color:' + cat.color + '">' +
+      escH(cat.label) + tooltipHtml + '</th>';
   });
   html += '</tr></thead><tbody>';
 
@@ -189,6 +253,32 @@ function mattyeRenderCategorize() {
   html += '<p class="mattype-note">ℹ️ Un tipo puede estar en más de una categoría. Sin categoría = todas las métricas con reglas en modo 🟡.</p>';
   wrap.innerHTML = html;
   _mattyeUpdateCatSummary();
+  _mattypeCatBindTooltips(wrap);
+}
+
+function _mattypeCatBindTooltips(wrap) {
+  wrap.querySelectorAll('.mattype-cat-help').forEach(function(el) {
+    el.addEventListener('mouseenter', function() {
+      var inner = el.querySelector('.mattype-cat-tooltip');
+      if (!inner) return;
+      var tip = document.createElement('div');
+      tip.id = 'mattype-floating-tooltip';
+      tip.innerHTML = inner.innerHTML;
+      document.body.appendChild(tip);
+      var rect = el.getBoundingClientRect();
+      var tipW = 240;
+      var left = rect.left + rect.width / 2 - tipW / 2;
+      left = Math.max(8, Math.min(left, window.innerWidth - tipW - 8));
+      var top  = rect.top - tip.offsetHeight - 10;
+      if (top < 8) top = rect.bottom + 10;
+      tip.style.left = left + 'px';
+      tip.style.top  = top  + 'px';
+    });
+    el.addEventListener('mouseleave', function() {
+      var t = document.getElementById('mattype-floating-tooltip');
+      if (t) t.parentNode.removeChild(t);
+    });
+  });
 }
 
 function mattypeToggleCat(mt, catId, checked) {
@@ -263,9 +353,9 @@ function mattypeResetCat() {
    Multi-cat     → ['finished','semi',...] */
 function mattypeGetCategories(mattypeid) {
   var cfg = MATTYPE_CFG[mattypeid];
-  if (!cfg)                       return ['all'];
+  if (!cfg)                       return ['uncategorized'];
   if (cfg.excluded)               return ['excluded'];
-  if (cfg.categories.size === 0)  return ['all'];
+  if (cfg.categories.size === 0)  return ['uncategorized'];
   return Array.from(cfg.categories);
 }
 
@@ -290,9 +380,15 @@ function mattypeResolveSeverity(severities) {
 /* Reglas de análisis por categoría.
    cats = array de category IDs (resultado de mattypeGetCategories) */
 function mattypeGetRules(cats) {
-  var isAll = cats.indexOf('all') >= 0;
+  var isAll          = cats.indexOf('all') >= 0;
+  var isUncategorized = cats.indexOf('uncategorized') >= 0;
 
   function rule(finishedVal, semiVal, rawmatVal, tradingVal) {
+    if (isUncategorized) {
+      var anyNonNone = [finishedVal, semiVal, rawmatVal, tradingVal]
+        .some(function(v) { return v !== 'none'; });
+      return anyNonNone ? 'yellow' : 'none';
+    }
     if (isAll) return _permissive([finishedVal, semiVal, rawmatVal, tradingVal]);
     var vals = cats.map(function(c) {
       if (c === 'finished') return finishedVal;
@@ -318,10 +414,14 @@ function mattypeGetRules(cats) {
     requiresPSI:           rule('red',    'red',    'none',   'none'),
     requiresPSR:           rule('red',    'red',    'none',   'none'),
     requiresLocPrd:        'red',
-    requiresLocSrc:        rule('red',    'yellow', 'none',   'red'),
     requiresPlantAsOrigin: rule('red',    'none',   'none',   'none'),
     requiresVendorArc:     rule('none',   'none',   'red',    'none'),
     requiresAnyOriginDest: rule('none',   'yellow', 'none',   'red'),
-    pleadtimeZero:         rule('red',    'yellow', 'none',   'none')
+    pleadtimeZero:         rule('red',    'yellow', 'none',   'none'),
+    outputCoeffZero:       rule('red',    'yellow', 'none',   'none'),
+    isCoproductOnly:       rule('yellow', 'yellow', 'none',   'none'),
+    hasPSHUnexpected:      rule('none',   'none',   'yellow', 'yellow'),
+    notConsumedInBOM:      rule('none',   'yellow', 'yellow', 'none'),
+    tleadtimeZero:         rule('yellow', 'yellow', 'yellow', 'yellow')
   };
 }
