@@ -776,7 +776,8 @@ async function paAnalyzeAndExport(
       var isExcl    = mattypeIsExcluded(mattypeid);
       if (isExcl) return; // excluidos no se analizan aquí
 
-      var rules = mattypeGetRules(cats);
+      var rules           = mattypeGetRules(cats);
+      var isUncategorized = cats[0] === 'uncategorized';
 
       var inLP  = locPrdPrdSet.has(prdid);
       var inPSH = !!pshPrdSetP[prdid];
@@ -855,20 +856,31 @@ async function paAnalyzeAndExport(
         }
       }
 
+      var uncatLabel = isUncategorized
+        ? 'Sin categoría [' + (mattypeid || 'sin MATTYPEID') + ']'
+        : null;
+
       if (!obs.length) {
-        var okParts = ['Habilitado en Location Product'];
-        if (reqPSH !== 'none' && inPSH)                     okParts.push('Con PSH, PSI y PSR');
-        if (rules.requiresPlantAsOrigin !== 'none' && inPSH) okParts.push('Planta es origen en Location Source');
-        if (rules.requiresVendorArc !== 'none')              okParts.push('Arcos de abastecimiento completos');
-        if (rules.requiresAnyOriginDest !== 'none')          okParts.push('Con arcos en Location Source');
-        if (rules.pleadtimeZero !== 'none' && inPSH)         okParts.push('Lead time definido en todos los SOURCEIDs');
-        obs.push(okParts.join(' | '));
+        if (isUncategorized) {
+          obs.push(uncatLabel + ' — sin hallazgos en modo permisivo');
+        } else {
+          var okParts = ['Habilitado en Location Product'];
+          if (reqPSH !== 'none' && inPSH)                     okParts.push('Con PSH, PSI y PSR');
+          if (rules.requiresPlantAsOrigin !== 'none' && inPSH) okParts.push('Planta es origen en Location Source');
+          if (rules.requiresVendorArc !== 'none')              okParts.push('Arcos de abastecimiento completos');
+          if (rules.requiresAnyOriginDest !== 'none')          okParts.push('Con arcos en Location Source');
+          if (rules.pleadtimeZero !== 'none' && inPSH)         okParts.push('Lead time definido en todos los SOURCEIDs');
+          obs.push(okParts.join(' | '));
+        }
+      } else if (isUncategorized) {
+        obs.unshift(uncatLabel);
       }
 
       // Severidad final
       var finalSev = fills.length ? mattypeResolveSeverity(fills.map(function(f){
         if(f==='red') return 'red'; if(f==='yellow') return 'yellow'; return 'none';
       })) : 'none';
+      if (isUncategorized && finalSev === 'none') finalSev = 'yellow';
       var fill = severityToFill(finalSev);
 
       S1.addRow([

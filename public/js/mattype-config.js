@@ -263,9 +263,9 @@ function mattypeResetCat() {
    Multi-cat     → ['finished','semi',...] */
 function mattypeGetCategories(mattypeid) {
   var cfg = MATTYPE_CFG[mattypeid];
-  if (!cfg)                       return ['all'];
+  if (!cfg)                       return ['uncategorized'];
   if (cfg.excluded)               return ['excluded'];
-  if (cfg.categories.size === 0)  return ['all'];
+  if (cfg.categories.size === 0)  return ['uncategorized'];
   return Array.from(cfg.categories);
 }
 
@@ -290,9 +290,15 @@ function mattypeResolveSeverity(severities) {
 /* Reglas de análisis por categoría.
    cats = array de category IDs (resultado de mattypeGetCategories) */
 function mattypeGetRules(cats) {
-  var isAll = cats.indexOf('all') >= 0;
+  var isAll          = cats.indexOf('all') >= 0;
+  var isUncategorized = cats.indexOf('uncategorized') >= 0;
 
   function rule(finishedVal, semiVal, rawmatVal, tradingVal) {
+    if (isUncategorized) {
+      var anyNonNone = [finishedVal, semiVal, rawmatVal, tradingVal]
+        .some(function(v) { return v !== 'none'; });
+      return anyNonNone ? 'yellow' : 'none';
+    }
     if (isAll) return _permissive([finishedVal, semiVal, rawmatVal, tradingVal]);
     var vals = cats.map(function(c) {
       if (c === 'finished') return finishedVal;
