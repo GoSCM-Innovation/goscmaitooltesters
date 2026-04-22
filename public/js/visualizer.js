@@ -278,7 +278,7 @@
         document.getElementById('btnVizFullscreen').style.display = '';
         document.getElementById('btnVizFilter').style.display = '';
         log(logEl, 'ok', '✓ Diagrama: ' + summary);
-        vizRenderRutas();
+        try { vizRenderRutas(); } catch (eR) { console.error('[vizRenderRutas]', eR); log(logEl, 'warn', '⚠ Panel Rutas: ' + eR.message); }
         var _vb2 = document.getElementById('bodyVizMDT'); if (_vb2) _vb2.style.display = 'none';
         var _va2 = document.getElementById('arrVizMDT');  if (_va2) _va2.textContent = '▶';
       } catch (e) {
