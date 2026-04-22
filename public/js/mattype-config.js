@@ -414,10 +414,14 @@ function mattypeGetRules(cats) {
     requiresPSI:           rule('red',    'red',    'none',   'none'),
     requiresPSR:           rule('red',    'red',    'none',   'none'),
     requiresLocPrd:        'red',
-    requiresLocSrc:        rule('red',    'yellow', 'none',   'red'),
     requiresPlantAsOrigin: rule('red',    'none',   'none',   'none'),
     requiresVendorArc:     rule('none',   'none',   'red',    'none'),
     requiresAnyOriginDest: rule('none',   'yellow', 'none',   'red'),
-    pleadtimeZero:         rule('red',    'yellow', 'none',   'none')
+    pleadtimeZero:         rule('red',    'yellow', 'none',   'none'),
+    outputCoeffZero:       rule('red',    'yellow', 'none',   'none'),
+    isCoproductOnly:       rule('yellow', 'yellow', 'none',   'none'),
+    hasPSHUnexpected:      rule('none',   'none',   'yellow', 'yellow'),
+    notConsumedInBOM:      rule('none',   'yellow', 'yellow', 'none'),
+    tleadtimeZero:         rule('yellow', 'yellow', 'yellow', 'yellow')
   };
 }

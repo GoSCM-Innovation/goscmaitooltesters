@@ -487,6 +487,15 @@ async function paAnalyzeAndExport(
     }
   });
 
+  /* Índice LS por PRDID — para check de TLEADTIME */
+  var locSrcRowsByPrd = {};
+  allLocSrc.forEach(function(r) {
+    var prd = str(r.PRDID);
+    if (!prd) return;
+    if (!locSrcRowsByPrd[prd]) locSrcRowsByPrd[prd] = [];
+    locSrcRowsByPrd[prd].push(r);
+  });
+
   /* Resource Location */
   var resLocSet      = new Set();
   var resLocResidSet = new Set();
@@ -836,6 +845,9 @@ async function paAnalyzeAndExport(
         if (covData.uncovered.size > 0) {
           obs.push('Sin arco de abastecimiento hacia: ' + codes(covData.uncovered));
           fills.push(rules.requiresVendorArc);
+        } else if (!inLS) {
+          obs.push('Sin arco de abastecimiento (no registrado en Location Source)');
+          fills.push(rules.requiresVendorArc);
         }
       }
 
@@ -856,6 +868,56 @@ async function paAnalyzeAndExport(
         }
       }
 
+      // OUTPUTCOEFFICIENT = 0 en PSH
+      if (rules.outputCoeffZero !== 'none' && inPSH) {
+        var sidsMissingCoeff = sidsPrd.filter(function(sid) {
+          var recs = pshBySid[sid] || [];
+          return recs.some(function(r) { return !r.OUTPUTCOEFFICIENT || r.OUTPUTCOEFFICIENT === '0'; });
+        });
+        if (sidsMissingCoeff.length) {
+          obs.push('OUTPUTCOEFFICIENT ausente o cero en ' + sidsMissingCoeff.length + ' SOURCEID(s)');
+          fills.push(rules.outputCoeffZero);
+        }
+      }
+
+      // Solo co-producto: aparece en PSH pero nunca como SOURCETYPE=P
+      if (rules.isCoproductOnly !== 'none') {
+        if (pshPrdSet[prdid] && !inPSH) {
+          obs.push('Configurado solo como co-producto (SOURCETYPE=C) — falta PSH primario');
+          fills.push(rules.isCoproductOnly);
+        }
+      }
+
+      // Tiene PSH cuando no debería (rawmat / trading)
+      if (rules.hasPSHUnexpected !== 'none') {
+        if (pshPrdSet[prdid]) {
+          obs.push('Tiene BOM de fabricación (PSH) — verificar categorización');
+          fills.push(rules.hasPSHUnexpected);
+        }
+      }
+
+      // No consumido como componente en ningún BOM
+      if (rules.notConsumedInBOM !== 'none') {
+        if (consLocs.size === 0) {
+          obs.push('No consumido como componente en ningún BOM');
+          fills.push(rules.notConsumedInBOM);
+        }
+      }
+
+      // TLEADTIME = 0 en todos los arcos de Location Source
+      if (rules.tleadtimeZero !== 'none' && inLS) {
+        var lsRows = locSrcRowsByPrd[prdid] || [];
+        if (lsRows.length > 0) {
+          var allZeroTlt = lsRows.every(function(r) {
+            return !r.TLEADTIME || str(r.TLEADTIME) === '0';
+          });
+          if (allZeroTlt) {
+            obs.push('TLEADTIME = 0 en todos los arcos de Location Source');
+            fills.push(rules.tleadtimeZero);
+          }
+        }
+      }
+
       var uncatLabel = isUncategorized
         ? 'Sin categoría [' + (mattypeid || 'sin MATTYPEID') + ']'
         : null;
@@ -865,11 +927,16 @@ async function paAnalyzeAndExport(
           obs.push(uncatLabel + ' — sin hallazgos en modo permisivo');
         } else {
           var okParts = ['Habilitado en Location Product'];
-          if (reqPSH !== 'none' && inPSH)                     okParts.push('Con PSH, PSI y PSR');
+          if (reqPSH !== 'none' && inPSH)                      okParts.push('Con PSH, PSI y PSR');
           if (rules.requiresPlantAsOrigin !== 'none' && inPSH) okParts.push('Planta es origen en Location Source');
-          if (rules.requiresVendorArc !== 'none')              okParts.push('Arcos de abastecimiento completos');
-          if (rules.requiresAnyOriginDest !== 'none')          okParts.push('Con arcos en Location Source');
-          if (rules.pleadtimeZero !== 'none' && inPSH)         okParts.push('Lead time definido en todos los SOURCEIDs');
+          if (rules.requiresVendorArc !== 'none')               okParts.push('Arcos de abastecimiento completos');
+          if (rules.requiresAnyOriginDest !== 'none')           okParts.push('Con arcos en Location Source');
+          if (rules.pleadtimeZero !== 'none' && inPSH)          okParts.push('PLEADTIME definido en todos los SOURCEIDs');
+          if (rules.outputCoeffZero !== 'none' && inPSH)        okParts.push('Coeficiente de salida definido');
+          if (rules.isCoproductOnly !== 'none' && inPSH)        okParts.push('PSH con SOURCETYPE=P presente');
+          if (rules.hasPSHUnexpected !== 'none')                okParts.push('Sin BOM de fabricación');
+          if (rules.notConsumedInBOM !== 'none')                okParts.push('Consumido como componente en BOM');
+          if (rules.tleadtimeZero !== 'none' && inLS)           okParts.push('TLEADTIME definido en Location Source');
           obs.push(okParts.join(' | '));
         }
       } else if (isUncategorized) {
@@ -1135,8 +1202,11 @@ async function paAnalyzeAndExport(
       if (roles[0] === 'Sin actividad') { obs.push('Ubicación en maestro sin actividad en otros datos'); fills.push('info'); }
       if (!obs.length) {
         var okParts = [];
-        if (isPlanta)    okParts.push('BOMs con PSI, PSR y lead time | Sin componentes descubiertos | Sin recursos ociosos');
-        if (isProveedor) okParts.push('Abastecimiento con consumo PSI y cobertura LP en destino');
+        if (isPlanta)        okParts.push('BOMs con PSI, PSR y lead time | Sin componentes descubiertos | Sin recursos ociosos');
+        if (isProveedor)     okParts.push('Abastecimiento con consumo PSI y cobertura LP en destino');
+        if (isTransferencia) okParts.push('Nodo de transferencia sin hallazgos');
+        if (isReceptor)      okParts.push('Nodo receptor sin hallazgos');
+        if (!okParts.length) okParts.push('Ubicación activa sin hallazgos');
         obs.push(okParts.join(' | '));
       }
 
