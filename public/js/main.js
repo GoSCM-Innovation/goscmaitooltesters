@@ -616,8 +616,8 @@
           : "PlanningAreaID eq '" + CFG.pa + "'")
         : '';
       var andF = function(b, c) { return b ? b + ' and ' + c : c; };
-      var pshFilter = andF(paFilter, "PINVALID eq ''");
-      var locFilter = andF(paFilter, "LOCVALID eq ''");
+      var pshFilter = andF(paFilter, "PINVALID ne 'X'");
+      var locFilter = andF(paFilter, "LOCVALID ne 'X'");
       var bomValidSids = {};
 
       try {

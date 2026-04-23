@@ -162,9 +162,9 @@
         ? paBase + " and PRDID eq '" + prdid + "'"
         : "PRDID eq '" + prdid + "'";
       var andF = function(b, c) { return b ? b + ' and ' + c : c; };
-      var fLocSrc  = prdFilter + " and TINVALID eq ''";
-      var fCustSrc = prdFilter + " and CINVALID eq ''";
-      var fPsh     = prdFilter + " and PINVALID eq ''";
+      var fLocSrc  = prdFilter + " and TINVALID ne 'X'";
+      var fCustSrc = prdFilter + " and CINVALID ne 'X'";
+      var fPsh     = prdFilter + " and PINVALID ne 'X'";
 
       try {
         log(logEl, 'info', '▶ Cargando red para: ' + prdid);
@@ -215,7 +215,7 @@
             var suppFilter = compList.map(function (c) { return "PRDID eq '" + c + "'"; }).join(' or ');
             if (paBase) suppFilter = '(' + suppFilter + ') and ' + paBase;
             log(logEl, 'info', '[GET] ' + cfg.base + cfg.location + ' | Arcos de proveedor para ' + compList.length + ' componentes');
-            supplierLocRows = await fetchAllPages(cfg.base + cfg.location, logEl, suppFilter + " and TINVALID eq ''", 'PRDID,LOCFR,LOCID,TLEADTIME');
+            supplierLocRows = await fetchAllPages(cfg.base + cfg.location, logEl, suppFilter + " and TINVALID ne 'X'", 'PRDID,LOCFR,LOCID,TLEADTIME');
             log(logEl, 'ok', '✓ Arcos de proveedor: ' + supplierLocRows.length + ' registros');
             supplierLocRows.forEach(function (r) { if (r.LOCFR) locIds[r.LOCFR] = true; if (r.LOCID) locIds[r.LOCID] = true; });
           }
@@ -239,7 +239,7 @@
           var ids = Object.keys(locIds);
           var locMFilter = ids.map(function (id) { return "LOCID eq '" + id + "'"; }).join(' or ');
           if (paBase) locMFilter = '(' + locMFilter + ') and ' + paBase;
-          locMFilter = locMFilter + " and LOCVALID eq ''";
+          locMFilter = locMFilter + " and LOCVALID ne 'X'";
           log(logEl, 'info', '[GET] ' + cfg.base + cfg.locMaster + ' | $filter=' + locMFilter + ' | $select=LOCID,LOCDESCR,LOCTYPE');
           locMasters = await fetchAllPages(cfg.base + cfg.locMaster, logEl, locMFilter, 'LOCID,LOCDESCR,LOCTYPE');
           log(logEl, 'ok', '✓ Location Master: ' + locMasters.length + ' registros');
@@ -248,7 +248,7 @@
           var ids = Object.keys(custIds);
           var custMFilter = ids.map(function (id) { return "CUSTID eq '" + id + "'"; }).join(' or ');
           if (paBase) custMFilter = '(' + custMFilter + ') and ' + paBase;
-          custMFilter = custMFilter + " and CUSTVALID eq ''";
+          custMFilter = custMFilter + " and CUSTVALID ne 'X'";
           log(logEl, 'info', '[GET] ' + cfg.base + cfg.custMaster + ' | $filter=' + custMFilter + ' | $select=CUSTID,CUSTDESCR');
           custMasters = await fetchAllPages(cfg.base + cfg.custMaster, logEl, custMFilter, 'CUSTID,CUSTDESCR');
           log(logEl, 'ok', '✓ Customer Master: ' + custMasters.length + ' registros');

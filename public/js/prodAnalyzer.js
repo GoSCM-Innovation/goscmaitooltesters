@@ -51,9 +51,9 @@ async function doProductionAnalysis() {
       : "PlanningAreaID eq '" + CFG.pa + "'")
     : '';
   var andF = function(b, c) { return b ? b + ' and ' + c : c; };
-  var fPsh    = andF(paFilter, "PINVALID eq ''");
-  var fLoc    = andF(paFilter, "LOCVALID eq ''");
-  var fLocSrc = andF(paFilter, "TINVALID eq ''");
+  var fPsh    = andF(paFilter, "PINVALID ne 'X'");
+  var fLoc    = andF(paFilter, "LOCVALID ne 'X'");
+  var fLocSrc = andF(paFilter, "TINVALID ne 'X'");
 
   var PA_PRD = {}, PA_LOC = {}, PA_RES = {}, PA_RES_LOC = {};
   var pshBySid = {}, pshPrdSet = {};

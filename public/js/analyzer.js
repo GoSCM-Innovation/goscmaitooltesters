@@ -205,11 +205,11 @@
           : "PlanningAreaID eq '" + CFG.pa + "'")
         : '';
       var andF = function(b, c) { return b ? b + ' and ' + c : c; };
-      var fLocSrc  = andF(paFilter, "TINVALID eq ''");
-      var fCustSrc = andF(paFilter, "CINVALID eq ''");
-      var fPsh     = andF(paFilter, "PINVALID eq ''");
-      var fLoc     = andF(paFilter, "LOCVALID eq ''");
-      var fCust    = andF(paFilter, "CUSTVALID eq ''");
+      var fLocSrc  = andF(paFilter, "TINVALID ne 'X'");
+      var fCustSrc = andF(paFilter, "CINVALID ne 'X'");
+      var fPsh     = andF(paFilter, "PINVALID ne 'X'");
+      var fLoc     = andF(paFilter, "LOCVALID ne 'X'");
+      var fCust    = andF(paFilter, "CUSTVALID ne 'X'");
       var snValidSids = {};
 
       // Reset SN — edge tables go to IDB, only small lookups stay in JS
