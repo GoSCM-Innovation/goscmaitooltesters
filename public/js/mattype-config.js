@@ -36,10 +36,12 @@ var MATTYPE_CATS = [
       desc: 'Componente fabricado internamente que alimenta otro proceso productivo; no se entrega directamente al cliente.',
       rules: [
         'Requiere BOM (PSH + PSI) y recurso (PSR)',
-        'No exige ruta directa a cliente — ausencia = 🟡 advertencia',
-        'Falta de Location Source = 🟡 advertencia (no crítico)',
-        'PLEADTIME = 0 se marca 🟡',
-        'Sin origen de planta no se penaliza'
+        'Produce y consume en misma planta = ✅ OK (sin transferencia requerida)',
+        'Produce en planta A, transfiere y consume en planta B = ✅ OK',
+        'Produce sin consumo local ni transferencia = 🔴 problema',
+        'Transfiere a destino sin consumo PSI = 🔴 problema',
+        'Consume localmente pero transfiere a destino sin consumo = 🟡 advertencia',
+        'PLEADTIME = 0 se marca 🟡'
       ],
       example: 'SF_TAPA_ROSCA, WIP_MEZCLA_BASE'
     }
@@ -439,7 +441,7 @@ function mattypeGetRules(cats) {
     requiresLocPrd:        'red',
     requiresPlantAsOrigin: rule('red',    'none',   'none',   'none'),
     requiresVendorArc:     rule('none',   'none',   'red',    'none'),
-    requiresAnyOriginDest: rule('none',   'yellow', 'none',   'red'),
+    requiresAnyOriginDest: rule('none',   'none',   'none',   'red'),
     pleadtimeZero:         rule('red',    'yellow', 'none',   'none'),
     outputCoeffZero:       rule('red',    'yellow', 'none',   'none'),
     isCoproductOnly:       rule('yellow', 'yellow', 'none',   'none'),

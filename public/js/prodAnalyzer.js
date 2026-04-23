@@ -865,9 +865,46 @@ async function paAnalyzeAndExport(
         }
       }
 
-      // LocSrc: algún origen y destino
+      // LocSrc: algún origen y destino (trading / finished)
       if (rules.requiresAnyOriginDest !== 'none') {
         if (!inLS) { obs.push('Sin arcos en Location Source'); fills.push(rules.requiresAnyOriginDest); }
+      }
+
+      // Semiterminado: validación específica de consumo y transferencia (7 casos)
+      if (cats.indexOf('semi') >= 0 && inPSH) {
+        var semiPlantsArr = Array.from(plantsSet);
+        var semiHasLocalConsumption = semiPlantsArr.some(function(loc) {
+          return !!psiCompByLocPrd[loc + '|' + prdid];
+        });
+        var semiHasTransferOut = semiPlantsArr.some(function(loc) {
+          return locSrcByPrdLocfr.has(prdid + '|' + loc);
+        });
+        var semiLsFromPlant = (locSrcRowsByPrd[prdid] || []).filter(function(r) {
+          return plantsSet.has(str(r.LOCFR || ''));
+        });
+        var semiDestsNoConsumption = new Set(
+          semiLsFromPlant
+            .map(function(r) { return str(r.LOCID || ''); })
+            .filter(function(dest) { return dest && !psiCompByLocPrd[dest + '|' + prdid]; })
+        );
+
+        if (!semiHasLocalConsumption && !semiHasTransferOut) {
+          // Caso 4: produce sin consumo PSI local ni transferencia
+          obs.push('Semiterminado sin consumo PSI en planta productora ni transferencia configurada');
+          fills.push('red');
+        } else if (semiHasTransferOut && semiDestsNoConsumption.size > 0) {
+          if (!semiHasLocalConsumption) {
+            // Caso 5: transfiere sin consumo en destino y sin consumo local
+            obs.push('Transfiere a ' + semiDestsNoConsumption.size + ' destino(s) sin consumo PSI en ningún punto: ' + codes(semiDestsNoConsumption));
+            fills.push('red');
+          } else {
+            // Caso 6: consume localmente pero transfiere a destino sin consumo
+            obs.push('Transfiere a ' + semiDestsNoConsumption.size + ' destino(s) sin consumo PSI (sí consume en planta origen): ' + codes(semiDestsNoConsumption));
+            fills.push('yellow');
+          }
+        }
+        // Caso 1: consume localmente, sin transferencia → OK (sin alerta)
+        // Casos 2 y 3: transfiere y consume en destino → OK (sin alerta)
       }
 
       // PLEADTIME
@@ -945,6 +982,10 @@ async function paAnalyzeAndExport(
           if (rules.requiresPlantAsOrigin !== 'none' && inPSH) okParts.push('Planta es origen en Location Source');
           if (rules.requiresVendorArc !== 'none')               okParts.push('Arcos de abastecimiento completos');
           if (rules.requiresAnyOriginDest !== 'none')           okParts.push('Con arcos en Location Source');
+          if (cats.indexOf('semi') >= 0 && inPSH) {
+            var _semiLocalOk = Array.from(plantsSet).some(function(loc) { return !!psiCompByLocPrd[loc + '|' + prdid]; });
+            okParts.push(_semiLocalOk ? 'Consume en planta productora' : 'Consumo en destino de transferencia verificado');
+          }
           if (rules.pleadtimeZero !== 'none' && inPSH)          okParts.push('PLEADTIME definido en todos los SOURCEIDs');
           if (rules.outputCoeffZero !== 'none' && inPSH)        okParts.push('Coeficiente de salida definido');
           if (rules.isCoproductOnly !== 'none' && inPSH)        okParts.push('PSH con SOURCETYPE=P presente');
