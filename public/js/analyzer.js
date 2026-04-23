@@ -339,8 +339,10 @@
         var summary = await analyzeAndStreamExcel(onProg, onStat, timer, logEl);
         progEl.style.width = '100%';
 
-        log(logEl, 'ok', timer.fmt() + ' ¡Excel descargado! ' + summary.totalProducts + ' productos analizados en ' + timer.ms() + 'ms.');
-        setStatusSN('ok', '&#10003; Completado · ' + summary.totalProducts + ' productos · ' + timer.ms() + 'ms');
+        var _dur = fmtDuration(timer.ms());
+        var _n   = summary.totalProducts.toLocaleString('es-CL');
+        log(logEl, 'ok', timer.fmt() + ' Análisis completado. ' + _n + ' productos analizados · Excel descargado · ' + _dur + '.');
+        setStatusSN('ok', '&#10003; Análisis completado &mdash; Excel descargado &nbsp;|&nbsp; ' + _n + ' productos &nbsp;&middot;&nbsp; ' + _dur);
         document.getElementById('snSuccessBanner').classList.remove('hidden');
 
       } catch (e) {

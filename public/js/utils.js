@@ -1,6 +1,13 @@
     /* ═══════════════════════════════════════════════════════════════
        TIMER UTILITY
        ═══════════════════════════════════════════════════════════════ */
+    function fmtDuration(ms) {
+      if (ms < 60000) return Math.round(ms / 1000) + ' s';
+      var m = Math.floor(ms / 60000);
+      var s = Math.round((ms % 60000) / 1000);
+      return m + ' min' + (s > 0 ? ' ' + s + ' s' : '');
+    }
+
     function createTimer() {
       var t0 = Date.now();
       return {
