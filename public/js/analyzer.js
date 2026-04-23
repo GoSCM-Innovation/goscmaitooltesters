@@ -342,7 +342,7 @@
         var _dur = fmtDuration(timer.ms());
         var _n   = summary.totalProducts.toLocaleString('es-CL');
         log(logEl, 'ok', timer.fmt() + ' Análisis completado. ' + _n + ' productos analizados · Excel descargado · ' + _dur + '.');
-        setStatusSN('ok', '&#10003; Análisis completado &mdash; Excel descargado &nbsp;|&nbsp; ' + _n + ' productos &nbsp;&middot;&nbsp; ' + _dur);
+        setStatusSN('ok', '✓ Análisis completado — Excel descargado | ' + _n + ' productos · ' + _dur);
         document.getElementById('snSuccessBanner').classList.remove('hidden');
 
       } catch (e) {
