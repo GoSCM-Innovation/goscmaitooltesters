@@ -1340,10 +1340,13 @@
               : (TRADE_YEL[networkStatus] || tradingDisconnected || (!inLP && inLS) || (!inCP && inCS)) ? C_YEL
               : null;
           } else {
-            // Terminado / insumo / sin categoría: lógica original
-            var RED_ST = { 'Hu\u00e9rfano': 1, 'Sin Distribuci\u00f3n': 1, 'Sin Abastecimiento': 1, 'Sin Entrega a Cliente': 1 };
-            var YEL_ST = { 'Abastecimiento Parcial': 1, 'Abastecimiento sin Consumo PSI': 1, 'Solo Distribuci\u00f3n': 1,
-                           'Distribuci\u00f3n sin ruta completa': 1, 'Solo Distribuci\u00f3n + Entrega': 1, 'Sin arcos de red': 1 };
+            // Terminado / insumo / sin categoría
+            // 'Solo Entrega', 'Solo Distribución' y 'Solo Distribución + Entrega' son RED para terminados:
+            // sin PSH no hay fuente de producción, independientemente de los arcos de distribución.
+            var RED_ST = { 'Hu\u00e9rfano': 1, 'Sin Distribuci\u00f3n': 1, 'Sin Abastecimiento': 1, 'Sin Entrega a Cliente': 1,
+                           'Solo Entrega': 1, 'Solo Distribuci\u00f3n': 1, 'Solo Distribuci\u00f3n + Entrega': 1, 'Sin arcos de red': 1 };
+            var YEL_ST = { 'Abastecimiento Parcial': 1, 'Abastecimiento sin Consumo PSI': 1,
+                           'Distribuci\u00f3n sin ruta completa': 1 };
             pFill = (RED_ST[networkStatus] || cycles.length > 0) ? C_RED
               : (YEL_ST[networkStatus] || (!inLP && (inPSH || inLS)) || (!inCP && inCS)) ? C_YEL
               : null;
@@ -1409,9 +1412,12 @@
           ghostCount += ghosts.length;
 
           /* ── Acumular locStats (topología) ── */
-          ghosts.forEach(function (l)    { if (!locStats[l]) locStats[l] = {}; locStats[l].isGhost    = true; });
-          deadEnds.forEach(function (l)  { if (!locStats[l]) locStats[l] = {}; locStats[l].isDeadEnd  = true; });
-          isoPlants.forEach(function (l) { if (!locStats[l]) locStats[l] = {}; locStats[l].isIsolated = true; });
+          // Mismo filtro que en obs: ghost/dead-end/planta aislada solo para terminados
+          if (!useSemiRules && !useRawmatRules) {
+            ghosts.forEach(function (l)    { if (!locStats[l]) locStats[l] = {}; locStats[l].isGhost    = true; });
+            deadEnds.forEach(function (l)  { if (!locStats[l]) locStats[l] = {}; locStats[l].isDeadEnd  = true; });
+            isoPlants.forEach(function (l) { if (!locStats[l]) locStats[l] = {}; locStats[l].isIsolated = true; });
+          }
           cycles.forEach(function (cStr) {
             cStr.split(' → ').forEach(function (loc) {
               if (!loc) return;
@@ -2081,12 +2087,12 @@
         if (metrics.customers > 1) { score += 20; steps.push('+20 multiples clientes (' + metrics.customers + ')'); }
 
       } else {
-        // Finished (y uncategorized): lógica original basada en rutas planta→cliente
-        if (paths.length > 0) { score += 30; steps.push('+30 ruta completa planta-cliente'); }
+        // Finished (y uncategorized): max teórico = 50+15+15+20 = 100 → 'Healthy' alcanzable
+        if (paths.length > 0) { score += 50; steps.push('+50 ruta completa planta-cliente'); }
         else { steps.push('+0 sin rutas completas'); }
-        if (metrics.customers > 1) { score += 10; steps.push('+10 multiples clientes (' + metrics.customers + ')'); }
-        if (metrics.paths > 1) { score += 10; steps.push('+10 multiples rutas (' + metrics.paths + ')'); }
-        if (metrics.plants > 1) { score += 10; steps.push('+10 multiples plantas (' + metrics.plants + ')'); }
+        if (metrics.customers > 1) { score += 15; steps.push('+15 multiples clientes (' + metrics.customers + ')'); }
+        if (metrics.paths > 1) { score += 15; steps.push('+15 multiples rutas (' + metrics.paths + ')'); }
+        if (metrics.plants > 1) { score += 20; steps.push('+20 multiples plantas (' + metrics.plants + ')'); }
         if (ghosts.length > 0) { score -= 20; steps.push('-20 ghost nodes (' + ghosts.length + ')'); }
         if (deadEnds.length > 0) { score -= 15; steps.push('-15 dead ends (' + deadEnds.length + ')'); }
         var custPC = {};
