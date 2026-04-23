@@ -1210,7 +1210,12 @@
           var ltIssues  = snFindMissingLeadTimes(graph);
           var metrics   = snComputeMetrics(prdid, graph, paths, ghosts, deadEnds);
           var resData   = snAnalyzeResilience(prdid, graph, paths);
-          var health    = snComputeHealthScore(metrics, paths, ghosts, deadEnds);
+          var health    = snComputeHealthScore(metrics, paths, ghosts, deadEnds, {
+            useSemiRules:    useSemiRules,
+            useRawmatRules:  useRawmatRules,
+            useTradingRules: useTradingRules,
+            inPSH: inPSH, inPSI: inPSI, inLS: inLS, inCS: inCS
+          });
 
           /* ── Estado de la Red ── */
           var networkStatus;
@@ -1985,31 +1990,57 @@
     }
 
     /* ── Health score (0-100) ── */
-    function snComputeHealthScore(metrics, paths, ghosts, deadEnds) {
+    function snComputeHealthScore(metrics, paths, ghosts, deadEnds, ctx) {
       var score = 0;
       var steps = ['Base: 0'];
-      if (paths.length > 0) { score += 30; steps.push('+30 ruta completa planta-cliente'); }
-      else { steps.push('+0 sin rutas completas'); }
-      if (metrics.customers > 1) { score += 10; steps.push('+10 multiples clientes (' + metrics.customers + ')'); }
-      if (metrics.paths > 1) { score += 10; steps.push('+10 multiples rutas (' + metrics.paths + ')'); }
-      if (metrics.plants > 1) { score += 10; steps.push('+10 multiples plantas (' + metrics.plants + ')'); }
-      if (ghosts.length > 0) { score -= 20; steps.push('-20 ghost nodes (' + ghosts.length + ')'); }
-      if (deadEnds.length > 0) { score -= 15; steps.push('-15 dead ends (' + deadEnds.length + ')'); }
-      var custPC = {};
-      paths.forEach(function (p) { custPC[p.customer] = (custPC[p.customer] || 0) + 1; });
-      var hasSinglePath = Object.keys(custPC).some(function (c) { return custPC[c] === 1; });
-      if (hasSinglePath) { score -= 20; steps.push('-20 cliente(s) con unica ruta'); }
-      if (metrics.plants === 1) { score -= 15; steps.push('-15 fuente unica de produccion'); }
-      score = Math.max(0, Math.min(100, score));
+      var cmts  = [];
+      ctx = ctx || {};
 
-      var cat = score >= 80 ? 'Healthy' : score >= 60 ? 'Acceptable'
-        : score >= 40 ? 'Weak' : 'Critical';
-      var cmts = [];
-      if (paths.length === 0) cmts.push('No valid plant-to-customer paths');
-      if (ghosts.length > 0) cmts.push(ghosts.length + ' ghost DC(s)');
-      if (deadEnds.length > 0) cmts.push(deadEnds.length + ' dead-end location(s)');
-      if (hasSinglePath) cmts.push('Single-path customers detected');
-      if (metrics.plants === 1) cmts.push('Single production source');
+      if (ctx.useSemiRules) {
+        // Semi: PSH existencia + consumo PSI + resiliencia multi-planta
+        if (ctx.inPSH) { score += 30; steps.push('+30 produccion configurada'); }
+        else            { steps.push('+0 sin produccion'); cmts.push('Sin PSH'); }
+        if (ctx.inPSI) { score += 40; steps.push('+40 consumo PSI configurado'); }
+        else            { steps.push('+0 sin consumo PSI'); cmts.push('Sin consumo PSI'); }
+        if (metrics.plants > 1) { score += 20; steps.push('+20 multiples plantas (' + metrics.plants + ')'); }
+        if (ctx.inLS)  { score += 10; steps.push('+10 transferencia configurada'); }
+
+      } else if (ctx.useRawmatRules) {
+        // Rawmat: arcos de suministro hacia plantas + cobertura de ubicaciones
+        if (ctx.inLS)        { score += 60; steps.push('+60 arcos de suministro configurados'); }
+        else                  { steps.push('+0 sin arcos de suministro'); cmts.push('Sin Location Source'); }
+        if (metrics.dcs > 0) { score += 20; steps.push('+20 ubicaciones de consumo alcanzadas (' + metrics.dcs + ')'); }
+        if (ctx.inCS)        { score += 20; steps.push('+20 entrega directa a cliente configurada'); }
+
+      } else if (ctx.useTradingRules) {
+        // Trading: distribución + entrega a cliente + amplitud de clientes
+        if (ctx.inLS) { score += 40; steps.push('+40 distribucion configurada'); }
+        else           { steps.push('+0 sin distribucion'); cmts.push('Sin Location Source'); }
+        if (ctx.inCS) { score += 40; steps.push('+40 entrega a cliente configurada'); }
+        else           { steps.push('+0 sin entrega a cliente'); cmts.push('Sin Customer Source'); }
+        if (metrics.customers > 1) { score += 20; steps.push('+20 multiples clientes (' + metrics.customers + ')'); }
+
+      } else {
+        // Finished (y uncategorized): lógica original basada en rutas planta→cliente
+        if (paths.length > 0) { score += 30; steps.push('+30 ruta completa planta-cliente'); }
+        else { steps.push('+0 sin rutas completas'); }
+        if (metrics.customers > 1) { score += 10; steps.push('+10 multiples clientes (' + metrics.customers + ')'); }
+        if (metrics.paths > 1) { score += 10; steps.push('+10 multiples rutas (' + metrics.paths + ')'); }
+        if (metrics.plants > 1) { score += 10; steps.push('+10 multiples plantas (' + metrics.plants + ')'); }
+        if (ghosts.length > 0) { score -= 20; steps.push('-20 ghost nodes (' + ghosts.length + ')'); }
+        if (deadEnds.length > 0) { score -= 15; steps.push('-15 dead ends (' + deadEnds.length + ')'); }
+        var custPC = {};
+        paths.forEach(function (p) { custPC[p.customer] = (custPC[p.customer] || 0) + 1; });
+        var hasSinglePath = Object.keys(custPC).some(function (c) { return custPC[c] === 1; });
+        if (hasSinglePath) { score -= 20; steps.push('-20 cliente(s) con unica ruta'); cmts.push('Single-path customers detected'); }
+        if (metrics.plants === 1) { score -= 15; steps.push('-15 fuente unica de produccion'); cmts.push('Single production source'); }
+        if (paths.length === 0) cmts.push('No valid plant-to-customer paths');
+        if (ghosts.length > 0) cmts.push(ghosts.length + ' ghost DC(s)');
+        if (deadEnds.length > 0) cmts.push(deadEnds.length + ' dead-end location(s)');
+      }
+
+      score = Math.max(0, Math.min(100, score));
+      var cat = score >= 80 ? 'Healthy' : score >= 60 ? 'Acceptable' : score >= 40 ? 'Weak' : 'Critical';
       var detail = steps.join(' | ') + ' = ' + score;
       return { score: score, category: cat, comments: cmts.join('; '), detail: detail };
     }
