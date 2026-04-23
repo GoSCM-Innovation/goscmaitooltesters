@@ -1250,6 +1250,13 @@
 
           /* ── Observaciones (filtradas por categoría) ── */
           var obs = [];
+          // Traduce networkStatus problemático a obs para que pObs refleje siempre el problema real
+          var OK_STATUSES = useSemiRules    ? { 'Semiterminado Local': 1, 'Semiterminado con Transferencia': 1 }
+            : useTradingRules ? { 'Solo Distribución + Entrega': 1 }
+            : useRawmatRules  ? { 'Abastecimiento Completo': 1 }
+            :                   { 'Red Completa': 1 };
+          if (!OK_STATUSES[networkStatus]) obs.push(networkStatus);
+
           if (paths._truncated) obs.push('Paths truncados (>50.000, red muy compleja)');
           cycles.forEach(function (c) { obs.push('Ciclo: ' + c); });
           // Ghost, dead-end, planta aislada solo aplican a terminados (necesitan ruta a cliente)
@@ -1275,7 +1282,7 @@
           /* ── Semáforo Product (por categoría) ── */
           var pFill;
           if (useSemiRules) {
-            var SEMI_RED = { 'Sin Producci\u00f3n': 1, 'Sin Consumo PSI': 1 };
+            var SEMI_RED = { 'Sin Producci\u00f3n': 1, 'Sin Consumo PSI': 1, 'Hu\u00e9rfano': 1 };
             pFill = (SEMI_RED[networkStatus] || cycles.length > 0) ? C_RED
               : ((!inLP && inPSH)) ? C_YEL
               : null;
