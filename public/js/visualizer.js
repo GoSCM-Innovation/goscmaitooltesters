@@ -161,6 +161,10 @@
       var prdFilter = paBase
         ? paBase + " and PRDID eq '" + prdid + "'"
         : "PRDID eq '" + prdid + "'";
+      var andF = function(b, c) { return b ? b + ' and ' + c : c; };
+      var fLocSrc  = prdFilter + " and TINVALID eq ''";
+      var fCustSrc = prdFilter + " and CINVALID eq ''";
+      var fPsh     = prdFilter + " and PINVALID eq ''";
 
       try {
         log(logEl, 'info', '▶ Cargando red para: ' + prdid);
@@ -169,17 +173,17 @@
 
         if (cfg.location) {
           log(logEl, 'info', '[GET] ' + cfg.base + cfg.location + ' | $filter=' + prdFilter + ' | $select=PRDID,LOCFR,LOCID,TLEADTIME');
-          locRows = await fetchAllPages(cfg.base + cfg.location, logEl, prdFilter, 'PRDID,LOCFR,LOCID,TLEADTIME');
+          locRows = await fetchAllPages(cfg.base + cfg.location, logEl, fLocSrc, 'PRDID,LOCFR,LOCID,TLEADTIME');
           log(logEl, 'ok', '✓ Location Source: ' + locRows.length + ' registros');
         }
         if (cfg.customer) {
           log(logEl, 'info', '[GET] ' + cfg.base + cfg.customer + ' | $filter=' + prdFilter + ' | $select=PRDID,LOCID,CUSTID,CLEADTIME');
-          custRows = await fetchAllPages(cfg.base + cfg.customer, logEl, prdFilter, 'PRDID,LOCID,CUSTID,CLEADTIME');
+          custRows = await fetchAllPages(cfg.base + cfg.customer, logEl, fCustSrc, 'PRDID,LOCID,CUSTID,CLEADTIME');
           log(logEl, 'ok', '✓ Customer Source: ' + custRows.length + ' registros');
         }
         if (cfg.sourceProd) {
           log(logEl, 'info', '[GET] ' + cfg.base + cfg.sourceProd + ' | $filter=' + prdFilter + ' | $select=SOURCEID,PRDID,LOCID,PLEADTIME');
-          plantRows = await fetchAllPages(cfg.base + cfg.sourceProd, logEl, prdFilter, 'SOURCEID,PRDID,LOCID,PLEADTIME');
+          plantRows = await fetchAllPages(cfg.base + cfg.sourceProd, logEl, fPsh, 'SOURCEID,PRDID,LOCID,PLEADTIME');
           log(logEl, 'ok', '✓ Production Source Header: ' + plantRows.length + ' registros');
         }
 
@@ -211,7 +215,7 @@
             var suppFilter = compList.map(function (c) { return "PRDID eq '" + c + "'"; }).join(' or ');
             if (paBase) suppFilter = '(' + suppFilter + ') and ' + paBase;
             log(logEl, 'info', '[GET] ' + cfg.base + cfg.location + ' | Arcos de proveedor para ' + compList.length + ' componentes');
-            supplierLocRows = await fetchAllPages(cfg.base + cfg.location, logEl, suppFilter, 'PRDID,LOCFR,LOCID,TLEADTIME');
+            supplierLocRows = await fetchAllPages(cfg.base + cfg.location, logEl, suppFilter + " and TINVALID eq ''", 'PRDID,LOCFR,LOCID,TLEADTIME');
             log(logEl, 'ok', '✓ Arcos de proveedor: ' + supplierLocRows.length + ' registros');
             supplierLocRows.forEach(function (r) { if (r.LOCFR) locIds[r.LOCFR] = true; if (r.LOCID) locIds[r.LOCID] = true; });
           }
@@ -235,6 +239,7 @@
           var ids = Object.keys(locIds);
           var locMFilter = ids.map(function (id) { return "LOCID eq '" + id + "'"; }).join(' or ');
           if (paBase) locMFilter = '(' + locMFilter + ') and ' + paBase;
+          locMFilter = locMFilter + " and LOCVALID eq ''";
           log(logEl, 'info', '[GET] ' + cfg.base + cfg.locMaster + ' | $filter=' + locMFilter + ' | $select=LOCID,LOCDESCR,LOCTYPE');
           locMasters = await fetchAllPages(cfg.base + cfg.locMaster, logEl, locMFilter, 'LOCID,LOCDESCR,LOCTYPE');
           log(logEl, 'ok', '✓ Location Master: ' + locMasters.length + ' registros');
@@ -243,6 +248,7 @@
           var ids = Object.keys(custIds);
           var custMFilter = ids.map(function (id) { return "CUSTID eq '" + id + "'"; }).join(' or ');
           if (paBase) custMFilter = '(' + custMFilter + ') and ' + paBase;
+          custMFilter = custMFilter + " and CUSTVALID eq ''";
           log(logEl, 'info', '[GET] ' + cfg.base + cfg.custMaster + ' | $filter=' + custMFilter + ' | $select=CUSTID,CUSTDESCR');
           custMasters = await fetchAllPages(cfg.base + cfg.custMaster, logEl, custMFilter, 'CUSTID,CUSTDESCR');
           log(logEl, 'ok', '✓ Customer Master: ' + custMasters.length + ' registros');

@@ -50,6 +50,10 @@ async function doProductionAnalysis() {
       ? "PlanningAreaID eq '" + CFG.pa + "' and VersionID eq '" + CFG.pver + "'"
       : "PlanningAreaID eq '" + CFG.pa + "'")
     : '';
+  var andF = function(b, c) { return b ? b + ' and ' + c : c; };
+  var fPsh    = andF(paFilter, "PINVALID eq ''");
+  var fLoc    = andF(paFilter, "LOCVALID eq ''");
+  var fLocSrc = andF(paFilter, "TINVALID eq ''");
 
   var PA_PRD = {}, PA_LOC = {}, PA_RES = {}, PA_RES_LOC = {};
   var pshBySid = {}, pshPrdSet = {};
@@ -63,7 +67,7 @@ async function doProductionAnalysis() {
 
     setStatusPA('Descargando Production Source Header → IDB...', 2);
     log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + ent.psh);
-    var nPsh = await fetchAndIndex(baseOData + ent.psh, logEl, paFilter,
+    var nPsh = await fetchAndIndex(baseOData + ent.psh, logEl, fPsh,
       'SOURCEID,PRDID,LOCID,SOURCETYPE,PLEADTIME,OUTPUTCOEFFICIENT,PRATIO',
       function(rows) {
         rows.forEach(function(r) {
@@ -87,7 +91,10 @@ async function doProductionAnalysis() {
       setStatusPA('Descargando Production Source Item → IDB...', 12);
       var nPsi = await fetchAndIndex(baseOData + ent.psi, logEl, paFilter,
         'SOURCEID,PRDID,COMPONENTCOEFFICIENT,ISALTITEM',
-        function(rows) { return idbBulkPut('pa_psi', rows); });
+        function(rows) {
+          var validRows = rows.filter(function(r) { return !!pshBySid[str(r.SOURCEID)]; });
+          return idbBulkPut('pa_psi', validRows);
+        });
       log(logEl, 'ok', timer.fmt() + ' PSI: ' + nPsi + ' reg');
     }
     progEl.style.width = '18%';
@@ -96,7 +103,10 @@ async function doProductionAnalysis() {
       setStatusPA('Descargando Production Source Item Sub → IDB...', 18);
       var nPsiSub = await fetchAndIndex(baseOData + ent.psiSub, logEl, paFilter,
         'SOURCEID,PRDFR,SPRDFR',
-        function(rows) { return idbBulkPut('pa_psisub', rows); });
+        function(rows) {
+          var validRows = rows.filter(function(r) { return !!pshBySid[str(r.SOURCEID)]; });
+          return idbBulkPut('pa_psisub', validRows);
+        });
       log(logEl, 'ok', timer.fmt() + ' PSI Sub: ' + nPsiSub + ' reg');
     }
     progEl.style.width = '22%';
@@ -105,7 +115,10 @@ async function doProductionAnalysis() {
       setStatusPA('Descargando Production Source Resource → IDB...', 22);
       var nPsr = await fetchAndIndex(baseOData + ent.psr, logEl, paFilter,
         'SOURCEID,RESID',
-        function(rows) { return idbBulkPut('pa_psr', rows); });
+        function(rows) {
+          var validRows = rows.filter(function(r) { return !!pshBySid[str(r.SOURCEID)]; });
+          return idbBulkPut('pa_psr', validRows);
+        });
       log(logEl, 'ok', timer.fmt() + ' PSR: ' + nPsr + ' reg');
     }
     progEl.style.width = '32%';
@@ -124,7 +137,7 @@ async function doProductionAnalysis() {
 
     if (ent.loc) {
       setStatusPA('Indexando Location...', 44);
-      var nLoc = await fetchAndIndex(baseOData + ent.loc, logEl, paFilter,
+      var nLoc = await fetchAndIndex(baseOData + ent.loc, logEl, fLoc,
         'LOCID,LOCDESCR,LOCTYPE',
         function(rows) {
           rows.forEach(function(r) { var k = str(r.LOCID); if (k) PA_LOC[k] = r; });
@@ -173,7 +186,7 @@ async function doProductionAnalysis() {
 
     if (ent.locSrc) {
       setStatusPA('Descargando Location Source → IDB...', 68);
-      var nLs = await fetchAndIndex(baseOData + ent.locSrc, logEl, paFilter,
+      var nLs = await fetchAndIndex(baseOData + ent.locSrc, logEl, fLocSrc,
         'PRDID,LOCFR,LOCID,TLEADTIME',
         function(rows) { return idbBulkPut('pa_loc_src', rows); });
       log(logEl, 'ok', timer.fmt() + ' Location Source: ' + nLs + ' reg');
