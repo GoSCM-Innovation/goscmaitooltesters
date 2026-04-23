@@ -883,7 +883,7 @@
         'PRDID','PRDDESCR','MATTYPEID',
         'En PSH?','En PSI?','En Location Source?','En Customer Source?','En Location Product?','En Customer Product?','Solo en maestro?',
         'Estado de la Red','# Plantas','# DCs','# Clientes','# Rutas completas','Ruta mas larga','# Ghost Nodes','# Dead Ends',
-        'Health Score','Categoria de salud',
+        'Health Score','Categoria de salud','Detalle Calculo Health Score',
         '# Origenes (LOCFR)','Origenes (codigos)','# Destinos (LOCID)','Destinos (codigos)',
         '# Clientes en CustSrc','Clientes (codigos)','Multi-sourced?','TLT promedio (dias)','CLT promedio (dias)',
         '# Plantas aisladas'
@@ -910,6 +910,7 @@
         'Ubicaciones que reciben producto pero no tienen ninguna salida configurada.',
         'Puntaje de salud 0-100 calculado en base a completitud de rutas, anomalias y lead times.',
         'Clasificacion del puntaje: Healthy (\u226580) | Acceptable (\u226560) | Weak (\u226540) | Critical (<40).',
+        'Desglose paso a paso del calculo: bonificaciones (+) y penalizaciones (-) que determinan el score final.',
         'Cantidad de ubicaciones origen distintas (LOCFR) en Location Source para este producto.',
         'Codigos de las ubicaciones origen separados por coma.',
         'Cantidad de ubicaciones destino distintas (LOCID) en Location Source para este producto.',
@@ -925,7 +926,7 @@
         'ibp','ibp','ibp',
         'flag','flag','flag','flag','flag','flag','flag',
         'metric','metric','metric','metric','metric','metric','metric','metric',
-        'metric','metric',
+        'metric','metric','metric',
         'detail','detail','detail','detail',
         'detail','detail','detail','detail','detail',
         'detail'
@@ -1259,7 +1260,7 @@
             yn(inPSH), yn(inPSI), yn(inLS), yn(inCS), yn(inLP), yn(inCP), yn(onlyMaster),
             networkStatus, metrics.plants, metrics.dcs, metrics.customers,
             metrics.paths, metrics.longestPath, metrics.ghosts, metrics.deadEnds,
-            health.score, health.category,
+            health.score, health.category, health.detail,
             _numOrigins || NA_DASH, _origCodes, _numDests || NA_DASH, _destCodes,
             _numCustCS  || NA_DASH, _custCodes, yn(_isMulti), _tltAvg, _cltAvg,
             _nIsoPlants > 0 ? _nIsoPlants : NA_DASH
@@ -1913,16 +1914,19 @@
     /* ── Health score (0-100) ── */
     function snComputeHealthScore(metrics, paths, ghosts, deadEnds) {
       var score = 0;
-      if (paths.length > 0) score += 30;
-      if (metrics.customers > 1) score += 10;
-      if (metrics.paths > 1) score += 10;
-      if (metrics.plants > 1) score += 10;
-      if (ghosts.length > 0) score -= 20;
-      if (deadEnds.length > 0) score -= 15;
+      var steps = ['Base: 0'];
+      if (paths.length > 0) { score += 30; steps.push('+30 ruta completa planta-cliente'); }
+      else { steps.push('+0 sin rutas completas'); }
+      if (metrics.customers > 1) { score += 10; steps.push('+10 multiples clientes (' + metrics.customers + ')'); }
+      if (metrics.paths > 1) { score += 10; steps.push('+10 multiples rutas (' + metrics.paths + ')'); }
+      if (metrics.plants > 1) { score += 10; steps.push('+10 multiples plantas (' + metrics.plants + ')'); }
+      if (ghosts.length > 0) { score -= 20; steps.push('-20 ghost nodes (' + ghosts.length + ')'); }
+      if (deadEnds.length > 0) { score -= 15; steps.push('-15 dead ends (' + deadEnds.length + ')'); }
       var custPC = {};
       paths.forEach(function (p) { custPC[p.customer] = (custPC[p.customer] || 0) + 1; });
-      if (Object.keys(custPC).some(function (c) { return custPC[c] === 1; })) score -= 20;
-      if (metrics.plants === 1) score -= 15;
+      var hasSinglePath = Object.keys(custPC).some(function (c) { return custPC[c] === 1; });
+      if (hasSinglePath) { score -= 20; steps.push('-20 cliente(s) con unica ruta'); }
+      if (metrics.plants === 1) { score -= 15; steps.push('-15 fuente unica de produccion'); }
       score = Math.max(0, Math.min(100, score));
 
       var cat = score >= 80 ? 'Healthy' : score >= 60 ? 'Acceptable'
@@ -1931,10 +1935,10 @@
       if (paths.length === 0) cmts.push('No valid plant-to-customer paths');
       if (ghosts.length > 0) cmts.push(ghosts.length + ' ghost DC(s)');
       if (deadEnds.length > 0) cmts.push(deadEnds.length + ' dead-end location(s)');
-      if (Object.keys(custPC).some(function (c) { return custPC[c] === 1; }))
-        cmts.push('Single-path customers detected');
+      if (hasSinglePath) cmts.push('Single-path customers detected');
       if (metrics.plants === 1) cmts.push('Single production source');
-      return { score: score, category: cat, comments: cmts.join('; ') };
+      var detail = steps.join(' | ') + ' = ' + score;
+      return { score: score, category: cat, comments: cmts.join('; '), detail: detail };
     }
 
     /* ── Category / finding label helpers ── */
