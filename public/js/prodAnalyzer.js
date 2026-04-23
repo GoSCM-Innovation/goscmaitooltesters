@@ -50,6 +50,10 @@ async function doProductionAnalysis() {
       ? "PlanningAreaID eq '" + CFG.pa + "' and VersionID eq '" + CFG.pver + "'"
       : "PlanningAreaID eq '" + CFG.pa + "'")
     : '';
+  var andF = function(b, c) { return b ? b + ' and ' + c : c; };
+  var fPsh    = paFilter;
+  var fLoc    = paFilter;
+  var fLocSrc = paFilter;
 
   var PA_PRD = {}, PA_LOC = {}, PA_RES = {}, PA_RES_LOC = {};
   var pshBySid = {}, pshPrdSet = {};
@@ -63,9 +67,10 @@ async function doProductionAnalysis() {
 
     setStatusPA('Descargando Production Source Header → IDB...', 2);
     log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + ent.psh);
-    var nPsh = await fetchAndIndex(baseOData + ent.psh, logEl, paFilter,
-      'SOURCEID,PRDID,LOCID,SOURCETYPE,PLEADTIME,OUTPUTCOEFFICIENT,PRATIO',
+    var nPsh = await fetchAndIndex(baseOData + ent.psh, logEl, fPsh,
+      'SOURCEID,PRDID,LOCID,SOURCETYPE,PLEADTIME,OUTPUTCOEFFICIENT,PRATIO,PINVALID',
       function(rows) {
+        rows = rows.filter(function(r) { return r.PINVALID !== 'X'; });
         rows.forEach(function(r) {
           var sid = str(r.SOURCEID); if (!sid) return;
           if (!pshBySid[sid]) pshBySid[sid] = [];
@@ -87,7 +92,10 @@ async function doProductionAnalysis() {
       setStatusPA('Descargando Production Source Item → IDB...', 12);
       var nPsi = await fetchAndIndex(baseOData + ent.psi, logEl, paFilter,
         'SOURCEID,PRDID,COMPONENTCOEFFICIENT,ISALTITEM',
-        function(rows) { return idbBulkPut('pa_psi', rows); });
+        function(rows) {
+          var validRows = rows.filter(function(r) { return !!pshBySid[str(r.SOURCEID)]; });
+          return idbBulkPut('pa_psi', validRows);
+        });
       log(logEl, 'ok', timer.fmt() + ' PSI: ' + nPsi + ' reg');
     }
     progEl.style.width = '18%';
@@ -96,7 +104,10 @@ async function doProductionAnalysis() {
       setStatusPA('Descargando Production Source Item Sub → IDB...', 18);
       var nPsiSub = await fetchAndIndex(baseOData + ent.psiSub, logEl, paFilter,
         'SOURCEID,PRDFR,SPRDFR',
-        function(rows) { return idbBulkPut('pa_psisub', rows); });
+        function(rows) {
+          var validRows = rows.filter(function(r) { return !!pshBySid[str(r.SOURCEID)]; });
+          return idbBulkPut('pa_psisub', validRows);
+        });
       log(logEl, 'ok', timer.fmt() + ' PSI Sub: ' + nPsiSub + ' reg');
     }
     progEl.style.width = '22%';
@@ -105,7 +116,10 @@ async function doProductionAnalysis() {
       setStatusPA('Descargando Production Source Resource → IDB...', 22);
       var nPsr = await fetchAndIndex(baseOData + ent.psr, logEl, paFilter,
         'SOURCEID,RESID',
-        function(rows) { return idbBulkPut('pa_psr', rows); });
+        function(rows) {
+          var validRows = rows.filter(function(r) { return !!pshBySid[str(r.SOURCEID)]; });
+          return idbBulkPut('pa_psr', validRows);
+        });
       log(logEl, 'ok', timer.fmt() + ' PSR: ' + nPsr + ' reg');
     }
     progEl.style.width = '32%';
@@ -124,9 +138,10 @@ async function doProductionAnalysis() {
 
     if (ent.loc) {
       setStatusPA('Indexando Location...', 44);
-      var nLoc = await fetchAndIndex(baseOData + ent.loc, logEl, paFilter,
-        'LOCID,LOCDESCR,LOCTYPE',
+      var nLoc = await fetchAndIndex(baseOData + ent.loc, logEl, fLoc,
+        'LOCID,LOCDESCR,LOCTYPE,LOCVALID',
         function(rows) {
+          rows = rows.filter(function(r) { return r.LOCVALID !== 'X'; });
           rows.forEach(function(r) { var k = str(r.LOCID); if (k) PA_LOC[k] = r; });
           return Promise.resolve();
         });
@@ -173,9 +188,12 @@ async function doProductionAnalysis() {
 
     if (ent.locSrc) {
       setStatusPA('Descargando Location Source → IDB...', 68);
-      var nLs = await fetchAndIndex(baseOData + ent.locSrc, logEl, paFilter,
-        'PRDID,LOCFR,LOCID,TLEADTIME',
-        function(rows) { return idbBulkPut('pa_loc_src', rows); });
+      var nLs = await fetchAndIndex(baseOData + ent.locSrc, logEl, fLocSrc,
+        'PRDID,LOCFR,LOCID,TLEADTIME,TINVALID',
+        function(rows) {
+          rows = rows.filter(function(r) { return r.TINVALID !== 'X'; });
+          return idbBulkPut('pa_loc_src', rows);
+        });
       log(logEl, 'ok', timer.fmt() + ' Location Source: ' + nLs + ' reg');
     }
     progEl.style.width = '75%';
@@ -274,7 +292,7 @@ function paConfirmMapping() {
   var wrap = document.getElementById('mattypeExcludeWrap');
   if (wrap) wrap.innerHTML = '<p style="color:var(--text2);font-size:12px;margin:8px 0;">⏳ Cargando tipos de material desde SAP IBP…</p>';
   paFetchMattypes().then(function() {
-    mattyeRenderExclude();
+    mattyeRenderExclude('');
     _mattyeUpdateExcludeSummary();
     _paUpdateRunSummary();
   });
@@ -852,9 +870,46 @@ async function paAnalyzeAndExport(
         }
       }
 
-      // LocSrc: algún origen y destino
+      // LocSrc: algún origen y destino (trading / finished)
       if (rules.requiresAnyOriginDest !== 'none') {
         if (!inLS) { obs.push('Sin arcos en Location Source'); fills.push(rules.requiresAnyOriginDest); }
+      }
+
+      // Semiterminado: validación específica de consumo y transferencia (7 casos)
+      if (cats.indexOf('semi') >= 0 && inPSH) {
+        var semiPlantsArr = Array.from(plantsSet);
+        var semiHasLocalConsumption = semiPlantsArr.some(function(loc) {
+          return !!psiCompByLocPrd[loc + '|' + prdid];
+        });
+        var semiHasTransferOut = semiPlantsArr.some(function(loc) {
+          return locSrcByPrdLocfr.has(prdid + '|' + loc);
+        });
+        var semiLsFromPlant = (locSrcRowsByPrd[prdid] || []).filter(function(r) {
+          return plantsSet.has(str(r.LOCFR || ''));
+        });
+        var semiDestsNoConsumption = new Set(
+          semiLsFromPlant
+            .map(function(r) { return str(r.LOCID || ''); })
+            .filter(function(dest) { return dest && !psiCompByLocPrd[dest + '|' + prdid]; })
+        );
+
+        if (!semiHasLocalConsumption && !semiHasTransferOut) {
+          // Caso 4: produce sin consumo PSI local ni transferencia
+          obs.push('Semiterminado sin consumo PSI en planta productora ni transferencia configurada');
+          fills.push('red');
+        } else if (semiHasTransferOut && semiDestsNoConsumption.size > 0) {
+          if (!semiHasLocalConsumption) {
+            // Caso 5: transfiere sin consumo en destino y sin consumo local
+            obs.push('Transfiere a ' + semiDestsNoConsumption.size + ' destino(s) sin consumo PSI en ningún punto: ' + codes(semiDestsNoConsumption));
+            fills.push('red');
+          } else {
+            // Caso 6: consume localmente pero transfiere a destino sin consumo
+            obs.push('Transfiere a ' + semiDestsNoConsumption.size + ' destino(s) sin consumo PSI (sí consume en planta origen): ' + codes(semiDestsNoConsumption));
+            fills.push('yellow');
+          }
+        }
+        // Caso 1: consume localmente, sin transferencia → OK (sin alerta)
+        // Casos 2 y 3: transfiere y consume en destino → OK (sin alerta)
       }
 
       // PLEADTIME
@@ -932,6 +987,10 @@ async function paAnalyzeAndExport(
           if (rules.requiresPlantAsOrigin !== 'none' && inPSH) okParts.push('Planta es origen en Location Source');
           if (rules.requiresVendorArc !== 'none')               okParts.push('Arcos de abastecimiento completos');
           if (rules.requiresAnyOriginDest !== 'none')           okParts.push('Con arcos en Location Source');
+          if (cats.indexOf('semi') >= 0 && inPSH) {
+            var _semiLocalOk = Array.from(plantsSet).some(function(loc) { return !!psiCompByLocPrd[loc + '|' + prdid]; });
+            okParts.push(_semiLocalOk ? 'Consume en planta productora' : 'Consumo en destino de transferencia verificado');
+          }
           if (rules.pleadtimeZero !== 'none' && inPSH)          okParts.push('PLEADTIME definido en todos los SOURCEIDs');
           if (rules.outputCoeffZero !== 'none' && inPSH)        okParts.push('Coeficiente de salida definido');
           if (rules.isCoproductOnly !== 'none' && inPSH)        okParts.push('PSH con SOURCETYPE=P presente');

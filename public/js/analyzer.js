@@ -204,9 +204,17 @@
           ? "PlanningAreaID eq '" + CFG.pa + "' and VersionID eq '" + CFG.pver + "'"
           : "PlanningAreaID eq '" + CFG.pa + "'")
         : '';
+      var andF = function(b, c) { return b ? b + ' and ' + c : c; };
+      var fLocSrc  = paFilter;
+      var fCustSrc = paFilter;
+      var fPsh     = paFilter;
+      var fLoc     = paFilter;
+      var fCust    = paFilter;
+      var snValidSids = {};
+      var snSidToLoc  = {};  // SOURCEID → LOCID, para join PSI→PSH al construir psiConsumingLocs
 
       // Reset SN — edge tables go to IDB, only small lookups stay in JS
-      SN_IDX = { allPrds: {}, prdLookup: {}, locLookup: {}, custLookup: {}, pshPrds: {}, psiCompPrds: {} };
+      SN_IDX = { allPrds: {}, prdLookup: {}, locLookup: {}, custLookup: {}, pshPrds: {}, psiCompPrds: {}, psiConsumingLocs: {} };
 
       try {
         var progEl = document.getElementById('progFillSN');
@@ -221,9 +229,10 @@
         if (locationEntity) {
           setStatusSN('info', 'Descargando Location Source → IDB...');
           log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + locationEntity);
-          var nLoc = await fetchAndIndex(baseOData + locationEntity, logEl, paFilter,
-            'PRDID,LOCFR,LOCID,TLEADTIME',
+          var nLoc = await fetchAndIndex(baseOData + locationEntity, logEl, fLocSrc,
+            'PRDID,LOCFR,LOCID,TLEADTIME,TINVALID',
             function (rows) {
+              rows = rows.filter(function(r) { return r.TINVALID !== 'X'; });
               rows.forEach(function (r) { var p = str(r.PRDID); if (p) SN_IDX.allPrds[p] = true; });
               return idbBulkPut('sn_loc', rows);
             });
@@ -234,9 +243,10 @@
         if (customerEntity) {
           setStatusSN('info', 'Descargando Customer Source → IDB...');
           log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + customerEntity);
-          var nCust = await fetchAndIndex(baseOData + customerEntity, logEl, paFilter,
-            'PRDID,LOCID,CUSTID,CLEADTIME',
+          var nCust = await fetchAndIndex(baseOData + customerEntity, logEl, fCustSrc,
+            'PRDID,LOCID,CUSTID,CLEADTIME,CINVALID',
             function (rows) {
+              rows = rows.filter(function(r) { return r.CINVALID !== 'X'; });
               rows.forEach(function (r) { var p = str(r.PRDID); if (p) SN_IDX.allPrds[p] = true; });
               return idbBulkPut('sn_cust', rows);
             });
@@ -260,10 +270,15 @@
         if (sourceProdEntity) {
           setStatusSN('info', 'Descargando Production Source Header → IDB...');
           log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + sourceProdEntity);
-          var nSrc = await fetchAndIndex(baseOData + sourceProdEntity, logEl, paFilter,
-            'PRDID,LOCID,PLEADTIME,PRATIO',
+          var nSrc = await fetchAndIndex(baseOData + sourceProdEntity, logEl, fPsh,
+            'SOURCEID,PRDID,LOCID,PLEADTIME,PRATIO,PINVALID',
             function (rows) {
-              rows.forEach(function (r) { var p = str(r.PRDID); if (p) { SN_IDX.allPrds[p] = true; SN_IDX.pshPrds[p] = true; } });
+              rows = rows.filter(function(r) { return r.PINVALID !== 'X'; });
+              rows.forEach(function (r) {
+                var p = str(r.PRDID); if (p) { SN_IDX.allPrds[p] = true; SN_IDX.pshPrds[p] = true; }
+                var s = str(r.SOURCEID);
+                if (s) { snValidSids[s] = true; var l = str(r.LOCID || ''); if (l) snSidToLoc[s] = l; }
+              });
               return idbBulkPut('sn_plant', rows);
             });
           log(logEl, 'ok', timer.fmt() + ' Production Source Header: ' + nSrc + ' reg → IDB');
@@ -276,8 +291,17 @@
           var nPsi = await fetchAndIndex(baseOData + sourceItemEntity, logEl, paFilter,
             'SOURCEID,PRDID,COMPONENTCOEFFICIENT',
             function (rows) {
-              rows.forEach(function (r) { var p = str(r.PRDID); if (p) SN_IDX.psiCompPrds[p] = true; });
-              return idbBulkPut('sn_psi', rows);
+              var validRows = rows.filter(function(r) { return !!snValidSids[str(r.SOURCEID)]; });
+              validRows.forEach(function (r) {
+                var p = str(r.PRDID); if (!p) return;
+                SN_IDX.psiCompPrds[p] = true;
+                var loc = snSidToLoc[str(r.SOURCEID || '')];
+                if (loc) {
+                  if (!SN_IDX.psiConsumingLocs[p]) SN_IDX.psiConsumingLocs[p] = {};
+                  SN_IDX.psiConsumingLocs[p][loc] = true;
+                }
+              });
+              return idbBulkPut('sn_psi', validRows);
             });
           log(logEl, 'ok', timer.fmt() + ' Production Source Item: ' + nPsi + ' reg → IDB (' + Object.keys(SN_IDX.psiCompPrds).length + ' componentes únicos)');
         }
@@ -286,9 +310,10 @@
         if (locMasterEntity) {
           setStatusSN('info', 'Indexando Location (lookup en memoria)...');
           log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + locMasterEntity);
-          var nLocM = await fetchAndIndex(baseOData + locMasterEntity, logEl, paFilter,
-            'LOCID,LOCDESCR,LOCTYPE',
+          var nLocM = await fetchAndIndex(baseOData + locMasterEntity, logEl, fLoc,
+            'LOCID,LOCDESCR,LOCTYPE,LOCVALID',
             function (rows) {
+              rows = rows.filter(function(r) { return r.LOCVALID !== 'X'; });
               rows.forEach(function (r) { var k = str(r.LOCID); if (k) SN_IDX.locLookup[k] = r; });
               return Promise.resolve();
             });
@@ -309,9 +334,10 @@
         if (custMasterEntity) {
           setStatusSN('info', 'Indexando Customer (lookup en memoria)...');
           log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + custMasterEntity);
-          var nCustM = await fetchAndIndex(baseOData + custMasterEntity, logEl, paFilter,
-            'CUSTID,CUSTDESCR',
+          var nCustM = await fetchAndIndex(baseOData + custMasterEntity, logEl, fCust,
+            'CUSTID,CUSTDESCR,CUSTVALID',
             function (rows) {
+              rows = rows.filter(function(r) { return r.CUSTVALID !== 'X'; });
               rows.forEach(function (r) { var k = str(r.CUSTID); if (k) SN_IDX.custLookup[k] = r; });
               return Promise.resolve();
             });
@@ -339,8 +365,10 @@
         var summary = await analyzeAndStreamExcel(onProg, onStat, timer, logEl);
         progEl.style.width = '100%';
 
-        log(logEl, 'ok', timer.fmt() + ' ¡Excel descargado! ' + summary.totalProducts + ' productos analizados en ' + timer.ms() + 'ms.');
-        setStatusSN('ok', '&#10003; Completado · ' + summary.totalProducts + ' productos · ' + timer.ms() + 'ms');
+        var _dur = fmtDuration(timer.ms());
+        var _n   = summary.totalProducts.toLocaleString('es-CL');
+        log(logEl, 'ok', timer.fmt() + ' Análisis completado. ' + _n + ' productos analizados · Excel descargado · ' + _dur + '.');
+        setStatusSN('ok', '✓ Análisis completado — Excel descargado | ' + _n + ' productos · ' + _dur);
         document.getElementById('snSuccessBanner').classList.remove('hidden');
 
       } catch (e) {
@@ -883,7 +911,7 @@
         'PRDID','PRDDESCR','MATTYPEID',
         'En PSH?','En PSI?','En Location Source?','En Customer Source?','En Location Product?','En Customer Product?','Solo en maestro?',
         'Estado de la Red','# Plantas','# DCs','# Clientes','# Rutas completas','Ruta mas larga','# Ghost Nodes','# Dead Ends',
-        'Health Score','Categoria de salud',
+        'Health Score','Categoria de salud','Detalle Calculo Health Score',
         '# Origenes (LOCFR)','Origenes (codigos)','# Destinos (LOCID)','Destinos (codigos)',
         '# Clientes en CustSrc','Clientes (codigos)','Multi-sourced?','TLT promedio (dias)','CLT promedio (dias)',
         '# Plantas aisladas'
@@ -910,6 +938,7 @@
         'Ubicaciones que reciben producto pero no tienen ninguna salida configurada.',
         'Puntaje de salud 0-100 calculado en base a completitud de rutas, anomalias y lead times.',
         'Clasificacion del puntaje: Healthy (\u226580) | Acceptable (\u226560) | Weak (\u226540) | Critical (<40).',
+        'Desglose paso a paso del calculo: bonificaciones (+) y penalizaciones (-) que determinan el score final.',
         'Cantidad de ubicaciones origen distintas (LOCFR) en Location Source para este producto.',
         'Codigos de las ubicaciones origen separados por coma.',
         'Cantidad de ubicaciones destino distintas (LOCID) en Location Source para este producto.',
@@ -925,7 +954,7 @@
         'ibp','ibp','ibp',
         'flag','flag','flag','flag','flag','flag','flag',
         'metric','metric','metric','metric','metric','metric','metric','metric',
-        'metric','metric',
+        'metric','metric','metric',
         'detail','detail','detail','detail',
         'detail','detail','detail','detail','detail',
         'detail'
@@ -1170,6 +1199,17 @@
 
           if (typeof mattypeIsExcluded === 'function' && mattypeIsExcluded(pm(prdid))) continue;
 
+          /* ── Categoría del producto ── */
+          var snCats       = (typeof mattypeGetCategories === 'function') ? mattypeGetCategories(pm(prdid)) : ['uncategorized'];
+          var catIsSemi     = snCats.indexOf('semi')     >= 0;
+          var catIsFinished = snCats.indexOf('finished') >= 0;
+          var catIsRawmat   = snCats.indexOf('rawmat')   >= 0;
+          var catIsTrading  = snCats.indexOf('trading')  >= 0;
+          // Reglas por categoría (más permisivo cuando hay multi-categoría)
+          var useSemiRules    = catIsSemi    && !catIsFinished;
+          var useRawmatRules  = catIsRawmat  && !catIsFinished && !catIsSemi;
+          var useTradingRules = catIsTrading && !catIsFinished && !catIsSemi;
+
           var graph     = await snBuildProductGraph(prdid);
           var paths     = snFindAllPaths(graph);
           var sets      = snComputeNetworkSets(graph);
@@ -1180,61 +1220,162 @@
           var ltIssues  = snFindMissingLeadTimes(graph);
           var metrics   = snComputeMetrics(prdid, graph, paths, ghosts, deadEnds);
           var resData   = snAnalyzeResilience(prdid, graph, paths);
-          var health    = snComputeHealthScore(metrics, paths, ghosts, deadEnds);
+          var health    = snComputeHealthScore(metrics, paths, ghosts, deadEnds, {
+            useSemiRules:    useSemiRules,
+            useRawmatRules:  useRawmatRules,
+            useTradingRules: useTradingRules,
+            inPSH: inPSH, inPSI: inPSI, inLS: inLS, inCS: inCS
+          });
 
           /* ── Estado de la Red ── */
           var networkStatus;
           if (onlyMaster) {
             networkStatus = 'Huérfano';
+          } else if (useSemiRules) {
+            if (!inPSH) {
+              networkStatus = 'Sin Producción';
+            } else if (!inPSI) {
+              networkStatus = 'Sin Consumo PSI';
+            } else if (!inLS) {
+              networkStatus = 'Semiterminado Local';
+            } else {
+              var _psiLocsNS = SN_IDX.psiConsumingLocs[prdid] || {};
+              var _semiLocalOk = graph.plants.some(function(l) { return !!_psiLocsNS[l]; });
+              networkStatus = _semiLocalOk ? 'Semiterminado Local con Transferencia' : 'Semiterminado con Transferencia';
+            }
           } else if (inPSH) {
+            // Terminado / multi-cat con finished: necesita ruta a cliente
             networkStatus = paths.length > 0 ? 'Red Completa'
               : inCS ? 'Distribución sin ruta completa'
               : inLS ? 'Sin Entrega a Cliente'
               : 'Sin Distribución';
           } else if (inPSI) {
+            // Insumo / rawmat: necesita arco de abastecimiento
             if (!inLS) { networkStatus = 'Sin Abastecimiento'; }
             else {
               var reachesPlant = graph.allLocations.some(function (l) { return locInPSH[l]; });
               networkStatus = reachesPlant ? 'Abastecimiento Completo' : 'Abastecimiento Parcial';
             }
+          } else if (useRawmatRules) {
+            // Rawmat sin PSI: tiene arcos pero no aparece como componente en ningún BOM
+            networkStatus = inLS ? 'Abastecimiento sin Consumo PSI' : 'Sin Abastecimiento';
           } else {
+            // Trading / sin PSH ni PSI: evalúa solo arcos de distribución
             networkStatus = (inLS && inCS) ? 'Solo Distribución + Entrega'
               : inLS ? 'Solo Distribución'
               : inCS ? 'Solo Entrega'
               : 'Sin arcos de red';
           }
 
-          /* ── Observaciones ── */
+          /* ── Observaciones (filtradas por categoría) ── */
           var obs = [];
-          if (paths._truncated)  obs.push('Paths truncados (>50.000, red muy compleja)');
-          cycles.forEach(function (c)   { obs.push('Ciclo: ' + c); });
-          ghosts.forEach(function (l)   { obs.push('Ghost node: ' + l); });
-          deadEnds.forEach(function (l) { obs.push('Dead-end: ' + l); });
-          isoPlants.forEach(function(l) { obs.push('Planta aislada: ' + l); });
+          // Traduce networkStatus problemático a obs para que pObs refleje siempre el problema real
+          var OK_STATUSES = useSemiRules    ? { 'Semiterminado Local': 1, 'Semiterminado con Transferencia': 1, 'Semiterminado Local con Transferencia': 1 }
+            : useTradingRules ? { 'Solo Distribución + Entrega': 1 }
+            : useRawmatRules  ? { 'Abastecimiento Completo': 1 }
+            :                   { 'Red Completa': 1 };
+          if (!OK_STATUSES[networkStatus]) obs.push(networkStatus);
+
+          if (paths._truncated) obs.push('Paths truncados (>50.000, red muy compleja)');
+          cycles.forEach(function (c) { obs.push('Ciclo: ' + c); });
+          // Ghost, dead-end, planta aislada solo aplican a terminados (necesitan ruta a cliente)
+          if (!useSemiRules && !useRawmatRules) {
+            ghosts.forEach(function (l)   { obs.push('Ghost node: ' + l); });
+            deadEnds.forEach(function (l) { obs.push('Dead-end: ' + l); });
+            isoPlants.forEach(function(l) { obs.push('Planta aislada: ' + l); });
+          }
           ltIssues.forEach(function (lt) {
-            if (lt.type === 'plant') obs.push('PLEADTIME faltante: ' + lt.loc);
-            else if (lt.type === 'loc')  obs.push('TLEADTIME faltante: ' + lt.from + '->' + lt.to);
-            else                         obs.push('CLEADTIME faltante: ' + lt.from + '->' + lt.to);
+            if (lt.type === 'plant') {
+              // PLEADTIME: aplica a terminados y semiterminados, no a insumos ni mercadería
+              if (!useRawmatRules && !useTradingRules) obs.push('PLEADTIME faltante: ' + lt.loc);
+            } else if (lt.type === 'loc') {
+              obs.push('TLEADTIME faltante: ' + lt.from + '->' + lt.to);
+            } else {
+              // CLEADTIME: solo aplica si el producto llega a clientes (no semi ni insumo)
+              if (!useSemiRules && !useRawmatRules) obs.push('CLEADTIME faltante: ' + lt.from + '->' + lt.to);
+            }
           });
           if (!inLP && (inPSH || inLS)) obs.push('Sin Location Product');
           if (!inCP && inCS)            obs.push('Sin Customer Product');
-          if (health.score < 60)        obs.push('Health score bajo: ' + health.score + '/100 (' + health.category + ')');
 
-          /* ── Semáforo Product ── */
-          var RED_ST  = { 'Hu\u00e9rfano': 1, 'Sin Distribuci\u00f3n': 1, 'Sin Abastecimiento': 1, 'Sin Entrega a Cliente': 1 };
-          var YEL_ST  = { 'Abastecimiento Parcial': 1, 'Solo Distribuci\u00f3n': 1, 'Solo Entrega': 1,
-                          'Distribuci\u00f3n sin ruta completa': 1, 'Solo Distribuci\u00f3n + Entrega': 1, 'Sin arcos de red': 1 };
-          var pFill = (RED_ST[networkStatus] || cycles.length > 0) ? C_RED
-            : (YEL_ST[networkStatus] || health.score < 60 || (!inLP && (inPSH || inLS)) || (!inCP && inCS)) ? C_YEL
-            : null;
+          // Trading: validar que arcos LS y CS compartan al menos una ubicación
+          var tradingDisconnected = false;
+          if (useTradingRules && inLS && inCS) {
+            var _lsReachable = {};
+            Object.keys(graph.locEdges).forEach(function(fr) {
+              _lsReachable[fr] = true;
+              graph.locEdges[fr].forEach(function(to) { _lsReachable[to] = true; });
+            });
+            tradingDisconnected = !Object.keys(graph.custEdges).some(function(loc) { return !!_lsReachable[loc]; });
+            if (tradingDisconnected) obs.push('Red desconectada: arcos LS y CS no comparten ubicaciones');
+          }
+
+          // Semiterminado: validar consumo PSI en cada destino de transferencia
+          var semiDestsNoPsi = [];
+          if (useSemiRules && inPSH && inPSI && inLS) {
+            var _psiLocs = SN_IDX.psiConsumingLocs[prdid] || {};
+            var _lsDests = [];
+            Object.keys(graph.locEdges).forEach(function(fr) {
+              graph.locEdges[fr].forEach(function(to) {
+                if (_lsDests.indexOf(to) < 0) _lsDests.push(to);
+              });
+            });
+            semiDestsNoPsi = _lsDests.filter(function(loc) { return !_psiLocs[loc]; });
+            if (semiDestsNoPsi.length > 0) {
+              obs.push('Destino(s) de transferencia sin consumo PSI: ' + semiDestsNoPsi.join(', '));
+            }
+          }
+
+          /* ── Semáforo Product (por categoría) ── */
+          var pFill;
+          if (useSemiRules) {
+            var SEMI_RED = { 'Sin Producci\u00f3n': 1, 'Sin Consumo PSI': 1, 'Hu\u00e9rfano': 1 };
+            pFill = (SEMI_RED[networkStatus] || cycles.length > 0) ? C_RED
+              : ((!inLP && inPSH) || semiDestsNoPsi.length > 0) ? C_YEL
+              : null;
+          } else if (useTradingRules) {
+            var TRADE_RED = { 'Solo Entrega': 1 };
+            var TRADE_YEL = { 'Solo Distribuci\u00f3n': 1, 'Sin arcos de red': 1, 'Hu\u00e9rfano': 1 };
+            pFill = (cycles.length > 0 || TRADE_RED[networkStatus]) ? C_RED
+              : (TRADE_YEL[networkStatus] || tradingDisconnected || (!inLP && inLS) || (!inCP && inCS)) ? C_YEL
+              : null;
+          } else {
+            // Terminado / insumo / sin categoría
+            // 'Solo Entrega', 'Solo Distribución' y 'Solo Distribución + Entrega' son RED para terminados:
+            // sin PSH no hay fuente de producción, independientemente de los arcos de distribución.
+            var RED_ST = { 'Hu\u00e9rfano': 1, 'Sin Distribuci\u00f3n': 1, 'Sin Abastecimiento': 1, 'Sin Entrega a Cliente': 1,
+                           'Solo Entrega': 1, 'Solo Distribuci\u00f3n': 1, 'Solo Distribuci\u00f3n + Entrega': 1, 'Sin arcos de red': 1,
+                           'Distribuci\u00f3n sin ruta completa': 1 };
+            var YEL_ST = { 'Abastecimiento Parcial': 1, 'Abastecimiento sin Consumo PSI': 1 };
+            pFill = (RED_ST[networkStatus] || cycles.length > 0) ? C_RED
+              : (YEL_ST[networkStatus] || (!inLP && (inPSH || inLS)) || (!inCP && inCS)) ? C_YEL
+              : null;
+          }
 
           var pObs;
           if (!obs.length) {
-            var okParts = ['Red completa sin anomalias'];
-            if (inLP)                      okParts.push('Habilitado en Location Product');
-            if (inCP && inCS)              okParts.push('Habilitado en Customer Product');
-            if (ltIssues.length === 0)     okParts.push('Lead times definidos');
-            if (metrics.paths > 0)         okParts.push(metrics.paths + ' ruta(s) a cliente');
+            var okParts = [];
+            if (useSemiRules) {
+              if (networkStatus === 'Semiterminado Local con Transferencia') {
+                okParts.push('Semiterminado consumido en planta productora con transferencia configurada');
+              } else if (networkStatus === 'Semiterminado con Transferencia') {
+                okParts.push('Semiterminado consumido en destino de transferencia');
+              } else {
+                okParts.push('Semiterminado consumido en planta productora');
+              }
+              if (inLP) okParts.push('Habilitado en Location Product');
+              if (ltIssues.length === 0) okParts.push('Lead times definidos');
+            } else if (useTradingRules) {
+              okParts.push('Mercadería con arcos de distribución y entrega');
+              if (inLP) okParts.push('Habilitado en Location Product');
+              if (inCP && inCS) okParts.push('Habilitado en Customer Product');
+            } else {
+              okParts.push('Red completa sin anomalias');
+              if (inLP)                  okParts.push('Habilitado en Location Product');
+              if (inCP && inCS)          okParts.push('Habilitado en Customer Product');
+              if (ltIssues.length === 0) okParts.push('Lead times definidos');
+              if (metrics.paths > 0)     okParts.push(metrics.paths + ' ruta(s) a cliente');
+            }
             pObs = okParts.join(' | ');
           } else {
             pObs = obs.join(' | ');
@@ -1259,7 +1400,7 @@
             yn(inPSH), yn(inPSI), yn(inLS), yn(inCS), yn(inLP), yn(inCP), yn(onlyMaster),
             networkStatus, metrics.plants, metrics.dcs, metrics.customers,
             metrics.paths, metrics.longestPath, metrics.ghosts, metrics.deadEnds,
-            health.score, health.category,
+            health.score, health.category, health.detail,
             _numOrigins || NA_DASH, _origCodes, _numDests || NA_DASH, _destCodes,
             _numCustCS  || NA_DASH, _custCodes, yn(_isMulti), _tltAvg, _cltAvg,
             _nIsoPlants > 0 ? _nIsoPlants : NA_DASH
@@ -1271,9 +1412,12 @@
           ghostCount += ghosts.length;
 
           /* ── Acumular locStats (topología) ── */
-          ghosts.forEach(function (l)    { if (!locStats[l]) locStats[l] = {}; locStats[l].isGhost    = true; });
-          deadEnds.forEach(function (l)  { if (!locStats[l]) locStats[l] = {}; locStats[l].isDeadEnd  = true; });
-          isoPlants.forEach(function (l) { if (!locStats[l]) locStats[l] = {}; locStats[l].isIsolated = true; });
+          // Mismo filtro que en obs: ghost/dead-end/planta aislada solo para terminados
+          if (!useSemiRules && !useRawmatRules) {
+            ghosts.forEach(function (l)    { if (!locStats[l]) locStats[l] = {}; locStats[l].isGhost    = true; });
+            deadEnds.forEach(function (l)  { if (!locStats[l]) locStats[l] = {}; locStats[l].isDeadEnd  = true; });
+            isoPlants.forEach(function (l) { if (!locStats[l]) locStats[l] = {}; locStats[l].isIsolated = true; });
+          }
           cycles.forEach(function (cStr) {
             cStr.split(' → ').forEach(function (loc) {
               if (!loc) return;
@@ -1365,6 +1509,7 @@
         if (lSt.inCycle && lSt.cycleDescs) lobs.push('Participa en ciclo: ' + lSt.cycleDescs[0]);
         if (!inLPL && (inLSL || inPSHL))   lobs.push('Sin Location Product');
         if (lSt.isCritical) lobs.push('Nodo critico: ' + lSt.productsImpacted + ' prod, ' + lSt.customersImpacted + ' clientes');
+        if (onlyMstL)       lobs.push('Solo en maestro de ubicaciones, sin actividad en la red');
 
         var lFill = (lSt.isGhost || lSt.isDeadEnd || lSt.isIsolated || lSt.inCycle || (!inLPL && (inLSL || inPSHL))) ? C_RED
           : (onlyMstL || lSt.isCritical) ? C_YEL : null;
@@ -1911,30 +2056,59 @@
     }
 
     /* ── Health score (0-100) ── */
-    function snComputeHealthScore(metrics, paths, ghosts, deadEnds) {
+    function snComputeHealthScore(metrics, paths, ghosts, deadEnds, ctx) {
       var score = 0;
-      if (paths.length > 0) score += 30;
-      if (metrics.customers > 1) score += 10;
-      if (metrics.paths > 1) score += 10;
-      if (metrics.plants > 1) score += 10;
-      if (ghosts.length > 0) score -= 20;
-      if (deadEnds.length > 0) score -= 15;
-      var custPC = {};
-      paths.forEach(function (p) { custPC[p.customer] = (custPC[p.customer] || 0) + 1; });
-      if (Object.keys(custPC).some(function (c) { return custPC[c] === 1; })) score -= 20;
-      if (metrics.plants === 1) score -= 15;
-      score = Math.max(0, Math.min(100, score));
+      var steps = ['Base: 0'];
+      var cmts  = [];
+      ctx = ctx || {};
 
-      var cat = score >= 80 ? 'Healthy' : score >= 60 ? 'Acceptable'
-        : score >= 40 ? 'Weak' : 'Critical';
-      var cmts = [];
-      if (paths.length === 0) cmts.push('No valid plant-to-customer paths');
-      if (ghosts.length > 0) cmts.push(ghosts.length + ' ghost DC(s)');
-      if (deadEnds.length > 0) cmts.push(deadEnds.length + ' dead-end location(s)');
-      if (Object.keys(custPC).some(function (c) { return custPC[c] === 1; }))
-        cmts.push('Single-path customers detected');
-      if (metrics.plants === 1) cmts.push('Single production source');
-      return { score: score, category: cat, comments: cmts.join('; ') };
+      if (ctx.useSemiRules) {
+        // Semi: PSH existencia + consumo PSI + resiliencia multi-planta
+        if (ctx.inPSH) { score += 30; steps.push('+30 produccion configurada'); }
+        else            { steps.push('+0 sin produccion'); cmts.push('Sin PSH'); }
+        if (ctx.inPSI) { score += 40; steps.push('+40 consumo PSI configurado'); }
+        else            { steps.push('+0 sin consumo PSI'); cmts.push('Sin consumo PSI'); }
+        if (metrics.plants > 1) { score += 20; steps.push('+20 multiples plantas (' + metrics.plants + ')'); }
+        if (ctx.inLS)  { score += 10; steps.push('+10 transferencia configurada'); }
+
+      } else if (ctx.useRawmatRules) {
+        // Rawmat: arcos de suministro hacia plantas + cobertura de ubicaciones
+        if (ctx.inLS)        { score += 60; steps.push('+60 arcos de suministro configurados'); }
+        else                  { steps.push('+0 sin arcos de suministro'); cmts.push('Sin Location Source'); }
+        if (metrics.dcs > 0) { score += 20; steps.push('+20 ubicaciones de consumo alcanzadas (' + metrics.dcs + ')'); }
+        if (ctx.inCS)        { score += 20; steps.push('+20 entrega directa a cliente configurada'); }
+
+      } else if (ctx.useTradingRules) {
+        // Trading: distribución + entrega a cliente + amplitud de clientes
+        if (ctx.inLS) { score += 40; steps.push('+40 distribucion configurada'); }
+        else           { steps.push('+0 sin distribucion'); cmts.push('Sin Location Source'); }
+        if (ctx.inCS) { score += 40; steps.push('+40 entrega a cliente configurada'); }
+        else           { steps.push('+0 sin entrega a cliente'); cmts.push('Sin Customer Source'); }
+        if (metrics.customers > 1) { score += 20; steps.push('+20 multiples clientes (' + metrics.customers + ')'); }
+
+      } else {
+        // Finished (y uncategorized): max teórico = 50+15+15+20 = 100 → 'Healthy' alcanzable
+        if (paths.length > 0) { score += 50; steps.push('+50 ruta completa planta-cliente'); }
+        else { steps.push('+0 sin rutas completas'); }
+        if (metrics.customers > 1) { score += 15; steps.push('+15 multiples clientes (' + metrics.customers + ')'); }
+        if (metrics.paths > 1) { score += 15; steps.push('+15 multiples rutas (' + metrics.paths + ')'); }
+        if (metrics.plants > 1) { score += 20; steps.push('+20 multiples plantas (' + metrics.plants + ')'); }
+        if (ghosts.length > 0) { score -= 20; steps.push('-20 ghost nodes (' + ghosts.length + ')'); }
+        if (deadEnds.length > 0) { score -= 15; steps.push('-15 dead ends (' + deadEnds.length + ')'); }
+        var custPC = {};
+        paths.forEach(function (p) { custPC[p.customer] = (custPC[p.customer] || 0) + 1; });
+        var hasSinglePath = Object.keys(custPC).some(function (c) { return custPC[c] === 1; });
+        if (hasSinglePath) { score -= 20; steps.push('-20 cliente(s) con unica ruta'); cmts.push('Single-path customers detected'); }
+        if (metrics.plants === 1) { score -= 15; steps.push('-15 fuente unica de produccion'); cmts.push('Single production source'); }
+        if (paths.length === 0) cmts.push('No valid plant-to-customer paths');
+        if (ghosts.length > 0) cmts.push(ghosts.length + ' ghost DC(s)');
+        if (deadEnds.length > 0) cmts.push(deadEnds.length + ' dead-end location(s)');
+      }
+
+      score = Math.max(0, Math.min(100, score));
+      var cat = score >= 80 ? 'Healthy' : score >= 60 ? 'Acceptable' : score >= 40 ? 'Weak' : 'Critical';
+      var detail = steps.join(' | ') + ' = ' + score;
+      return { score: score, category: cat, comments: cmts.join('; '), detail: detail };
     }
 
     /* ── Category / finding label helpers ── */
