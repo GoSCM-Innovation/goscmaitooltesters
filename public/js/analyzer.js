@@ -1368,6 +1368,7 @@
         if (lSt.inCycle && lSt.cycleDescs) lobs.push('Participa en ciclo: ' + lSt.cycleDescs[0]);
         if (!inLPL && (inLSL || inPSHL))   lobs.push('Sin Location Product');
         if (lSt.isCritical) lobs.push('Nodo critico: ' + lSt.productsImpacted + ' prod, ' + lSt.customersImpacted + ' clientes');
+        if (onlyMstL)       lobs.push('Solo en maestro de ubicaciones, sin actividad en la red');
 
         var lFill = (lSt.isGhost || lSt.isDeadEnd || lSt.isIsolated || lSt.inCycle || (!inLPL && (inLSL || inPSHL))) ? C_RED
           : (onlyMstL || lSt.isCritical) ? C_YEL : null;
