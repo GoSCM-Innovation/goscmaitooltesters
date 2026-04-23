@@ -1232,11 +1232,17 @@
           if (onlyMaster) {
             networkStatus = 'Huérfano';
           } else if (useSemiRules) {
-            // Semiterminado: éxito = PSH + consumido como PSI en algún lugar
-            networkStatus = !inPSH ? 'Sin Producción'
-              : !inPSI  ? 'Sin Consumo PSI'
-              : inLS    ? 'Semiterminado con Transferencia'
-              :           'Semiterminado Local';
+            if (!inPSH) {
+              networkStatus = 'Sin Producción';
+            } else if (!inPSI) {
+              networkStatus = 'Sin Consumo PSI';
+            } else if (!inLS) {
+              networkStatus = 'Semiterminado Local';
+            } else {
+              var _psiLocsNS = SN_IDX.psiConsumingLocs[prdid] || {};
+              var _semiLocalOk = graph.plants.some(function(l) { return !!_psiLocsNS[l]; });
+              networkStatus = _semiLocalOk ? 'Semiterminado Local con Transferencia' : 'Semiterminado con Transferencia';
+            }
           } else if (inPSH) {
             // Terminado / multi-cat con finished: necesita ruta a cliente
             networkStatus = paths.length > 0 ? 'Red Completa'
@@ -1250,6 +1256,9 @@
               var reachesPlant = graph.allLocations.some(function (l) { return locInPSH[l]; });
               networkStatus = reachesPlant ? 'Abastecimiento Completo' : 'Abastecimiento Parcial';
             }
+          } else if (useRawmatRules) {
+            // Rawmat sin PSI: tiene arcos pero no aparece como componente en ningún BOM
+            networkStatus = inLS ? 'Abastecimiento sin Consumo PSI' : 'Sin Abastecimiento';
           } else {
             // Trading / sin PSH ni PSI: evalúa solo arcos de distribución
             networkStatus = (inLS && inCS) ? 'Solo Distribución + Entrega'
@@ -1261,7 +1270,7 @@
           /* ── Observaciones (filtradas por categoría) ── */
           var obs = [];
           // Traduce networkStatus problemático a obs para que pObs refleje siempre el problema real
-          var OK_STATUSES = useSemiRules    ? { 'Semiterminado Local': 1, 'Semiterminado con Transferencia': 1 }
+          var OK_STATUSES = useSemiRules    ? { 'Semiterminado Local': 1, 'Semiterminado con Transferencia': 1, 'Semiterminado Local con Transferencia': 1 }
             : useTradingRules ? { 'Solo Distribución + Entrega': 1 }
             : useRawmatRules  ? { 'Abastecimiento Completo': 1 }
             :                   { 'Red Completa': 1 };
@@ -1289,6 +1298,18 @@
           if (!inLP && (inPSH || inLS)) obs.push('Sin Location Product');
           if (!inCP && inCS)            obs.push('Sin Customer Product');
 
+          // Trading: validar que arcos LS y CS compartan al menos una ubicación
+          var tradingDisconnected = false;
+          if (useTradingRules && inLS && inCS) {
+            var _lsReachable = {};
+            Object.keys(graph.locEdges).forEach(function(fr) {
+              _lsReachable[fr] = true;
+              graph.locEdges[fr].forEach(function(to) { _lsReachable[to] = true; });
+            });
+            tradingDisconnected = !Object.keys(graph.custEdges).some(function(loc) { return !!_lsReachable[loc]; });
+            if (tradingDisconnected) obs.push('Red desconectada: arcos LS y CS no comparten ubicaciones');
+          }
+
           // Semiterminado: validar consumo PSI en cada destino de transferencia
           var semiDestsNoPsi = [];
           if (useSemiRules && inPSH && inPSI && inLS) {
@@ -1313,15 +1334,15 @@
               : ((!inLP && inPSH) || semiDestsNoPsi.length > 0) ? C_YEL
               : null;
           } else if (useTradingRules) {
-            // Mercadería: OK si tiene arcos de distribución + entrega
-            var TRADE_YEL = { 'Solo Distribuci\u00f3n': 1, 'Solo Entrega': 1, 'Sin arcos de red': 1, 'Hu\u00e9rfano': 1 };
-            pFill = cycles.length > 0 ? C_RED
-              : (TRADE_YEL[networkStatus] || (!inLP && inLS) || (!inCP && inCS)) ? C_YEL
+            var TRADE_RED = { 'Solo Entrega': 1 };
+            var TRADE_YEL = { 'Solo Distribuci\u00f3n': 1, 'Sin arcos de red': 1, 'Hu\u00e9rfano': 1 };
+            pFill = (cycles.length > 0 || TRADE_RED[networkStatus]) ? C_RED
+              : (TRADE_YEL[networkStatus] || tradingDisconnected || (!inLP && inLS) || (!inCP && inCS)) ? C_YEL
               : null;
           } else {
             // Terminado / insumo / sin categoría: lógica original
             var RED_ST = { 'Hu\u00e9rfano': 1, 'Sin Distribuci\u00f3n': 1, 'Sin Abastecimiento': 1, 'Sin Entrega a Cliente': 1 };
-            var YEL_ST = { 'Abastecimiento Parcial': 1, 'Solo Distribuci\u00f3n': 1, 'Solo Entrega': 1,
+            var YEL_ST = { 'Abastecimiento Parcial': 1, 'Abastecimiento sin Consumo PSI': 1, 'Solo Distribuci\u00f3n': 1,
                            'Distribuci\u00f3n sin ruta completa': 1, 'Solo Distribuci\u00f3n + Entrega': 1, 'Sin arcos de red': 1 };
             pFill = (RED_ST[networkStatus] || cycles.length > 0) ? C_RED
               : (YEL_ST[networkStatus] || (!inLP && (inPSH || inLS)) || (!inCP && inCS)) ? C_YEL
@@ -1332,7 +1353,13 @@
           if (!obs.length) {
             var okParts = [];
             if (useSemiRules) {
-              okParts.push(inLS ? 'Semiterminado con transferencia configurada' : 'Semiterminado consumido en planta productora');
+              if (networkStatus === 'Semiterminado Local con Transferencia') {
+                okParts.push('Semiterminado consumido en planta productora con transferencia configurada');
+              } else if (networkStatus === 'Semiterminado con Transferencia') {
+                okParts.push('Semiterminado consumido en destino de transferencia');
+              } else {
+                okParts.push('Semiterminado consumido en planta productora');
+              }
               if (inLP) okParts.push('Habilitado en Location Product');
               if (ltIssues.length === 0) okParts.push('Lead times definidos');
             } else if (useTradingRules) {
