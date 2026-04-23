@@ -1232,14 +1232,13 @@
           });
           if (!inLP && (inPSH || inLS)) obs.push('Sin Location Product');
           if (!inCP && inCS)            obs.push('Sin Customer Product');
-          if (health.score < 60)        obs.push('Health score bajo: ' + health.score + '/100 (' + health.category + ')');
 
           /* ── Semáforo Product ── */
           var RED_ST  = { 'Hu\u00e9rfano': 1, 'Sin Distribuci\u00f3n': 1, 'Sin Abastecimiento': 1, 'Sin Entrega a Cliente': 1 };
           var YEL_ST  = { 'Abastecimiento Parcial': 1, 'Solo Distribuci\u00f3n': 1, 'Solo Entrega': 1,
                           'Distribuci\u00f3n sin ruta completa': 1, 'Solo Distribuci\u00f3n + Entrega': 1, 'Sin arcos de red': 1 };
           var pFill = (RED_ST[networkStatus] || cycles.length > 0) ? C_RED
-            : (YEL_ST[networkStatus] || health.score < 60 || (!inLP && (inPSH || inLS)) || (!inCP && inCS)) ? C_YEL
+            : (YEL_ST[networkStatus] || (!inLP && (inPSH || inLS)) || (!inCP && inCS)) ? C_YEL
             : null;
 
           var pObs;
