@@ -1344,9 +1344,9 @@
             // 'Solo Entrega', 'Solo Distribución' y 'Solo Distribución + Entrega' son RED para terminados:
             // sin PSH no hay fuente de producción, independientemente de los arcos de distribución.
             var RED_ST = { 'Hu\u00e9rfano': 1, 'Sin Distribuci\u00f3n': 1, 'Sin Abastecimiento': 1, 'Sin Entrega a Cliente': 1,
-                           'Solo Entrega': 1, 'Solo Distribuci\u00f3n': 1, 'Solo Distribuci\u00f3n + Entrega': 1, 'Sin arcos de red': 1 };
-            var YEL_ST = { 'Abastecimiento Parcial': 1, 'Abastecimiento sin Consumo PSI': 1,
+                           'Solo Entrega': 1, 'Solo Distribuci\u00f3n': 1, 'Solo Distribuci\u00f3n + Entrega': 1, 'Sin arcos de red': 1,
                            'Distribuci\u00f3n sin ruta completa': 1 };
+            var YEL_ST = { 'Abastecimiento Parcial': 1, 'Abastecimiento sin Consumo PSI': 1 };
             pFill = (RED_ST[networkStatus] || cycles.length > 0) ? C_RED
               : (YEL_ST[networkStatus] || (!inLP && (inPSH || inLS)) || (!inCP && inCS)) ? C_YEL
               : null;
