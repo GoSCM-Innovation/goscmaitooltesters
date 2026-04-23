@@ -1334,8 +1334,8 @@
               : ((!inLP && inPSH) || semiDestsNoPsi.length > 0) ? C_YEL
               : null;
           } else if (useTradingRules) {
-            var TRADE_RED = { 'Solo Entrega': 1 };
-            var TRADE_YEL = { 'Solo Distribuci\u00f3n': 1, 'Sin arcos de red': 1, 'Hu\u00e9rfano': 1 };
+            var TRADE_RED = { 'Solo Entrega': 1, 'Hu\u00e9rfano': 1 };
+            var TRADE_YEL = { 'Solo Distribuci\u00f3n': 1, 'Sin arcos de red': 1 };
             pFill = (cycles.length > 0 || TRADE_RED[networkStatus]) ? C_RED
               : (TRADE_YEL[networkStatus] || tradingDisconnected || (!inLP && inLS) || (!inCP && inCS)) ? C_YEL
               : null;

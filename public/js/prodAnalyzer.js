@@ -1003,10 +1003,15 @@ async function paAnalyzeAndExport(
         obs.unshift(uncatLabel);
       }
 
-      // Severidad final
-      var finalSev = fills.length ? mattypeResolveSeverity(fills.map(function(f){
-        if(f==='red') return 'red'; if(f==='yellow') return 'yellow'; return 'none';
-      })) : 'none';
+      // Severidad final — máximo entre todos los hallazgos (el más grave gana)
+      var finalSev = 'none';
+      if (fills.length) {
+        var _sevOrder = ['none', 'info', 'yellow', 'red'];
+        fills.forEach(function(f) {
+          var s = f === 'red' ? 'red' : f === 'yellow' ? 'yellow' : 'none';
+          if (_sevOrder.indexOf(s) > _sevOrder.indexOf(finalSev)) finalSev = s;
+        });
+      }
       if (isUncategorized && finalSev === 'none') finalSev = 'yellow';
       var fill = severityToFill(finalSev);
 
