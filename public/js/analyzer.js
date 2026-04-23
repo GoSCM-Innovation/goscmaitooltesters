@@ -1189,6 +1189,17 @@
 
           if (typeof mattypeIsExcluded === 'function' && mattypeIsExcluded(pm(prdid))) continue;
 
+          /* ── Categoría del producto ── */
+          var snCats       = (typeof mattypeGetCategories === 'function') ? mattypeGetCategories(pm(prdid)) : ['uncategorized'];
+          var catIsSemi     = snCats.indexOf('semi')     >= 0;
+          var catIsFinished = snCats.indexOf('finished') >= 0;
+          var catIsRawmat   = snCats.indexOf('rawmat')   >= 0;
+          var catIsTrading  = snCats.indexOf('trading')  >= 0;
+          // Reglas por categoría (más permisivo cuando hay multi-categoría)
+          var useSemiRules    = catIsSemi    && !catIsFinished;
+          var useRawmatRules  = catIsRawmat  && !catIsFinished && !catIsSemi;
+          var useTradingRules = catIsTrading && !catIsFinished && !catIsSemi;
+
           var graph     = await snBuildProductGraph(prdid);
           var paths     = snFindAllPaths(graph);
           var sets      = snComputeNetworkSets(graph);
@@ -1205,54 +1216,98 @@
           var networkStatus;
           if (onlyMaster) {
             networkStatus = 'Huérfano';
+          } else if (useSemiRules) {
+            // Semiterminado: éxito = PSH + consumido como PSI en algún lugar
+            networkStatus = !inPSH ? 'Sin Producción'
+              : !inPSI  ? 'Sin Consumo PSI'
+              : inLS    ? 'Semiterminado con Transferencia'
+              :           'Semiterminado Local';
           } else if (inPSH) {
+            // Terminado / multi-cat con finished: necesita ruta a cliente
             networkStatus = paths.length > 0 ? 'Red Completa'
               : inCS ? 'Distribución sin ruta completa'
               : inLS ? 'Sin Entrega a Cliente'
               : 'Sin Distribución';
           } else if (inPSI) {
+            // Insumo / rawmat: necesita arco de abastecimiento
             if (!inLS) { networkStatus = 'Sin Abastecimiento'; }
             else {
               var reachesPlant = graph.allLocations.some(function (l) { return locInPSH[l]; });
               networkStatus = reachesPlant ? 'Abastecimiento Completo' : 'Abastecimiento Parcial';
             }
           } else {
+            // Trading / sin PSH ni PSI: evalúa solo arcos de distribución
             networkStatus = (inLS && inCS) ? 'Solo Distribución + Entrega'
               : inLS ? 'Solo Distribución'
               : inCS ? 'Solo Entrega'
               : 'Sin arcos de red';
           }
 
-          /* ── Observaciones ── */
+          /* ── Observaciones (filtradas por categoría) ── */
           var obs = [];
-          if (paths._truncated)  obs.push('Paths truncados (>50.000, red muy compleja)');
-          cycles.forEach(function (c)   { obs.push('Ciclo: ' + c); });
-          ghosts.forEach(function (l)   { obs.push('Ghost node: ' + l); });
-          deadEnds.forEach(function (l) { obs.push('Dead-end: ' + l); });
-          isoPlants.forEach(function(l) { obs.push('Planta aislada: ' + l); });
+          if (paths._truncated) obs.push('Paths truncados (>50.000, red muy compleja)');
+          cycles.forEach(function (c) { obs.push('Ciclo: ' + c); });
+          // Ghost, dead-end, planta aislada solo aplican a terminados (necesitan ruta a cliente)
+          if (!useSemiRules && !useRawmatRules) {
+            ghosts.forEach(function (l)   { obs.push('Ghost node: ' + l); });
+            deadEnds.forEach(function (l) { obs.push('Dead-end: ' + l); });
+            isoPlants.forEach(function(l) { obs.push('Planta aislada: ' + l); });
+          }
           ltIssues.forEach(function (lt) {
-            if (lt.type === 'plant') obs.push('PLEADTIME faltante: ' + lt.loc);
-            else if (lt.type === 'loc')  obs.push('TLEADTIME faltante: ' + lt.from + '->' + lt.to);
-            else                         obs.push('CLEADTIME faltante: ' + lt.from + '->' + lt.to);
+            if (lt.type === 'plant') {
+              // PLEADTIME: aplica a terminados y semiterminados, no a insumos ni mercadería
+              if (!useRawmatRules && !useTradingRules) obs.push('PLEADTIME faltante: ' + lt.loc);
+            } else if (lt.type === 'loc') {
+              obs.push('TLEADTIME faltante: ' + lt.from + '->' + lt.to);
+            } else {
+              // CLEADTIME: solo aplica si el producto llega a clientes (no semi ni insumo)
+              if (!useSemiRules && !useRawmatRules) obs.push('CLEADTIME faltante: ' + lt.from + '->' + lt.to);
+            }
           });
           if (!inLP && (inPSH || inLS)) obs.push('Sin Location Product');
           if (!inCP && inCS)            obs.push('Sin Customer Product');
 
-          /* ── Semáforo Product ── */
-          var RED_ST  = { 'Hu\u00e9rfano': 1, 'Sin Distribuci\u00f3n': 1, 'Sin Abastecimiento': 1, 'Sin Entrega a Cliente': 1 };
-          var YEL_ST  = { 'Abastecimiento Parcial': 1, 'Solo Distribuci\u00f3n': 1, 'Solo Entrega': 1,
-                          'Distribuci\u00f3n sin ruta completa': 1, 'Solo Distribuci\u00f3n + Entrega': 1, 'Sin arcos de red': 1 };
-          var pFill = (RED_ST[networkStatus] || cycles.length > 0) ? C_RED
-            : (YEL_ST[networkStatus] || (!inLP && (inPSH || inLS)) || (!inCP && inCS)) ? C_YEL
-            : null;
+          /* ── Semáforo Product (por categoría) ── */
+          var pFill;
+          if (useSemiRules) {
+            var SEMI_RED = { 'Sin Producci\u00f3n': 1, 'Sin Consumo PSI': 1 };
+            pFill = (SEMI_RED[networkStatus] || cycles.length > 0) ? C_RED
+              : ((!inLP && inPSH)) ? C_YEL
+              : null;
+          } else if (useTradingRules) {
+            // Mercadería: OK si tiene arcos de distribución + entrega
+            var TRADE_YEL = { 'Solo Distribuci\u00f3n': 1, 'Solo Entrega': 1, 'Sin arcos de red': 1, 'Hu\u00e9rfano': 1 };
+            pFill = cycles.length > 0 ? C_RED
+              : (TRADE_YEL[networkStatus] || (!inLP && inLS) || (!inCP && inCS)) ? C_YEL
+              : null;
+          } else {
+            // Terminado / insumo / sin categoría: lógica original
+            var RED_ST = { 'Hu\u00e9rfano': 1, 'Sin Distribuci\u00f3n': 1, 'Sin Abastecimiento': 1, 'Sin Entrega a Cliente': 1 };
+            var YEL_ST = { 'Abastecimiento Parcial': 1, 'Solo Distribuci\u00f3n': 1, 'Solo Entrega': 1,
+                           'Distribuci\u00f3n sin ruta completa': 1, 'Solo Distribuci\u00f3n + Entrega': 1, 'Sin arcos de red': 1 };
+            pFill = (RED_ST[networkStatus] || cycles.length > 0) ? C_RED
+              : (YEL_ST[networkStatus] || (!inLP && (inPSH || inLS)) || (!inCP && inCS)) ? C_YEL
+              : null;
+          }
 
           var pObs;
           if (!obs.length) {
-            var okParts = ['Red completa sin anomalias'];
-            if (inLP)                      okParts.push('Habilitado en Location Product');
-            if (inCP && inCS)              okParts.push('Habilitado en Customer Product');
-            if (ltIssues.length === 0)     okParts.push('Lead times definidos');
-            if (metrics.paths > 0)         okParts.push(metrics.paths + ' ruta(s) a cliente');
+            var okParts = [];
+            if (useSemiRules) {
+              okParts.push(inLS ? 'Semiterminado con transferencia configurada' : 'Semiterminado consumido en planta productora');
+              if (inLP) okParts.push('Habilitado en Location Product');
+              if (ltIssues.length === 0) okParts.push('Lead times definidos');
+            } else if (useTradingRules) {
+              okParts.push('Mercadería con arcos de distribución y entrega');
+              if (inLP) okParts.push('Habilitado en Location Product');
+              if (inCP && inCS) okParts.push('Habilitado en Customer Product');
+            } else {
+              okParts.push('Red completa sin anomalias');
+              if (inLP)                  okParts.push('Habilitado en Location Product');
+              if (inCP && inCS)          okParts.push('Habilitado en Customer Product');
+              if (ltIssues.length === 0) okParts.push('Lead times definidos');
+              if (metrics.paths > 0)     okParts.push(metrics.paths + ' ruta(s) a cliente');
+            }
             pObs = okParts.join(' | ');
           } else {
             pObs = obs.join(' | ');
