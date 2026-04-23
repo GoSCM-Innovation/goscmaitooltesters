@@ -51,9 +51,9 @@ async function doProductionAnalysis() {
       : "PlanningAreaID eq '" + CFG.pa + "'")
     : '';
   var andF = function(b, c) { return b ? b + ' and ' + c : c; };
-  var fPsh    = andF(paFilter, "PINVALID ne 'X'");
-  var fLoc    = andF(paFilter, "LOCVALID ne 'X'");
-  var fLocSrc = andF(paFilter, "TINVALID ne 'X'");
+  var fPsh    = paFilter;
+  var fLoc    = paFilter;
+  var fLocSrc = paFilter;
 
   var PA_PRD = {}, PA_LOC = {}, PA_RES = {}, PA_RES_LOC = {};
   var pshBySid = {}, pshPrdSet = {};
@@ -68,8 +68,9 @@ async function doProductionAnalysis() {
     setStatusPA('Descargando Production Source Header → IDB...', 2);
     log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + ent.psh);
     var nPsh = await fetchAndIndex(baseOData + ent.psh, logEl, fPsh,
-      'SOURCEID,PRDID,LOCID,SOURCETYPE,PLEADTIME,OUTPUTCOEFFICIENT,PRATIO',
+      'SOURCEID,PRDID,LOCID,SOURCETYPE,PLEADTIME,OUTPUTCOEFFICIENT,PRATIO,PINVALID',
       function(rows) {
+        rows = rows.filter(function(r) { return r.PINVALID !== 'X'; });
         rows.forEach(function(r) {
           var sid = str(r.SOURCEID); if (!sid) return;
           if (!pshBySid[sid]) pshBySid[sid] = [];
@@ -138,8 +139,9 @@ async function doProductionAnalysis() {
     if (ent.loc) {
       setStatusPA('Indexando Location...', 44);
       var nLoc = await fetchAndIndex(baseOData + ent.loc, logEl, fLoc,
-        'LOCID,LOCDESCR,LOCTYPE',
+        'LOCID,LOCDESCR,LOCTYPE,LOCVALID',
         function(rows) {
+          rows = rows.filter(function(r) { return r.LOCVALID !== 'X'; });
           rows.forEach(function(r) { var k = str(r.LOCID); if (k) PA_LOC[k] = r; });
           return Promise.resolve();
         });
@@ -187,8 +189,11 @@ async function doProductionAnalysis() {
     if (ent.locSrc) {
       setStatusPA('Descargando Location Source → IDB...', 68);
       var nLs = await fetchAndIndex(baseOData + ent.locSrc, logEl, fLocSrc,
-        'PRDID,LOCFR,LOCID,TLEADTIME',
-        function(rows) { return idbBulkPut('pa_loc_src', rows); });
+        'PRDID,LOCFR,LOCID,TLEADTIME,TINVALID',
+        function(rows) {
+          rows = rows.filter(function(r) { return r.TINVALID !== 'X'; });
+          return idbBulkPut('pa_loc_src', rows);
+        });
       log(logEl, 'ok', timer.fmt() + ' Location Source: ' + nLs + ' reg');
     }
     progEl.style.width = '75%';

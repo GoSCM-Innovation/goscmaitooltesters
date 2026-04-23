@@ -205,11 +205,11 @@
           : "PlanningAreaID eq '" + CFG.pa + "'")
         : '';
       var andF = function(b, c) { return b ? b + ' and ' + c : c; };
-      var fLocSrc  = andF(paFilter, "TINVALID ne 'X'");
-      var fCustSrc = andF(paFilter, "CINVALID ne 'X'");
-      var fPsh     = andF(paFilter, "PINVALID ne 'X'");
-      var fLoc     = andF(paFilter, "LOCVALID ne 'X'");
-      var fCust    = andF(paFilter, "CUSTVALID ne 'X'");
+      var fLocSrc  = paFilter;
+      var fCustSrc = paFilter;
+      var fPsh     = paFilter;
+      var fLoc     = paFilter;
+      var fCust    = paFilter;
       var snValidSids = {};
 
       // Reset SN — edge tables go to IDB, only small lookups stay in JS
@@ -229,8 +229,9 @@
           setStatusSN('info', 'Descargando Location Source → IDB...');
           log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + locationEntity);
           var nLoc = await fetchAndIndex(baseOData + locationEntity, logEl, fLocSrc,
-            'PRDID,LOCFR,LOCID,TLEADTIME',
+            'PRDID,LOCFR,LOCID,TLEADTIME,TINVALID',
             function (rows) {
+              rows = rows.filter(function(r) { return r.TINVALID !== 'X'; });
               rows.forEach(function (r) { var p = str(r.PRDID); if (p) SN_IDX.allPrds[p] = true; });
               return idbBulkPut('sn_loc', rows);
             });
@@ -242,8 +243,9 @@
           setStatusSN('info', 'Descargando Customer Source → IDB...');
           log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + customerEntity);
           var nCust = await fetchAndIndex(baseOData + customerEntity, logEl, fCustSrc,
-            'PRDID,LOCID,CUSTID,CLEADTIME',
+            'PRDID,LOCID,CUSTID,CLEADTIME,CINVALID',
             function (rows) {
+              rows = rows.filter(function(r) { return r.CINVALID !== 'X'; });
               rows.forEach(function (r) { var p = str(r.PRDID); if (p) SN_IDX.allPrds[p] = true; });
               return idbBulkPut('sn_cust', rows);
             });
@@ -268,8 +270,9 @@
           setStatusSN('info', 'Descargando Production Source Header → IDB...');
           log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + sourceProdEntity);
           var nSrc = await fetchAndIndex(baseOData + sourceProdEntity, logEl, fPsh,
-            'SOURCEID,PRDID,LOCID,PLEADTIME,PRATIO',
+            'SOURCEID,PRDID,LOCID,PLEADTIME,PRATIO,PINVALID',
             function (rows) {
+              rows = rows.filter(function(r) { return r.PINVALID !== 'X'; });
               rows.forEach(function (r) {
                 var p = str(r.PRDID); if (p) { SN_IDX.allPrds[p] = true; SN_IDX.pshPrds[p] = true; }
                 var s = str(r.SOURCEID); if (s) snValidSids[s] = true;
@@ -298,8 +301,9 @@
           setStatusSN('info', 'Indexando Location (lookup en memoria)...');
           log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + locMasterEntity);
           var nLocM = await fetchAndIndex(baseOData + locMasterEntity, logEl, fLoc,
-            'LOCID,LOCDESCR,LOCTYPE',
+            'LOCID,LOCDESCR,LOCTYPE,LOCVALID',
             function (rows) {
+              rows = rows.filter(function(r) { return r.LOCVALID !== 'X'; });
               rows.forEach(function (r) { var k = str(r.LOCID); if (k) SN_IDX.locLookup[k] = r; });
               return Promise.resolve();
             });
@@ -321,8 +325,9 @@
           setStatusSN('info', 'Indexando Customer (lookup en memoria)...');
           log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + custMasterEntity);
           var nCustM = await fetchAndIndex(baseOData + custMasterEntity, logEl, fCust,
-            'CUSTID,CUSTDESCR',
+            'CUSTID,CUSTDESCR,CUSTVALID',
             function (rows) {
+              rows = rows.filter(function(r) { return r.CUSTVALID !== 'X'; });
               rows.forEach(function (r) { var k = str(r.CUSTID); if (k) SN_IDX.custLookup[k] = r; });
               return Promise.resolve();
             });

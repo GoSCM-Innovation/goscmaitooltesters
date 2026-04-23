@@ -616,8 +616,8 @@
           : "PlanningAreaID eq '" + CFG.pa + "'")
         : '';
       var andF = function(b, c) { return b ? b + ' and ' + c : c; };
-      var pshFilter = andF(paFilter, "PINVALID ne 'X'");
-      var locFilter = andF(paFilter, "LOCVALID ne 'X'");
+      var pshFilter = paFilter;
+      var locFilter = paFilter;
       var bomValidSids = {};
 
       try {
@@ -633,8 +633,9 @@
         setStatus('info', 'Descargando Production Source Header...');
         log(logEl, 'info', 'GET → ' + baseOData + headerEntity + (paFilter ? ' [filtro PA/Ver]' : ''));
         var nHdr = await fetchAndIndex(baseOData + headerEntity, logEl, pshFilter,
-          'PRDID,SOURCEID,LOCID,SOURCETYPE,OUTPUTCOEFFICIENT',
+          'PRDID,SOURCEID,LOCID,SOURCETYPE,OUTPUTCOEFFICIENT,PINVALID',
           function (rows) {
+            rows = rows.filter(function(r) { return r.PINVALID !== 'X'; });
             rows.forEach(function(r) { var s = str(r.SOURCEID); if (s) bomValidSids[s] = true; });
             return idbBulkPut('bom_psh', rows);
           });
@@ -700,8 +701,11 @@
           setStatus('info', 'Descargando Location (maestro)...');
           log(logEl, 'info', 'GET → ' + baseOData + bomLocEntity + (paFilter ? ' [filtro PA/Ver]' : ''));
           var nLoc = await fetchAndIndex(baseOData + bomLocEntity, logEl, locFilter,
-            'LOCID,LOCDESCR',
-            function (rows) { return idbBulkPut('bom_loc', rows); });
+            'LOCID,LOCDESCR,LOCVALID',
+            function (rows) {
+              rows = rows.filter(function(r) { return r.LOCVALID !== 'X'; });
+              return idbBulkPut('bom_loc', rows);
+            });
           log(logEl, 'ok', 'Location: ' + nLoc + ' registros → IDB');
         } else {
           log(logEl, 'warn', 'Location: sin entidad configurada');
