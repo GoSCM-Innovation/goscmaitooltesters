@@ -64,7 +64,7 @@ async function doProductionAnalysis() {
     setStatusPA('Descargando Production Source Header → IDB...', 2);
     log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + ent.psh);
     var nPsh = await fetchAndIndex(baseOData + ent.psh, logEl, paFilter,
-      'SOURCEID,PRDID,LOCID,SOURCETYPE,PLEADTIME,OUTPUTCOEFFICIENT',
+      'SOURCEID,PRDID,LOCID,SOURCETYPE,PLEADTIME,OUTPUTCOEFFICIENT,PRATIO',
       function(rows) {
         rows.forEach(function(r) {
           var sid = str(r.SOURCEID); if (!sid) return;
@@ -73,7 +73,8 @@ async function doProductionAnalysis() {
             PRDID: str(r.PRDID), LOCID: str(r.LOCID),
             SOURCETYPE: str(r.SOURCETYPE),
             PLEADTIME: r.PLEADTIME != null ? str(r.PLEADTIME) : '',
-            OUTPUTCOEFFICIENT: r.OUTPUTCOEFFICIENT != null ? str(r.OUTPUTCOEFFICIENT) : ''
+            OUTPUTCOEFFICIENT: r.OUTPUTCOEFFICIENT != null ? str(r.OUTPUTCOEFFICIENT) : '',
+            PRATIO: r.PRATIO != null ? str(r.PRATIO) : ''
           });
           var p = str(r.PRDID); if (p) pshPrdSet[p] = true;
         });
@@ -1242,7 +1243,7 @@ async function paAnalyzeAndExport(
         if (compSinCov.size)         { obs.push(compSinCov.size + ' componente(s) sin arco de abastecimiento'); fills.push('red'); }
         if (sidsSinPlt.size)         { obs.push(sidsSinPlt.size + ' SOURCEID(s) con PLEADTIME = 0'); fills.push('red'); }
         if (resOciosos.size)         { obs.push(resOciosos.size + ' recurso(s) asignados sin uso en PSR'); fills.push('yellow'); }
-        if (plantaPrdsWrongCat.size) { obs.push(plantaPrdsWrongCat.size + ' producto(s) rawmat/trading con BOM de fabricación en esta planta — verificar categorización'); fills.push('yellow'); }
+        if (plantaPrdsWrongCat.size) { obs.push(plantaPrdsWrongCat.size + ' producto(s) Mat. Prima/Mercadería con BOM de fabricación en esta planta — verificar categorización'); fills.push('yellow'); }
       }
       if (isProveedor) {
         if (sinConsumoPSI.size) { obs.push(sinConsumoPSI.size + ' producto(s) abastecidos sin consumo PSI en destino'); fills.push('yellow'); }
@@ -1250,11 +1251,11 @@ async function paAnalyzeAndExport(
       }
       if (isTransferencia) {
         if (transfCompPlanta.size) {
-          obs.push(transfCompPlanta.size + ' componente(s) rawmat/semi transferido(s) a planta sin consumo PSI — verificar BOM');
+          obs.push(transfCompPlanta.size + ' componente(s) Mat. Prima/Semiterminado transferido(s) a planta sin consumo PSI — verificar BOM');
           fills.push('red');
         }
         if (transfCompNoPl.size) {
-          obs.push(transfCompNoPl.size + ' componente(s) rawmat/semi transferido(s) a nodo sin producción');
+          obs.push(transfCompNoPl.size + ' componente(s) Mat. Prima/Semiterminado transferido(s) a nodo sin producción');
           fills.push('yellow');
         }
         if (transfUncatSet.size && hasSomeCategorized) {
@@ -1268,7 +1269,7 @@ async function paAnalyzeAndExport(
           fills.push('red');
         }
         if (receptorComp.size) {
-          obs.push(receptorComp.size + ' componente(s) rawmat/semi recibidos en ubicación sin producción asociada');
+          obs.push(receptorComp.size + ' componente(s) Mat. Prima/Semiterminado recibidos en ubicación sin producción asociada');
           fills.push('yellow');
         }
       }
@@ -1453,7 +1454,7 @@ async function paAnalyzeAndExport(
       'SOURCEID',
       'PRDID output','PRDDESCR output','MATTYPEID output',
       'LOCID planta','LOCDESCR planta',
-      'SOURCETYPE(s)','PLEADTIME','OUTPUTCOEFFICIENT',
+      'SOURCETYPE(s)','PLEADTIME','OUTPUTCOEFFICIENT','PRATIO',
       'PRDID+LOCID en Location Product',
       '# Componentes PSI','# Recursos PSR','Recursos PSR (códigos)',
       '# Componentes con alternativa',
@@ -1470,6 +1471,7 @@ async function paAnalyzeAndExport(
       'Tipo(s) de fuente en esta receta: P = producción primaria (el output principal) | C = co-producto (se obtiene en el mismo proceso). Ej: P/C = esta receta produce PROD-001 como primario y SEMI-X como co-producto.',
       'Lead time de producción en días. Indica cuánto tarda el proceso desde que se lanza la orden hasta tener el producto listo. PLEADTIME = 0 o vacío hace que IBP planifique como producción instantánea → 🔴. Ej: 5 = 5 días de fabricación.',
       'Unidades del producto terminado que se obtienen por corrida de producción. Afecta directamente el cálculo de cuántas corridas se necesitan. Ej: 100 = cada corrida produce 100 unidades.',
+      'Proporción de producción asignada a esta fuente cuando existen múltiples SOURCEIDs para el mismo PRDID+LOCID. IBP usa PRATIO para distribuir la demanda planificada entre fuentes. Ej: 0.6 = esta fuente cubre el 60% de la demanda. Vacío = fuente única o sin cuota definida.',
       'Si / No — ¿La combinación PRDID+LOCID está habilitada en Location Product? Sin esto, IBP no planifica este producto en esta planta aunque exista la receta. Ej: PROD-001 en P001 = No → receta sin efecto.',
       'Número de componentes (PSI) definidos en el BOM de esta receta. 0 = BOM vacío → IBP no planifica compra de insumos. Ej: 4 = esta receta requiere 4 ingredientes.',
       'Número de recursos productivos (máquinas/líneas) asignados a esta receta vía PSR. 0 = sin capacidad modelada. Ej: 2 = LINEA-01 y HORNO-A.',
@@ -1481,7 +1483,7 @@ async function paAnalyzeAndExport(
       'ibp',
       'ibp','ibp','ibp',
       'ibp','ibp',
-      'ibp','ibp','ibp',
+      'ibp','ibp','ibp','ibp',
       'flag',
       'metric','metric','detail',
       'metric',
@@ -1492,7 +1494,7 @@ async function paAnalyzeAndExport(
       var primary = recs.find(function(r){ return r.SOURCETYPE === 'P'; }) || recs[0];
       var outPrd  = primary.PRDID, outLoc = primary.LOCID;
       if (mattypeIsExcluded(pm(outPrd))) return;
-      var plt     = primary.PLEADTIME || '', coeff = primary.OUTPUTCOEFFICIENT || '';
+      var plt     = primary.PLEADTIME || '', coeff = primary.OUTPUTCOEFFICIENT || '', pratio = primary.PRATIO || '';
       var stypes  = recs.map(function(r){ return r.SOURCETYPE; })
                         .filter(function(v,i,a){ return a.indexOf(v) === i; }).join('/');
       var inLP    = locPrdSet.has(outLoc + '|' + outPrd);
@@ -1522,7 +1524,7 @@ async function paAnalyzeAndExport(
         sid,
         outPrd, pd(outPrd), pm(outPrd),
         outLoc, ld(outLoc),
-        stypes, plt, coeff,
+        stypes, plt, coeff, pratio,
         yn(inLP),
         psiRows.length, residsSet.size, codes(residsSet),
         altCount,
