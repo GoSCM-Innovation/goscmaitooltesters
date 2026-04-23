@@ -211,9 +211,10 @@
       var fLoc     = paFilter;
       var fCust    = paFilter;
       var snValidSids = {};
+      var snSidToLoc  = {};  // SOURCEID → LOCID, para join PSI→PSH al construir psiConsumingLocs
 
       // Reset SN — edge tables go to IDB, only small lookups stay in JS
-      SN_IDX = { allPrds: {}, prdLookup: {}, locLookup: {}, custLookup: {}, pshPrds: {}, psiCompPrds: {} };
+      SN_IDX = { allPrds: {}, prdLookup: {}, locLookup: {}, custLookup: {}, pshPrds: {}, psiCompPrds: {}, psiConsumingLocs: {} };
 
       try {
         var progEl = document.getElementById('progFillSN');
@@ -275,7 +276,8 @@
               rows = rows.filter(function(r) { return r.PINVALID !== 'X'; });
               rows.forEach(function (r) {
                 var p = str(r.PRDID); if (p) { SN_IDX.allPrds[p] = true; SN_IDX.pshPrds[p] = true; }
-                var s = str(r.SOURCEID); if (s) snValidSids[s] = true;
+                var s = str(r.SOURCEID);
+                if (s) { snValidSids[s] = true; var l = str(r.LOCID || ''); if (l) snSidToLoc[s] = l; }
               });
               return idbBulkPut('sn_plant', rows);
             });
@@ -290,7 +292,15 @@
             'SOURCEID,PRDID,COMPONENTCOEFFICIENT',
             function (rows) {
               var validRows = rows.filter(function(r) { return !!snValidSids[str(r.SOURCEID)]; });
-              validRows.forEach(function (r) { var p = str(r.PRDID); if (p) SN_IDX.psiCompPrds[p] = true; });
+              validRows.forEach(function (r) {
+                var p = str(r.PRDID); if (!p) return;
+                SN_IDX.psiCompPrds[p] = true;
+                var loc = snSidToLoc[str(r.SOURCEID || '')];
+                if (loc) {
+                  if (!SN_IDX.psiConsumingLocs[p]) SN_IDX.psiConsumingLocs[p] = {};
+                  SN_IDX.psiConsumingLocs[p][loc] = true;
+                }
+              });
               return idbBulkPut('sn_psi', validRows);
             });
           log(logEl, 'ok', timer.fmt() + ' Production Source Item: ' + nPsi + ' reg → IDB (' + Object.keys(SN_IDX.psiCompPrds).length + ' componentes únicos)');
@@ -1279,12 +1289,28 @@
           if (!inLP && (inPSH || inLS)) obs.push('Sin Location Product');
           if (!inCP && inCS)            obs.push('Sin Customer Product');
 
+          // Semiterminado: validar consumo PSI en cada destino de transferencia
+          var semiDestsNoPsi = [];
+          if (useSemiRules && inPSH && inPSI && inLS) {
+            var _psiLocs = SN_IDX.psiConsumingLocs[prdid] || {};
+            var _lsDests = [];
+            Object.keys(graph.locEdges).forEach(function(fr) {
+              graph.locEdges[fr].forEach(function(to) {
+                if (_lsDests.indexOf(to) < 0) _lsDests.push(to);
+              });
+            });
+            semiDestsNoPsi = _lsDests.filter(function(loc) { return !_psiLocs[loc]; });
+            if (semiDestsNoPsi.length > 0) {
+              obs.push('Destino(s) de transferencia sin consumo PSI: ' + semiDestsNoPsi.join(', '));
+            }
+          }
+
           /* ── Semáforo Product (por categoría) ── */
           var pFill;
           if (useSemiRules) {
             var SEMI_RED = { 'Sin Producci\u00f3n': 1, 'Sin Consumo PSI': 1, 'Hu\u00e9rfano': 1 };
             pFill = (SEMI_RED[networkStatus] || cycles.length > 0) ? C_RED
-              : ((!inLP && inPSH)) ? C_YEL
+              : ((!inLP && inPSH) || semiDestsNoPsi.length > 0) ? C_YEL
               : null;
           } else if (useTradingRules) {
             // Mercadería: OK si tiene arcos de distribución + entrega
