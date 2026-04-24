@@ -929,22 +929,39 @@
       <div class="mattype-panel-body" id="snmattypeCatBody" style="display:none;">
         <div id="snmattypeCatWrap"></div>
         <div class="btn-row" style="margin-top:12px;">
-          <button class="btn btn-primary btn-small" onclick="snContinueToRun()">Continuar &#8594;</button>
+          <button class="btn btn-primary btn-small" onclick="snContinueToExtraFields()">Continuar &#8594;</button>
           <button class="btn btn-secondary btn-small" onclick="snBackToExclude()">&#8592; Volver</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ SN: CAMPOS ADICIONALES ═══ -->
+    <div class="mattype-panel hidden" id="panelSNExtraFields">
+      <div class="mattype-panel-header">
+        <div class="mattype-panel-title">
+          ④ Campos adicionales de datos maestros
+          <span class="mattype-optional-badge">Opcional</span>
+        </div>
+      </div>
+      <div style="padding:12px 16px 16px;">
+        <div class="ef-entity-buttons" id="efButtons_sn"></div>
+        <div class="btn-row" style="margin-top:16px;">
+          <button class="btn btn-primary btn-small" onclick="snContinueToRun()">Continuar a ejecución &#8594;</button>
+          <button class="btn btn-secondary btn-small" onclick="snBackFromExtraFieldsToCategories()">&#8592; Volver</button>
         </div>
       </div>
     </div>
 
     <!-- ═══ SN: EJECUTAR ANÁLISIS ═══ -->
     <div class="panel hidden" id="panelSNExportMode">
-      <div class="panel-title">④ Ejecutar análisis</div>
+      <div class="panel-title">⑤ Ejecutar análisis</div>
       <div id="bodySNExportMode">
         <div id="snRunSummary" style="font-size:12px;color:var(--text2);margin-bottom:14px;padding:10px 12px;background:rgba(41,171,226,.05);border-left:3px solid var(--cyan);border-radius:4px;">
           Configuración por defecto — análisis estándar para todos los tipos
         </div>
         <div class="btn-row">
           <button class="btn btn-primary" id="btnFetchSN" onclick="doAnalyzeAndExport()">&#9654; Ejecutar análisis</button>
-          <button class="btn btn-secondary btn-small" onclick="snBackToCategories()">&#8592; Volver</button>
+          <button class="btn btn-secondary btn-small" onclick="snBackToExtraFields()">&#8592; Volver</button>
         </div>
         <div class="progress-bar hidden" id="progBarSN">
           <div class="fill" id="progFillSN" style="width:0%"></div>
@@ -1755,22 +1772,39 @@
       <div class="mattype-panel-body" id="mattypeCatBody" style="display:none;">
         <div id="mattypeCatWrap"></div>
         <div class="btn-row" style="margin-top:12px;">
-          <button class="btn btn-primary btn-small" onclick="paContinueToRun()">Continuar &#8594;</button>
+          <button class="btn btn-primary btn-small" onclick="paContinueToExtraFields()">Continuar &#8594;</button>
           <button class="btn btn-secondary btn-small" onclick="paBackToExclude()">&#8592; Volver</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ PA: CAMPOS ADICIONALES ═══ -->
+    <div class="mattype-panel hidden" id="panelPAExtraFields">
+      <div class="mattype-panel-header">
+        <div class="mattype-panel-title">
+          ④ Campos adicionales de datos maestros
+          <span class="mattype-optional-badge">Opcional</span>
+        </div>
+      </div>
+      <div style="padding:12px 16px 16px;">
+        <div class="ef-entity-buttons" id="efButtons_pa"></div>
+        <div class="btn-row" style="margin-top:16px;">
+          <button class="btn btn-primary btn-small" onclick="paContinueToRun()">Continuar a ejecución &#8594;</button>
+          <button class="btn btn-secondary btn-small" onclick="paBackFromExtraFieldsToCategories()">&#8592; Volver</button>
         </div>
       </div>
     </div>
 
     <!-- ═══ PA: EJECUTAR ANÁLISIS ═══ -->
     <div class="panel hidden" id="panelPAExportMode">
-      <div class="panel-title">④ Ejecutar análisis</div>
+      <div class="panel-title">⑤ Ejecutar análisis</div>
       <div id="bodyPAExportMode">
         <div id="paRunSummary" style="font-size:12px;color:var(--text2);margin-bottom:14px;padding:10px 12px;background:rgba(41,171,226,.05);border-left:3px solid var(--cyan);border-radius:4px;">
           Configuración por defecto — análisis estándar
         </div>
         <div class="btn-row">
           <button class="btn btn-primary" id="btnFetchPA" onclick="doProductionAnalysis()">▶ Ejecutar análisis</button>
-          <button class="btn btn-secondary btn-small" onclick="paBackToCategories()">&#8592; Volver</button>
+          <button class="btn btn-secondary btn-small" onclick="paBackToExtraFields()">&#8592; Volver</button>
         </div>
         <div class="progress-bar hidden" id="progBarPA">
           <div class="fill" id="progFillPA" style="width:0%"></div>
@@ -2090,6 +2124,7 @@
     </div><!-- /main-content -->
   </div><!-- /app-shell -->
 
+  <script src="js/extraFields.js"></script>
   <script src="js/state.js"></script>
   <script src="js/utils.js"></script>
   <script src="js/api.js"></script>
@@ -2185,6 +2220,21 @@
       <button id="fbSendBtn" onclick="sendFeedback()" class="btn btn-primary" style="flex:2;">Enviar</button>
     </div>
   </div>
+
+  <!-- ═══ EXTRA FIELDS MODAL ═══ -->
+  <dialog id="efModal" style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:0;color:var(--text);width:420px;max-width:95vw;max-height:80vh;display:flex;flex-direction:column;">
+    <div style="padding:16px 20px 12px;border-bottom:1px solid var(--border);flex-shrink:0;">
+      <div id="efModalTitle" style="font-size:14px;font-weight:600;color:var(--accent);"></div>
+      <input id="efModalSearch" type="text" placeholder="Buscar campo..." oninput="efModalFilter()"
+        style="margin-top:10px;width:100%;box-sizing:border-box;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;outline:none;">
+    </div>
+    <div id="efModalList" style="overflow-y:auto;flex:1;padding:8px 16px;"></div>
+    <div style="padding:10px 20px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;">
+      <span id="efModalCount" style="font-size:11px;color:var(--text2);flex:1;"></span>
+      <button class="btn btn-secondary btn-small" onclick="efModalClose()">Cancelar</button>
+      <button class="btn btn-primary btn-small" onclick="efModalSave()">Guardar</button>
+    </div>
+  </dialog>
 
 </body>
 
