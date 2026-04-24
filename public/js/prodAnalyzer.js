@@ -350,8 +350,8 @@ function paBackToExclude() {
 
 /* Categories → Run */
 function paContinueToRun() {
-  // Colapsar categorización
   _paCloseMattypeBody('mattypeCatBody', 'mattypeCatArr');
+  _efCloseEFBody('pa');
 
   var run = document.getElementById('panelPAExportMode');
   if (run) {

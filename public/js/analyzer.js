@@ -113,6 +113,7 @@
     /* Categories → Run */
     function snContinueToRun() {
       _snCloseMattypeBody('snmattypeCatBody', 'snmattypeCatArr');
+      _efCloseEFBody('sn');
       var run = document.getElementById('panelSNExportMode');
       if (run) {
         run.classList.remove('hidden');
