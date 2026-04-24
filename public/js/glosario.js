@@ -644,7 +644,11 @@
     e.preventDefault();
     var el = document.getElementById(id);
     var cont = document.getElementById('glosarioContent');
-    if (el && cont) cont.scrollTo({ top: el.offsetTop - 16, behavior: 'smooth' });
+    if (el && cont) {
+      var rect = el.getBoundingClientRect();
+      var contRect = cont.getBoundingClientRect();
+      cont.scrollTo({ top: cont.scrollTop + rect.top - contRect.top - 16, behavior: 'smooth' });
+    }
     document.querySelectorAll('.glos-nav-link').forEach(function (a) {
       a.classList.toggle('active', a.getAttribute('href') === '#' + id);
     });
