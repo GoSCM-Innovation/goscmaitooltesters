@@ -937,13 +937,16 @@
 
     <!-- ═══ SN: CAMPOS ADICIONALES ═══ -->
     <div class="mattype-panel hidden" id="panelSNExtraFields">
-      <div class="mattype-panel-header">
+      <div class="mattype-panel-header" onclick="efToggleEFBody('sn')">
         <div class="mattype-panel-title">
           ④ Campos adicionales de datos maestros
           <span class="mattype-optional-badge">Opcional</span>
         </div>
+        <div class="mattype-panel-actions">
+          <span class="mattype-arr" id="snEFArr">▼</span>
+        </div>
       </div>
-      <div style="padding:12px 16px 16px;">
+      <div class="mattype-panel-body" id="snEFBody">
         <div class="ef-entity-buttons" id="efButtons_sn"></div>
         <div class="btn-row" style="margin-top:16px;">
           <button class="btn btn-primary btn-small" onclick="snContinueToRun()">Continuar a ejecución &#8594;</button>
@@ -1780,13 +1783,16 @@
 
     <!-- ═══ PA: CAMPOS ADICIONALES ═══ -->
     <div class="mattype-panel hidden" id="panelPAExtraFields">
-      <div class="mattype-panel-header">
+      <div class="mattype-panel-header" onclick="efToggleEFBody('pa')">
         <div class="mattype-panel-title">
           ④ Campos adicionales de datos maestros
           <span class="mattype-optional-badge">Opcional</span>
         </div>
+        <div class="mattype-panel-actions">
+          <span class="mattype-arr" id="paEFArr">▼</span>
+        </div>
       </div>
-      <div style="padding:12px 16px 16px;">
+      <div class="mattype-panel-body" id="paEFBody">
         <div class="ef-entity-buttons" id="efButtons_pa"></div>
         <div class="btn-row" style="margin-top:16px;">
           <button class="btn btn-primary btn-small" onclick="paContinueToRun()">Continuar a ejecución &#8594;</button>

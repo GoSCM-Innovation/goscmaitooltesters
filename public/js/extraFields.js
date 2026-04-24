@@ -319,12 +319,40 @@ function efModalClose() {
   _efModalTmp = [];
 }
 
+/* ── Toggle del cuerpo del panel Extra Fields ── */
+
+function efToggleEFBody(ns) {
+  var bodyId = ns + 'EFBody';
+  var arrId  = ns + 'EFArr';
+  var body   = document.getElementById(bodyId);
+  var arr    = document.getElementById(arrId);
+  if (!body) return;
+  var open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if (arr) arr.textContent = open ? '▶' : '▼';
+}
+
+function _efOpenEFBody(ns) {
+  var body = document.getElementById(ns + 'EFBody');
+  var arr  = document.getElementById(ns + 'EFArr');
+  if (body) body.style.display = 'block';
+  if (arr)  arr.textContent = '▼';
+}
+
+function _efCloseEFBody(ns) {
+  var body = document.getElementById(ns + 'EFBody');
+  var arr  = document.getElementById(ns + 'EFArr');
+  if (body) body.style.display = 'none';
+  if (arr)  arr.textContent = '▶';
+}
+
 /* ── Navegación SN ── */
 
 function snContinueToExtraFields() {
   _snCloseMattypeBody('snmattypeCatBody', 'snmattypeCatArr');
   efLoadAll();
   efRenderEntityButtons('sn');
+  _efOpenEFBody('sn');
   var ef = document.getElementById('panelSNExtraFields');
   if (ef) {
     ef.classList.remove('hidden');
@@ -335,6 +363,7 @@ function snContinueToExtraFields() {
 function snBackToExtraFields() {
   var run = document.getElementById('panelSNExportMode');
   if (run) run.classList.add('hidden');
+  _efOpenEFBody('sn');
   var ef = document.getElementById('panelSNExtraFields');
   if (ef) ef.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
@@ -353,6 +382,7 @@ function paContinueToExtraFields() {
   _paCloseMattypeBody('mattypeCatBody', 'mattypeCatArr');
   efLoadAll();
   efRenderEntityButtons('pa');
+  _efOpenEFBody('pa');
   var ef = document.getElementById('panelPAExtraFields');
   if (ef) {
     ef.classList.remove('hidden');
