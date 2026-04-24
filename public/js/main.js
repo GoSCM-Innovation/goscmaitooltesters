@@ -129,10 +129,16 @@
         entityTypes.forEach(function (et) {
           var name = et.getAttribute('Name') || '';
           var fields = [];
+          var fieldMeta = {};
           et.querySelectorAll('Property').forEach(function (p) {
-            fields.push(p.getAttribute('Name') || '');
+            var id = p.getAttribute('Name') || '';
+            if (!id) return;
+            var label = p.getAttributeNS('http://www.sap.com/Protocols/SAPData', 'label')
+                        || p.getAttribute('sap:label') || '';
+            fields.push(id);
+            if (label) fieldMeta[id] = label;
           });
-          if (fields.length > 0) ENTITIES.push({ name: name, fields: fields });
+          if (fields.length > 0) ENTITIES.push({ name: name, fields: fields, fieldMeta: fieldMeta });
         });
 
         log(logEl, 'ok', ENTITIES.length + ' entidades encontradas');

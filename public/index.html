@@ -2221,18 +2221,24 @@
     </div>
   </div>
 
-  <!-- ═══ EXTRA FIELDS MODAL ═══ -->
-  <dialog id="efModal" style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:0;color:var(--text);width:420px;max-width:95vw;max-height:80vh;display:flex;flex-direction:column;">
-    <div style="padding:16px 20px 12px;border-bottom:1px solid var(--border);flex-shrink:0;">
-      <div id="efModalTitle" style="font-size:14px;font-weight:600;color:var(--accent);"></div>
-      <input id="efModalSearch" type="text" placeholder="Buscar campo..." oninput="efModalFilter()"
-        style="margin-top:10px;width:100%;box-sizing:border-box;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;outline:none;">
+  <!-- ═══ EXTRA FIELDS DIALOG ═══ -->
+  <dialog id="efModal" class="connect-dialog ef-fields-dialog">
+    <div class="connect-dialog-header">
+      <span class="connect-dialog-title" id="efModalTitle"></span>
+      <button type="button" class="dialog-close-btn" onclick="efModalClose()" aria-label="Cerrar">✕</button>
     </div>
-    <div id="efModalList" style="overflow-y:auto;flex:1;padding:8px 16px;"></div>
-    <div style="padding:10px 20px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;">
-      <span id="efModalCount" style="font-size:11px;color:var(--text2);flex:1;"></span>
-      <button class="btn btn-secondary btn-small" onclick="efModalClose()">Cancelar</button>
-      <button class="btn btn-primary btn-small" onclick="efModalSave()">Guardar</button>
+    <div class="ef-fields-dialog-body">
+      <div class="ef-fields-search-wrap">
+        <input id="efModalSearch" type="text" placeholder="Buscar por ID o descripción..." oninput="efModalFilter()" class="ef-fields-search">
+      </div>
+      <div id="efModalList" class="ef-fields-list"></div>
+      <div class="ef-fields-footer">
+        <span id="efModalCount" class="ef-fields-count"></span>
+        <div class="btn-row" style="margin:0;">
+          <button type="button" class="btn btn-secondary" onclick="efModalClose()">Cancelar</button>
+          <button type="button" class="btn btn-primary" onclick="efModalSave()">Guardar</button>
+        </div>
+      </div>
     </div>
   </dialog>
 

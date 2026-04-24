@@ -155,7 +155,7 @@ function efRenderEntityButtons(ns) {
     var badge = extra > 0
       ? '<span class="ef-count-badge">' + extra + ' extra</span>'
       : '';
-    html += '<button class="ef-entity-btn" onclick="efOpenModal(\'' +
+    html += '<button type="button" class="btn btn-secondary btn-small" onclick="efOpenModal(\'' +
       escH(ns) + '\',\'' + escH(m.key) + '\',\'' + escH(m.label) + '\',\'' + escH(m.sel) + '\')">' +
       escH(m.label) + badge + '</button>';
   });
@@ -164,6 +164,9 @@ function efRenderEntityButtons(ns) {
   }
   container.innerHTML = html;
 }
+
+/* ── state compartido del modal ── */
+var _efModalFieldMeta = {};
 
 /* ── Modal ── */
 
@@ -175,7 +178,7 @@ function efOpenModal(ns, entityKey, displayName, selectorId) {
   var dlg = document.getElementById('efModal');
   if (!dlg) return;
 
-  document.getElementById('efModalTitle').textContent = 'Campos adicionales — ' + displayName;
+  document.getElementById('efModalTitle').textContent = displayName;
 
   var selEl      = document.getElementById(selectorId);
   var entityName = selEl ? selEl.value : '';
@@ -183,63 +186,80 @@ function efOpenModal(ns, entityKey, displayName, selectorId) {
     ? ENTITIES.find(function (e) { return e.name === entityName; })
     : null;
 
-  var allFields  = entityObj ? entityObj.fields : [];
-  var mandVis    = (EF_MAND_VISIBLE[ns] && EF_MAND_VISIBLE[ns][entityKey])  ? EF_MAND_VISIBLE[ns][entityKey]  : [];
-  var mandHid    = (EF_MAND_HIDDEN[ns]  && EF_MAND_HIDDEN[ns][entityKey])   ? EF_MAND_HIDDEN[ns][entityKey]   : [];
-  var reserved   = mandVis.concat(mandHid);
+  var allFields      = entityObj ? entityObj.fields    : [];
+  _efModalFieldMeta  = entityObj ? (entityObj.fieldMeta || {}) : {};
 
-  var optional   = allFields.filter(function (f) { return reserved.indexOf(f) < 0; });
+  var mandVis  = (EF_MAND_VISIBLE[ns] && EF_MAND_VISIBLE[ns][entityKey]) ? EF_MAND_VISIBLE[ns][entityKey] : [];
+  var mandHid  = (EF_MAND_HIDDEN[ns]  && EF_MAND_HIDDEN[ns][entityKey])  ? EF_MAND_HIDDEN[ns][entityKey]  : [];
+  var reserved = mandVis.concat(mandHid);
+  var optional = allFields.filter(function (f) { return reserved.indexOf(f) < 0; });
 
-  /* Render list */
-  _efRenderList(mandVis, optional, '');
-  _efUpdateCount();
-
-  /* Clear search */
   var srch = document.getElementById('efModalSearch');
   if (srch) srch.value = '';
+
+  _efRenderList(mandVis, optional, '', _efModalFieldMeta);
+  _efUpdateCount();
 
   dlg.showModal ? dlg.showModal() : (dlg.open = true);
 }
 
-function _efRenderList(mandVis, optional, filter) {
+function _efFieldMatches(id, label, q) {
+  if (!q) return true;
+  return id.toUpperCase().indexOf(q) >= 0 || (label && label.toUpperCase().indexOf(q) >= 0);
+}
+
+function _efFieldRow(f, label, toggleHtml, badgeHtml) {
+  var descHtml = label
+    ? '<span class="ef-field-desc">' + escH(label) + '</span>'
+    : '';
+  return '<div class="ef-field-item">' +
+    toggleHtml +
+    '<div class="ef-field-info">' +
+      '<span class="ef-field-name">' + escH(f) + '</span>' +
+      descHtml +
+    '</div>' +
+    badgeHtml +
+  '</div>';
+}
+
+function _efRenderList(mandVis, optional, filter, fieldMeta) {
   var list = document.getElementById('efModalList');
   if (!list) return;
-
-  var q = filter.trim().toUpperCase();
+  var meta = fieldMeta || {};
+  var q    = filter.trim().toUpperCase();
   var html = '';
 
   /* Mandatory visible fields (locked ON) */
   if (mandVis.length) {
     html += '<div class="ef-section-label">Campos obligatorios</div>';
     mandVis.forEach(function (f) {
-      if (q && f.toUpperCase().indexOf(q) < 0) return;
-      html += '<div class="ef-field-item">' +
-        '<label class="ef-toggle-wrap locked">' +
-          '<input type="checkbox" checked disabled>' +
-          '<span class="ef-toggle-slider"></span>' +
-        '</label>' +
-        '<span class="ef-field-name">' + escH(f) + '</span>' +
-        '<span class="ef-mandatory-badge">Obligatorio</span>' +
-      '</div>';
+      var label = meta[f] || '';
+      if (!_efFieldMatches(f, label, q)) return;
+      var toggleHtml = '<label class="ef-toggle-wrap locked">' +
+        '<input type="checkbox" checked disabled>' +
+        '<span class="ef-toggle-slider"></span>' +
+        '</label>';
+      html += _efFieldRow(f, label, toggleHtml, '<span class="ef-mandatory-badge">Obligatorio</span>');
     });
   }
 
   /* Optional fields */
-  var visOptional = optional.filter(function (f) { return !q || f.toUpperCase().indexOf(q) >= 0; });
+  var visOptional = optional.filter(function (f) {
+    return _efFieldMatches(f, meta[f] || '', q);
+  });
   if (visOptional.length) {
     html += '<div class="ef-section-label">Campos adicionales disponibles</div>';
     visOptional.forEach(function (f) {
+      var label   = meta[f] || '';
       var checked = _efModalTmp.indexOf(f) >= 0;
-      html += '<div class="ef-field-item">' +
-        '<label class="ef-toggle-wrap">' +
-          '<input type="checkbox"' + (checked ? ' checked' : '') +
-            ' onchange="efToggleField(\'' + escH(f) + '\',this.checked)">' +
-          '<span class="ef-toggle-slider"></span>' +
-        '</label>' +
-        '<span class="ef-field-name">' + escH(f) + '</span>' +
-      '</div>';
+      var toggleHtml = '<label class="ef-toggle-wrap">' +
+        '<input type="checkbox"' + (checked ? ' checked' : '') +
+          ' onchange="efToggleField(\'' + escH(f) + '\',this.checked)">' +
+        '<span class="ef-toggle-slider"></span>' +
+        '</label>';
+      html += _efFieldRow(f, label, toggleHtml, '');
     });
-  } else if (!mandVis.length || (q && !mandVis.some(function (f) { return f.toUpperCase().indexOf(q) >= 0; }))) {
+  } else if (q) {
     html += '<p style="font-size:12px;color:var(--text2);padding:8px 0;">Sin resultados para "' + escH(filter) + '".</p>';
   }
 
@@ -257,7 +277,7 @@ function _efUpdateCount() {
   var el = document.getElementById('efModalCount');
   if (!el) return;
   var n = _efModalTmp.length;
-  el.textContent = n > 0 ? n + ' campo' + (n > 1 ? 's' : '') + ' seleccionado' + (n > 1 ? 's' : '') : '';
+  el.textContent = n > 0 ? n + ' campo' + (n > 1 ? 's' : '') + ' adicional' + (n > 1 ? 'es' : '') + ' seleccionado' + (n > 1 ? 's' : '') : '';
 }
 
 function efModalFilter() {
@@ -270,12 +290,12 @@ function efModalFilter() {
   var entityObj  = (typeof ENTITIES !== 'undefined')
     ? ENTITIES.find(function (e) { return e.name === entityName; })
     : null;
-  var allFields  = entityObj ? entityObj.fields : [];
-  var mandVis    = (EF_MAND_VISIBLE[ns] && EF_MAND_VISIBLE[ns][key]) ? EF_MAND_VISIBLE[ns][key] : [];
-  var mandHid    = (EF_MAND_HIDDEN[ns]  && EF_MAND_HIDDEN[ns][key])  ? EF_MAND_HIDDEN[ns][key]  : [];
-  var reserved   = mandVis.concat(mandHid);
-  var optional   = allFields.filter(function (f) { return reserved.indexOf(f) < 0; });
-  _efRenderList(mandVis, optional, q);
+  var allFields = entityObj ? entityObj.fields : [];
+  var mandVis   = (EF_MAND_VISIBLE[ns] && EF_MAND_VISIBLE[ns][key]) ? EF_MAND_VISIBLE[ns][key] : [];
+  var mandHid   = (EF_MAND_HIDDEN[ns]  && EF_MAND_HIDDEN[ns][key])  ? EF_MAND_HIDDEN[ns][key]  : [];
+  var reserved  = mandVis.concat(mandHid);
+  var optional  = allFields.filter(function (f) { return reserved.indexOf(f) < 0; });
+  _efRenderList(mandVis, optional, q, _efModalFieldMeta);
 }
 
 function _efEntitySel(ns, key) {
