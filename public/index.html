@@ -394,6 +394,10 @@
           <span class="nav-icon">🔎</span>
           <span class="nav-label">Integration Explorer</span>
         </button>
+        <button class="nav-item nav-docs" onclick="switchTab('glosario')" id="tabBtn-glosario">
+          <span class="nav-icon">📖</span>
+          <span class="nav-label">Glosario</span>
+        </button>
       </nav>
 
       <!-- Footer -->
@@ -2127,6 +2131,24 @@
     </div>
   </div><!-- /tab-explorer -->
 
+  <!-- ═══ TAB: GLOSARIO ═══ -->
+  <div class="tab-panel" id="tab-glosario">
+    <div class="glosario-shell">
+      <div class="glosario-module-bar">
+        <button class="glosario-mod-btn active" id="glosModBtn-pa" onclick="glosarioSwitchModule('pa')">
+          🔬 Production Analyzer
+        </button>
+        <button class="glosario-mod-btn" id="glosModBtn-sn" onclick="glosarioSwitchModule('sn')">
+          🌐 Network Analyzer
+        </button>
+      </div>
+      <div class="glosario-body">
+        <nav class="glosario-sidenav" id="glosarioSidenav"></nav>
+        <div class="glosario-content" id="glosarioContent"></div>
+      </div>
+    </div>
+  </div><!-- /tab-glosario -->
+
     </div><!-- /main-content -->
   </div><!-- /app-shell -->
 
@@ -2142,6 +2164,7 @@
   <script src="js/main.js"></script>
   <script src="js/docs.js"></script>
   <script src="js/explorer.js"></script>
+  <script src="js/glosario.js"></script>
 
   <!-- Feedback button -->
   <button onclick="openFeedback()" title="Reportar / Consultar / Sugerir"
