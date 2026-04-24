@@ -2471,3 +2471,100 @@ button[disabled][title]:hover::after {
   .ex-split { grid-template-columns: 1fr; }
   .ex-master { max-height: 280px; }
 }
+
+/* ═══ EXTRA FIELDS ═══ */
+.ef-entity-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.ef-count-badge {
+  background: var(--accent); color: var(--navy, #0b1120);
+  font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px;
+}
+
+.mattype-optional-badge {
+  display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 10px;
+  font-size: 10px; font-weight: 600; background: rgba(247,168,0,.15); color: var(--accent);
+  vertical-align: middle;
+}
+
+/* ── Extra Fields dialog ── */
+.ef-fields-dialog { width: min(520px, 94vw); }
+
+.ef-fields-dialog-body {
+  display: flex; flex-direction: column;
+  height: min(560px, 70vh);
+  overflow: hidden;
+}
+
+.ef-fields-search-wrap {
+  padding: 12px 20px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+
+.ef-fields-search {
+  width: 100%; box-sizing: border-box;
+  padding: 7px 10px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--bg);
+  color: var(--text); font-size: 12px; outline: none;
+  font-family: var(--font);
+}
+.ef-fields-search:focus { border-color: var(--accent); }
+
+.ef-fields-list {
+  flex: 1; overflow-y: auto; padding: 4px 20px 8px;
+}
+
+.ef-fields-footer {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 20px; border-top: 1px solid var(--border); flex-shrink: 0;
+}
+
+.ef-fields-count {
+  font-size: 11px; color: var(--text2); flex: 1;
+}
+
+/* ── Field list rows ── */
+.ef-section-label {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--text3); font-weight: 600; margin: 10px 0 4px;
+}
+
+.ef-field-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,.04);
+}
+
+.ef-field-info {
+  display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0;
+}
+
+.ef-field-name {
+  font-size: 12px; font-family: var(--mono, monospace);
+  color: var(--text); white-space: nowrap;
+}
+
+.ef-field-desc {
+  font-size: 11px; color: var(--text2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.ef-mandatory-badge {
+  font-size: 10px; color: var(--text3); background: rgba(255,255,255,.06);
+  padding: 1px 6px; border-radius: 8px; flex-shrink: 0;
+}
+
+.ef-toggle-wrap {
+  position: relative; display: inline-flex; align-items: center;
+  width: 32px; height: 17px; cursor: pointer; flex-shrink: 0;
+}
+.ef-toggle-wrap input { opacity: 0; width: 0; height: 0; position: absolute; }
+.ef-toggle-slider {
+  position: absolute; inset: 0; border-radius: 17px;
+  background: var(--border); transition: background .2s;
+}
+.ef-toggle-slider::before {
+  content: ''; position: absolute; width: 11px; height: 11px;
+  left: 3px; top: 3px; border-radius: 50%; background: #fff;
+  transition: transform .2s;
+}
+.ef-toggle-wrap input:checked + .ef-toggle-slider { background: var(--accent); }
+.ef-toggle-wrap input:checked + .ef-toggle-slider::before { transform: translateX(15px); }
+.ef-toggle-wrap.locked { opacity: .55; cursor: default; }

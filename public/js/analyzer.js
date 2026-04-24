@@ -906,7 +906,7 @@
       var s0colW = s0hdr.map(function (h) { return h.length; });
 
       /* ── Crear grupos de hojas ── */
-      var gPrd = makeGroup('Product', 'FF29ABE2', [
+      var _prdHdrs = [
         'Estado','Observacion',
         'PRDID','PRDDESCR','MATTYPEID',
         'En PSH?','En PSI?','En Location Source?','En Customer Source?','En Location Product?','En Customer Product?','Solo en maestro?',
@@ -915,7 +915,8 @@
         '# Origenes (LOCFR)','Origenes (codigos)','# Destinos (LOCID)','Destinos (codigos)',
         '# Clientes en CustSrc','Clientes (codigos)','Multi-sourced?','TLT promedio (dias)','CLT promedio (dias)',
         '# Plantas aisladas'
-      ],[
+      ];
+      var _prdNotes = [
         'Color: \u26d4 Alerta = problema critico | \u26a0 Advertencia = dato incompleto | \u2705 OK = sin hallazgos.',
         'Detalle de validaciones. En estado OK lista las que pasaron.',
         'Codigo unico del producto (PRDID).',
@@ -949,7 +950,8 @@
         'Promedio de TLEADTIME (dias) para todos los arcos de Location Source de este producto. \u2014 si no hay arcos con lead time definido.',
         'Promedio de CLEADTIME (dias) para todos los arcos de Customer Source de este producto. \u2014 si no hay arcos con lead time definido.',
         'Cantidad de plantas que producen este producto pero no tienen ninguna ruta hasta algun cliente.'
-      ],[
+      ];
+      var _prdGroups = [
         'control','control',
         'ibp','ibp','ibp',
         'flag','flag','flag','flag','flag','flag','flag',
@@ -958,15 +960,18 @@
         'detail','detail','detail','detail',
         'detail','detail','detail','detail','detail',
         'detail'
-      ]);
+      ];
+      efInjectHeaders(_prdHdrs, _prdNotes, _prdGroups, 'sn', 'product', 4);
+      var gPrd = makeGroup('Product', 'FF29ABE2', _prdHdrs, _prdNotes, _prdGroups);
 
-      var gLoc = makeGroup('Location', 'FF06B6D4', [
+      var _locHdrs = [
         'Estado','Observacion',
         'LOCID','LOCDESCR','LOCTYPE','Rol inferido',
         'En PSH?','En Location Source?','En Customer Source?','En Location Product?','Solo en maestro?',
         '# Productos manejados','# Como origen (LOCFR)','# Como destino (LOCID)','# Clientes servidos',
         'Es nodo critico?','# Productos impactados','# Clientes impactados','Nivel de riesgo'
-      ],[
+      ];
+      var _locNotes = [
         'Color: \u26d4 Alerta | \u26a0 Advertencia | \u2705 OK.',
         'Detalle de validaciones. En estado OK lista las que pasaron.',
         'Codigo unico de la ubicacion (LOCID).',
@@ -986,20 +991,24 @@
         'Numero de productos cuyas rutas pasan por este nodo critico.',
         'Numero de clientes cuyo abastecimiento depende de este nodo.',
         'Critical (\u22654 productos) | High (2\u20133) | Medium (1).'
-      ],[
+      ];
+      var _locGroups = [
         'control','control',
         'ibp','ibp','ibp','ibp',
         'flag','flag','flag','flag','flag',
         'metric','metric','metric','metric',
         'metric','metric','metric','metric'
-      ]);
+      ];
+      efInjectHeaders(_locHdrs, _locNotes, _locGroups, 'sn', 'location', 4);
+      var gLoc = makeGroup('Location', 'FF06B6D4', _locHdrs, _locNotes, _locGroups);
 
-      var gCust = makeGroup('Customer', 'FF10B981', [
+      var _custHdrs = [
         'Estado','Observacion',
         'CUSTID','CUSTDESCR',
         'En Customer Source?','En Customer Product?','Solo en maestro?',
         '# Productos recibidos','# Ubicaciones proveedoras','# Paths que llegan','Resiliencia predominante'
-      ],[
+      ];
+      var _custNotes = [
         'Color: \u26d4 Alerta | \u26a0 Advertencia | \u2705 OK.',
         'Detalle de validaciones. En estado OK lista las que pasaron.',
         'Codigo unico del cliente (CUSTID).',
@@ -1011,19 +1020,23 @@
         'Numero de ubicaciones desde las que se despacha al cliente.',
         'Total de rutas completas de planta a este cliente sumadas para todos sus productos.',
         'Single Path = algún producto llega solo por una ruta | Single Node Dependency = hay un nodo unico que si falla corta el abastecimiento | Resilient = todos los productos tienen rutas alternativas.'
-      ],[
+      ];
+      var _custGroups = [
         'control','control',
         'ibp','ibp',
         'flag','flag','flag',
         'metric','metric','metric','metric'
-      ]);
+      ];
+      efInjectHeaders(_custHdrs, _custNotes, _custGroups, 'sn', 'customer', 3);
+      var gCust = makeGroup('Customer', 'FF10B981', _custHdrs, _custNotes, _custGroups);
 
-      var gLS = makeGroup('Location Source', 'FFF7A800', [
+      var _lsHdrs = [
         'Estado','Observacion',
         'PRDID','PRDDESCR','MATTYPEID','LOCFR','LOCFR Descripcion','LOCID','LOCID Descripcion','TLEADTIME',
         'LOCFR+PRDID en Location Product?','LOCID+PRDID en Location Product?','PRDID en PSH?',
         'Arco en ruta completa?','Arco inverso?','Lead Time Status','SPOF arco?'
-      ],[
+      ];
+      var _lsNotes = [
         'Color: \u26d4 Alerta | \u26a0 Advertencia | \u2705 OK.',
         'Detalle de validaciones. En estado OK lista las que pasaron.',
         'Producto transferido en este arco.',
@@ -1041,19 +1054,23 @@
         'Si/No — existe un arco configurado en la direccion opuesta (LOCID->LOCFR) para el mismo producto.',
         'OK = lead time > 0 | Zero = TLEADTIME = 0 | Missing = sin valor.',
         'Si/No — SPOF: este LOCID tiene un unico LOCFR para este producto. Si falla el origen, el destino queda sin abastecimiento.'
-      ],[
+      ];
+      var _lsGroups = [
         'control','control',
         'ibp','ibp','ibp','ibp','ibp','ibp','ibp','ibp',
         'flag','flag','flag',
         'metric','metric','metric','metric'
-      ]);
+      ];
+      efInjectHeaders(_lsHdrs, _lsNotes, _lsGroups, 'sn', 'locationSource', 9);
+      var gLS = makeGroup('Location Source', 'FFF7A800', _lsHdrs, _lsNotes, _lsGroups);
 
-      var gCS = makeGroup('Customer Source', 'FFE8622A', [
+      var _csHdrs = [
         'Estado','Observacion',
         'PRDID','PRDDESCR','MATTYPEID','LOCID','LOCID Descripcion','CUSTID','CUSTID Descripcion','CLEADTIME',
         'LOCID+PRDID en Location Product?','CUSTID+PRDID en Customer Product?','PRDID en PSH?',
         'Entrega alcanzable desde produccion?','Lead Time Status'
-      ],[
+      ];
+      var _csNotes = [
         'Color: \u26d4 Alerta | \u26a0 Advertencia | \u2705 OK.',
         'Detalle de validaciones. En estado OK lista las que pasaron.',
         'Producto entregado al cliente en este arco.',
@@ -1069,12 +1086,15 @@
         'Si/No — el producto tiene produccion propia (PSH) en alguna planta de la red.',
         'Si/No — existe una ruta completa de produccion hasta esta entrega al cliente.',
         'OK = lead time > 0 | Zero = CLEADTIME = 0 | Missing = sin valor.'
-      ],[
+      ];
+      var _csGroups = [
         'control','control',
         'ibp','ibp','ibp','ibp','ibp','ibp','ibp','ibp',
         'flag','flag','flag',
         'metric','metric'
-      ]);
+      ];
+      efInjectHeaders(_csHdrs, _csNotes, _csGroups, 'sn', 'customerSource', 9);
+      var gCS = makeGroup('Customer Source', 'FFE8622A', _csHdrs, _csNotes, _csGroups);
 
 
       /* ════════════════════════════════════════════════════════════════
@@ -1334,8 +1354,8 @@
               : ((!inLP && inPSH) || semiDestsNoPsi.length > 0) ? C_YEL
               : null;
           } else if (useTradingRules) {
-            var TRADE_RED = { 'Solo Entrega': 1 };
-            var TRADE_YEL = { 'Solo Distribuci\u00f3n': 1, 'Sin arcos de red': 1, 'Hu\u00e9rfano': 1 };
+            var TRADE_RED = { 'Solo Entrega': 1, 'Hu\u00e9rfano': 1 };
+            var TRADE_YEL = { 'Solo Distribuci\u00f3n': 1, 'Sin arcos de red': 1 };
             pFill = (cycles.length > 0 || TRADE_RED[networkStatus]) ? C_RED
               : (TRADE_YEL[networkStatus] || tradingDisconnected || (!inLP && inLS) || (!inCP && inCS)) ? C_YEL
               : null;
@@ -1394,7 +1414,7 @@
           var _cltAvg     = _csPrd.cltCount > 0 ? parseFloat((_csPrd.cltSum / _csPrd.cltCount).toFixed(1)) : NA_DASH;
           var _nIsoPlants = isoPlants.length;
 
-          gPrd.addRow([
+          var _prdRow = [
             stLabel(pFill), pObs,
             prdid, pd(prdid), pm(prdid),
             yn(inPSH), yn(inPSI), yn(inLS), yn(inCS), yn(inLP), yn(inCP), yn(onlyMaster),
@@ -1404,7 +1424,9 @@
             _numOrigins || NA_DASH, _origCodes, _numDests || NA_DASH, _destCodes,
             _numCustCS  || NA_DASH, _custCodes, yn(_isMulti), _tltAvg, _cltAvg,
             _nIsoPlants > 0 ? _nIsoPlants : NA_DASH
-          ], pFill);
+          ];
+          efInjectRow(_prdRow, 'sn', 'product', 4, SN_IDX.prdLookup[prdid]);
+          gPrd.addRow(_prdRow, pFill);
 
           if (paths.length > 0) completeCount++;
           totalPaths += paths.length;
@@ -1530,13 +1552,15 @@
           : inCSL ? 'Punto de Entrega'
           : 'Sin rol activo';
 
-        gLoc.addRow([
+        var _locRow = [
           stLabel(lFill), lObsStr,
           locid, ld(locid), locType(locid), _locRole,
           yn(inPSHL), yn(inLSL), yn(inCSL), yn(inLPL), yn(onlyMstL),
           numPrd, numOrigin, numDest, numCust,
           yn(!!lSt.isCritical), lSt.productsImpacted || '', lSt.customersImpacted || '', lSt.riskLevel || ''
-        ], lFill);
+        ];
+        efInjectRow(_locRow, 'sn', 'location', 4, SN_IDX.locLookup[locid]);
+        gLoc.addRow(_locRow, lFill);
       });
       locStats = null; locStatsSrc = null;
       if (onProgress) onProgress(88);
@@ -1580,12 +1604,14 @@
           cObsStr = cOkParts.join(' | ');
         } else { cObsStr = cobs.join(' | '); }
 
-        gCust.addRow([
+        var _custRow = [
           stLabel(cFill), cObsStr,
           custid, cd(custid),
           yn(inCS2), yn(inCP2), yn(onlyM2),
           numPrd2, numLoc2, cSt.pathCount, domRes
-        ], cFill);
+        ];
+        efInjectRow(_custRow, 'sn', 'customer', 3, SN_IDX.custLookup[custid]);
+        gCust.addRow(_custRow, cFill);
       });
       var kpi_totalCusts = Object.keys(custStats).length;
       var kpi_resilCusts = 0;
@@ -1634,12 +1660,14 @@
           : 'Arco valido | Location Product en origen y destino | TLEADTIME definido' + (inPath ? ' | En ruta completa' : '');
 
         var isSpof = (originsPerDest[p + '|' + to] || 0) === 1;
-        gLS.addRow([
+        var _lsRow = [
           stLabel(lsFill), lsObsStr,
           p, pd(p), pm(p), fr, ld(fr), to, ld(to), tlt,
           yn(inLPFr), yn(inLPTo), yn(pInPSH),
           yn(inPath), yn(isInv), ltSt, yn(isSpof)
-        ], lsFill);
+        ];
+        efInjectRow(_lsRow, 'sn', 'locationSource', 9, r);
+        gLS.addRow(_lsRow, lsFill);
       });
       lsSeenArcs = null; lsArcSet = null; originsPerDest = null;
       if (onProgress) onProgress(94);
@@ -1674,51 +1702,17 @@
           ? csObs.join(' | ')
           : 'Entrega alcanzable | Location Product y Customer Product configurados | CLEADTIME definido';
 
-        gCS.addRow([
+        var _csRow = [
           stLabel(csFill), csObsStr,
           p, pd(p), pm(p), loc, ld(loc), c, cd(c), clt,
           yn(inLPLoc), yn(inCPCust), yn(pInPSH2),
           yn(inPath2), ltSt2
-        ], csFill);
+        ];
+        efInjectRow(_csRow, 'sn', 'customerSource', 9, r);
+        gCS.addRow(_csRow, csFill);
       });
       arcInCompletePath = null; locProdSet = null; custProdSet = null;
       if (onProgress) onProgress(96);
-
-      /* ════════════════════════════════════════════════════════════════
-         FASE 7c — Hoja Tipos Excluidos
-         ════════════════════════════════════════════════════════════════ */
-      if (onStatus) onStatus('Escribiendo hoja Tipos Excluidos...');
-      var exclHdr = ['MATTYPEID','Descripcion (cat.)','Categoria IBP','# Productos','Estado'];
-      var exclWs = wb.addWorksheet('Tipos Excluidos', {
-        views: [{ state: 'frozen', ySplit: 1 }],
-        properties: { tabColor: { argb: 'FFa78bfa' } }
-      });
-      exclWs.addRow(exclHdr);
-      exclWs.getRow(1).eachCell(function (cell) {
-        cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: GOLD } };
-        cell.font  = { bold: true, name: 'DM Sans', size: 10, color: { argb: NAVY } };
-        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-        cell.border = { bottom: { style: 'medium', color: { argb: ORANGE } } };
-      });
-      exclWs.getRow(1).height = 22;
-      var exclColW = exclHdr.map(function(h) { return h.length; });
-
-      var CAT_LABELS = { finished: 'Producto Terminado', semi: 'Semiterminado', rawmat: 'Mat. Prima / Insumo', trading: 'Mercadería' };
-      var exclEntries = Object.keys(MATTYPE_CFG).filter(function(k) { return MATTYPE_CFG[k].excluded; });
-      if (exclEntries.length === 0) {
-        var noExclRow = exclWs.addRow(['(ninguno)', 'No se excluyeron tipos de material en este análisis.', '', '', '']);
-        noExclRow.eachCell(function(cell) { cell.font = { italic: true, name: 'DM Sans', size: 10, color: { argb: NA_FONT } }; });
-      } else {
-        exclEntries.forEach(function(k) {
-          var cfg = MATTYPE_CFG[k];
-          var cats = cfg.categories && cfg.categories.size > 0 ? Array.from(cfg.categories).map(function(c) { return CAT_LABELS[c] || c; }).join(', ') : '—';
-          var row = [k, cats, 'Excluido', cfg.count || 0, 'Excluido del análisis'];
-          var exRow = exclWs.addRow(row);
-          exRow.eachCell(function(cell) { cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C_YEL } }; });
-          row.forEach(function(v, ci) { var len = v != null ? String(v).length : 0; if (len > exclColW[ci]) exclColW[ci] = len; });
-        });
-      }
-      exclWs.columns.forEach(function(col, ci) { col.width = Math.min(Math.max((exclColW[ci] || 10) + 2, 10), 40); });
 
       /* ════════════════════════════════════════════════════════════════
          FASE 8 — Hoja Resumen + column widths + export
@@ -1735,31 +1729,6 @@
         var exRow = s0ws.addRow(row);
         if (fill) exRow.eachCell(function (cell) { cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } }; });
         row.forEach(function (v, ci) { var len = v != null ? String(v).length : 0; if (len > s0colW[ci]) s0colW[ci] = len; });
-      });
-
-      /* ── KPIs en Resumen ── */
-      s0ws.addRow([]);  // separador
-      var kpiHdrRow = s0ws.addRow(['KPI', 'Valor', '', '', '', '', '']);
-      kpiHdrRow.eachCell(function(cell) {
-        if (!cell.value) return;
-        cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: GRP.metric } };
-        cell.font  = { bold: true, name: 'DM Sans', size: 10, color: { argb: NAVY } };
-      });
-      var kpiRows = [
-        ['Productos analizados', n],
-        ['Productos con ruta completa (planta a cliente)', completeCount + ' (' + kpi_pctComplete + '%)'],
-        ['Ghost nodes totales detectados', ghostCount],
-        ['Health Score promedio', kpi_avgHealth],
-        ['TLT promedio global (dias)', kpi_avgTlt != null ? kpi_avgTlt : NA_DASH],
-        ['CLT promedio global (dias)', kpi_avgClt != null ? kpi_avgClt : NA_DASH],
-        ['Clientes con rutas resilientes', kpi_totalCusts > 0 ? kpi_resilCusts + ' de ' + kpi_totalCusts + ' (' + kpi_pctResil + '%)' : NA_DASH],
-        ['Tipos de material excluidos', exclEntries.length > 0 ? exclEntries.join(', ') : '(ninguno)']
-      ];
-      kpiRows.forEach(function(r) {
-        var kr = s0ws.addRow([r[0], r[1], '', '', '', '', '']);
-        var len0 = r[0] ? String(r[0]).length : 0, len1 = r[1] != null ? String(r[1]).length : 0;
-        if (len0 > s0colW[0]) s0colW[0] = len0;
-        if (len1 > s0colW[1]) s0colW[1] = len1;
       });
 
       [gPrd, gLoc, gCust, gLS, gCS].forEach(function (g) { g.finalize(); });

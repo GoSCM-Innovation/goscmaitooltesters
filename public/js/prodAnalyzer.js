@@ -68,19 +68,22 @@ async function doProductionAnalysis() {
     setStatusPA('Descargando Production Source Header → IDB...', 2);
     log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + ent.psh);
     var nPsh = await fetchAndIndex(baseOData + ent.psh, logEl, fPsh,
-      'SOURCEID,PRDID,LOCID,SOURCETYPE,PLEADTIME,OUTPUTCOEFFICIENT,PRATIO,PINVALID',
+      efGetSelect('pa', 'psh'),
       function(rows) {
         rows = rows.filter(function(r) { return r.PINVALID !== 'X'; });
+        var _pshExtra = (typeof EF_SEL !== 'undefined') ? (EF_SEL['pa']['psh'] || []) : [];
         rows.forEach(function(r) {
           var sid = str(r.SOURCEID); if (!sid) return;
           if (!pshBySid[sid]) pshBySid[sid] = [];
-          pshBySid[sid].push({
+          var _entry = {
             PRDID: str(r.PRDID), LOCID: str(r.LOCID),
             SOURCETYPE: str(r.SOURCETYPE),
             PLEADTIME: r.PLEADTIME != null ? str(r.PLEADTIME) : '',
             OUTPUTCOEFFICIENT: r.OUTPUTCOEFFICIENT != null ? str(r.OUTPUTCOEFFICIENT) : '',
             PRATIO: r.PRATIO != null ? str(r.PRATIO) : ''
-          });
+          };
+          _pshExtra.forEach(function(f) { if (r[f] != null) _entry[f] = str(r[f]); });
+          pshBySid[sid].push(_entry);
           var p = str(r.PRDID); if (p) pshPrdSet[p] = true;
         });
         return idbBulkPut('pa_psh', rows);
@@ -91,7 +94,7 @@ async function doProductionAnalysis() {
     if (ent.psi) {
       setStatusPA('Descargando Production Source Item → IDB...', 12);
       var nPsi = await fetchAndIndex(baseOData + ent.psi, logEl, paFilter,
-        'SOURCEID,PRDID,COMPONENTCOEFFICIENT,ISALTITEM',
+        efGetSelect('pa', 'psi'),
         function(rows) {
           var validRows = rows.filter(function(r) { return !!pshBySid[str(r.SOURCEID)]; });
           return idbBulkPut('pa_psi', validRows);
@@ -115,7 +118,7 @@ async function doProductionAnalysis() {
     if (ent.psr) {
       setStatusPA('Descargando Production Source Resource → IDB...', 22);
       var nPsr = await fetchAndIndex(baseOData + ent.psr, logEl, paFilter,
-        'SOURCEID,RESID',
+        efGetSelect('pa', 'psr'),
         function(rows) {
           var validRows = rows.filter(function(r) { return !!pshBySid[str(r.SOURCEID)]; });
           return idbBulkPut('pa_psr', validRows);
@@ -127,7 +130,7 @@ async function doProductionAnalysis() {
     if (ent.prd) {
       setStatusPA('Indexando Product...', 32);
       var nPrd = await fetchAndIndex(baseOData + ent.prd, logEl, paFilter,
-        'PRDID,PRDDESCR,MATTYPEID',
+        efGetSelect('pa', 'product'),
         function(rows) {
           rows.forEach(function(r) { var k = str(r.PRDID); if (k) PA_PRD[k] = r; });
           return Promise.resolve();
@@ -139,7 +142,7 @@ async function doProductionAnalysis() {
     if (ent.loc) {
       setStatusPA('Indexando Location...', 44);
       var nLoc = await fetchAndIndex(baseOData + ent.loc, logEl, fLoc,
-        'LOCID,LOCDESCR,LOCTYPE,LOCVALID',
+        efGetSelect('pa', 'location'),
         function(rows) {
           rows = rows.filter(function(r) { return r.LOCVALID !== 'X'; });
           rows.forEach(function(r) { var k = str(r.LOCID); if (k) PA_LOC[k] = r; });
@@ -152,7 +155,7 @@ async function doProductionAnalysis() {
     if (ent.res) {
       setStatusPA('Indexando Resource...', 54);
       var nRes = await fetchAndIndex(baseOData + ent.res, logEl, paFilter,
-        'RESID,RESDESCR',
+        efGetSelect('pa', 'resource'),
         function(rows) {
           rows.forEach(function(r) { var k = str(r.RESID); if (k) PA_RES[k] = r; });
           return Promise.resolve();
@@ -164,12 +167,15 @@ async function doProductionAnalysis() {
     if (ent.resLoc) {
       setStatusPA('Indexando Resource Location...', 60);
       var nResLoc = await fetchAndIndex(baseOData + ent.resLoc, logEl, paFilter,
-        'RESID,LOCID',
+        efGetSelect('pa', 'resourceLocation'),
         function(rows) {
+          var _rlExtra = (typeof EF_SEL !== 'undefined') ? (EF_SEL['pa']['resourceLocation'] || []) : [];
           rows.forEach(function(r) {
             var k = str(r.RESID); if (!k) return;
             if (!PA_RES_LOC[k]) PA_RES_LOC[k] = [];
-            PA_RES_LOC[k].push({ LOCID: str(r.LOCID || '') });
+            var _entry = { LOCID: str(r.LOCID || '') };
+            _rlExtra.forEach(function(f) { if (r[f] != null) _entry[f] = str(r[f]); });
+            PA_RES_LOC[k].push(_entry);
           });
           return Promise.resolve();
         });
@@ -740,7 +746,7 @@ async function paAnalyzeAndExport(
      ════════════════════════════════════════════════════════════════ */
   if (ent.prd) {
     initStat('Product');
-    var S1 = makeSheet('Product', 'FF29ABE2', [
+    var _s1Hdrs = [
       'Estado','Observacion',
       'PRDID','PRDDESCR','MATTYPEID',
       'En Location Product','En PSH (output)','En PSI (componente)','En Location Source',
@@ -754,7 +760,8 @@ async function paAnalyzeAndExport(
       '# Productos que lo usan',
       '# Orígenes en red','Orígenes en red (códigos)',
       '# Plantas consumidoras','Plantas consumidoras (códigos)'
-    ], [
+    ];
+    var _s1Notes = [
       'Color de alerta: 🔴 Alerta = problema crítico que bloquea la planificación | 🟡 Advertencia = dato incompleto o sospechoso | ✅ OK = sin hallazgos.',
       'Detalle de cada validación. Si hay hallazgos, describe el problema concreto. Si el estado es OK, lista las validaciones que pasaron. Ej OK: "Habilitado en Location Product | Con PSH, PSI y PSR | Lead time definido en todos los SOURCEIDs".',
       'Código único del producto en SAP IBP (PRDID). Ej: PROD-001, MAT-A.',
@@ -782,7 +789,8 @@ async function paAnalyzeAndExport(
       'Códigos de los nodos origen del producto en la red. Ej: PROV-01, P002.',
       'Número de plantas donde este producto es consumido como ingrediente en algún BOM. Ej: 2 = se usa como componente en P001 y P002.',
       'Códigos de las plantas donde este producto aparece como componente PSI. Ej: P001, P002.'
-    ], [
+    ];
+    var _s1Groups = [
       'control','control',
       'ibp','ibp','ibp',
       'flag','flag','flag','flag',
@@ -796,7 +804,9 @@ async function paAnalyzeAndExport(
       'metric',
       'metric','detail',
       'metric','detail'
-    ]);
+    ];
+    efInjectHeaders(_s1Hdrs, _s1Notes, _s1Groups, 'pa', 'product', 4);
+    var S1 = makeSheet('Product', 'FF29ABE2', _s1Hdrs, _s1Notes, _s1Groups);
 
     Object.keys(PA_PRD).sort().forEach(function(prdid) {
       var mattypeid = pm(prdid);
@@ -1003,14 +1013,19 @@ async function paAnalyzeAndExport(
         obs.unshift(uncatLabel);
       }
 
-      // Severidad final
-      var finalSev = fills.length ? mattypeResolveSeverity(fills.map(function(f){
-        if(f==='red') return 'red'; if(f==='yellow') return 'yellow'; return 'none';
-      })) : 'none';
+      // Severidad final — máximo entre todos los hallazgos (el más grave gana)
+      var finalSev = 'none';
+      if (fills.length) {
+        var _sevOrder = ['none', 'info', 'yellow', 'red'];
+        fills.forEach(function(f) {
+          var s = f === 'red' ? 'red' : f === 'yellow' ? 'yellow' : 'none';
+          if (_sevOrder.indexOf(s) > _sevOrder.indexOf(finalSev)) finalSev = s;
+        });
+      }
       if (isUncategorized && finalSev === 'none') finalSev = 'yellow';
       var fill = severityToFill(finalSev);
 
-      S1.addRow([
+      var _s1Row = [
         statusLabel(fill), obs.join(' | '),
         prdid, pd(prdid), mattypeid,
         yn(inLP), yn(inPSH), yn(inPSI), yn(inLS),
@@ -1024,7 +1039,9 @@ async function paAnalyzeAndExport(
         usedBySet.size,
         origins.size,         codes(origins),
         consLocs.size,        codes(consLocs)
-      ], fill);
+      ];
+      efInjectRow(_s1Row, 'pa', 'product', 4, PA_PRD[prdid]);
+      S1.addRow(_s1Row, fill);
       track('Product', fill);
     });
     S1.finalize();
@@ -1038,7 +1055,7 @@ async function paAnalyzeAndExport(
      ════════════════════════════════════════════════════════════════ */
   if (ent.loc) {
     initStat('Location');
-    var S9 = makeSheet('Location', 'FF10B981', [
+    var _s9Hdrs = [
       'Estado','Observacion',
       'LOCID','LOCDESCR','LOCTYPE',
       'Rol(es) inferido(s)',
@@ -1063,7 +1080,8 @@ async function paAnalyzeAndExport(
       /* Nodo receptor */
       '# Productos recibidos','Productos recibidos (códigos)',
       '# Orígenes desde los que recibe','Orígenes (códigos)'
-    ], [
+    ];
+    var _s9Notes = [
       'Color de alerta: 🔴 Alerta = problema crítico que bloquea la planificación | 🟡 Advertencia = dato incompleto o sospechoso | ✅ OK = sin hallazgos.',
       'Detalle de cada validación. Ej 🔴: "2 SOURCEID(s) sin PSI | 1 componente sin arco de abastecimiento". Ej ✅: "BOMs con PSI, PSR y lead time | Sin componentes descubiertos".',
       'Código único de la ubicación en SAP IBP (LOCID). Ej: P001, DC-NORTE, PROV-05.',
@@ -1109,7 +1127,8 @@ async function paAnalyzeAndExport(
       'Códigos de los productos recibidos en esta ubicación. Ej: PROD-001, MAT-A.',
       'Número de ubicaciones origen distintas desde las que recibe productos. Ej: 3 = recibe desde P001, P002 y PROV-01.',
       'Códigos de las ubicaciones origen que abastecen a esta ubicación. Ej: P001, PROV-01.'
-    ], [
+    ];
+    var _s9Groups = [
       'control','control',
       'ibp','ibp','ibp','ibp',
       /* Planta */
@@ -1124,7 +1143,9 @@ async function paAnalyzeAndExport(
       'metric','detail','metric','detail',
       /* Receptor */
       'metric','detail','metric','detail'
-    ]);
+    ];
+    efInjectHeaders(_s9Hdrs, _s9Notes, _s9Groups, 'pa', 'location', 4);
+    var S9 = makeSheet('Location', 'FF10B981', _s9Hdrs, _s9Notes, _s9Groups);
 
     // Unión de todos los locids conocidos
     var allLocIds = new Set();
@@ -1350,7 +1371,7 @@ async function paAnalyzeAndExport(
       var finalSev = fills.length ? mattypeResolveSeverity(fills) : 'none';
       var fill = finalSev === 'red' ? C_RED : finalSev === 'yellow' ? C_YEL : null;
 
-      S9.addRow([
+      var _s9Row = [
         statusLabel(fill), obs.join(' | '),
         locid, locdescr, loctype, rolStr,
         plantaPrds.size,    codes(plantaPrds),
@@ -1370,7 +1391,9 @@ async function paAnalyzeAndExport(
         destTransf.size,      codes(destTransf),
         prdRecibidos.size,  codes(prdRecibidos),
         origenes.size,      codes(origenes)
-      ], fill);
+      ];
+      efInjectRow(_s9Row, 'pa', 'location', 4, PA_LOC[locid]);
+      S9.addRow(_s9Row, fill);
       track('Location', fill);
     });
     S9.finalize();
@@ -1383,14 +1406,15 @@ async function paAnalyzeAndExport(
      ════════════════════════════════════════════════════════════════ */
   if (ent.res) {
     initStat('Resource');
-    var S2 = makeSheet('Resource', 'FFa78bfa', [
+    var _s2Hdrs = [
       'Estado','Observacion',
       'RESID','RESDESCR',
       'En PSR','En Resource Location',
       '# Plantas asignadas','Plantas asignadas (códigos)',
       '# Fuentes prod.','Fuentes prod. (SOURCEIDs)',
       '# Productos que fabrica','Productos que fabrica (códigos)'
-    ], [
+    ];
+    var _s2Notes = [
       'Color de alerta: 🔴 Alerta = recurso completamente huérfano (sin PSR ni Resource Location) | 🟡 Advertencia = dato incompleto | ✅ OK = recurso activo y con planta asignada.',
       'Detalle de la validación. Ej 🔴: "Recurso huérfano: sin uso en producción ni planta asignada". Ej 🟡: "Sin uso en producción (no aparece en PSR)". Ej ✅: "En uso en PSR y con planta asignada en Resource Location".',
       'Código único del recurso productivo en SAP IBP (RESID). Ej: LINEA-01, HORNO-A, MAQUINA-03.',
@@ -1403,14 +1427,17 @@ async function paAnalyzeAndExport(
       'Códigos de los SOURCEIDs a los que está asignado este recurso. Ej: SRC-001, SRC-002.',
       'Número de productos distintos que fabrica a través de sus SOURCEIDs. Ej: 2 = HORNO-A produce PROD-001 y PROD-002.',
       'Códigos de los productos fabricados por las fuentes donde participa este recurso. Ej: PROD-001, PROD-002.'
-    ], [
+    ];
+    var _s2Groups = [
       'control','control',
       'ibp','ibp',
       'flag','flag',
       'metric','detail',
       'metric','detail',
       'metric','detail'
-    ]);
+    ];
+    efInjectHeaders(_s2Hdrs, _s2Notes, _s2Groups, 'pa', 'resource', 3);
+    var S2 = makeSheet('Resource', 'FFa78bfa', _s2Hdrs, _s2Notes, _s2Groups);
 
     // Índice: RESID → Set<LOCID> (desde Resource Location)
     var resLocsByResid = {};
@@ -1451,14 +1478,16 @@ async function paAnalyzeAndExport(
       else if (!inRL)      obs.push('Sin planta asignada en Resource Location');
       if (!obs.length)     obs.push('En uso en PSR y con planta asignada en Resource Location');
       var fill = (!inPSR && !inRL) ? C_RED : (!inPSR || !inRL) ? C_YEL : null;
-      S2.addRow([
+      var _s2Row = [
         statusLabel(fill), obs.join(' | '),
         resid, rd(resid),
         yn(inPSR), yn(inRL),
         locsSet.size, codes(locsSet),
         sidsSet.size, codes(sidsSet),
         prdsSet.size, codes(prdsSet)
-      ], fill);
+      ];
+      efInjectRow(_s2Row, 'pa', 'resource', 3, PA_RES[resid]);
+      S2.addRow(_s2Row, fill);
       track('Resource', fill);
     });
     S2.finalize();
@@ -1471,11 +1500,12 @@ async function paAnalyzeAndExport(
      ════════════════════════════════════════════════════════════════ */
   if (ent.resLoc) {
     initStat('Resource Location');
-    var S3 = makeSheet('Resource Location', 'FFFF9F43', [
+    var _s3Hdrs = [
       'Estado','Observacion',
       'RESID','RESDESCR','LOCID','LOCDESCR',
       'RESID+LOCID usado en PSR'
-    ], [
+    ];
+    var _s3Notes = [
       'Color de alerta: 🟡 Advertencia = recurso asignado a planta pero sin uso en ninguna receta | ✅ OK = recurso activo en PSR para esta planta.',
       'Detalle de la validación. Ej ✅: "Recurso activo en PSR para esta planta". Ej 🟡: "Recurso asignado a planta pero sin uso en PSR para esta planta" — significa que está en el maestro pero IBP nunca lo considera en esa planta.',
       'Código del recurso productivo (RESID). Ej: LINEA-01.',
@@ -1483,18 +1513,23 @@ async function paAnalyzeAndExport(
       'Código de la planta donde está configurado este recurso (LOCID). Ej: P001.',
       'Descripción de la planta del maestro de ubicaciones. Ej: "Planta Santiago".',
       'Si / No — ¿Esta combinación RESID+LOCID aparece en al menos un PSR? Si No, el recurso está en el maestro de esa planta pero no participa en ninguna receta. Ej: HORNO-B en P002 = No → 🟡 configuración sin uso productivo.'
-    ], [
+    ];
+    var _s3Groups = [
       'control','control',
       'ibp','ibp','ibp','ibp',
       'flag'
-    ]);
+    ];
+    efInjectHeaders(_s3Hdrs, _s3Notes, _s3Groups, 'pa', 'resourceLocation', 5);
+    var S3 = makeSheet('Resource Location', 'FFFF9F43', _s3Hdrs, _s3Notes, _s3Groups);
     Object.keys(PA_RES_LOC).sort().forEach(function(resid) {
       PA_RES_LOC[resid].forEach(function(e) {
         var locid = e.LOCID;
         var used  = psrByResidLoc.has(resid + '|' + locid);
         var obs   = used ? 'Recurso activo en PSR para esta planta' : 'Recurso asignado a planta pero sin uso en PSR para esta planta';
         var fill  = used ? null : C_YEL;
-        S3.addRow([statusLabel(fill), obs, resid, rd(resid), locid, ld(locid), yn(used)], fill);
+        var _s3Row = [statusLabel(fill), obs, resid, rd(resid), locid, ld(locid), yn(used)];
+        efInjectRow(_s3Row, 'pa', 'resourceLocation', 5, e);
+        S3.addRow(_s3Row, fill);
         track('Resource Location', fill);
       });
     });
@@ -1508,7 +1543,7 @@ async function paAnalyzeAndExport(
      ════════════════════════════════════════════════════════════════ */
   if (ent.psh) {
     initStat('Prod Source Header');
-    var S6 = makeSheet('Prod Source Header', 'FFF7A800', [
+    var _s6Hdrs = [
       'Estado','Observacion',
       'SOURCEID',
       'PRDID output','PRDDESCR output','MATTYPEID output',
@@ -1518,7 +1553,8 @@ async function paAnalyzeAndExport(
       '# Componentes PSI','# Recursos PSR','Recursos PSR (códigos)',
       '# Componentes con alternativa',
       'Tiene PSR'
-    ], [
+    ];
+    var _s6Notes = [
       'Color de alerta: 🔴 Alerta = BOM vacío, PLEADTIME=0, sin Location Product o sin PSR | 🟡 Advertencia = sin SOURCETYPE=P o múltiples fuentes sin cuota | ✅ OK = receta completa.',
       'Detalle de hallazgos. Ej 🔴: "BOM vacío: sin componentes PSI | PLEADTIME = 0 o no definido". Ej 🟡: "Múltiples SOURCEIDs para mismo PRDID+LOCID — verificar cuotas". Ej ✅: "BOM con PSI | Lead time definido | Habilitado en LP | SOURCETYPE=P presente | Recursos PSR asignados".',
       'Identificador único de la fuente de producción (SOURCEID) en SAP IBP. Ej: SRC-001.',
@@ -1537,7 +1573,8 @@ async function paAnalyzeAndExport(
       'Códigos de los recursos (RESID) asignados a esta fuente de producción. Ej: LINEA-01, HORNO-A.',
       'Número de componentes PSI marcados como material de reemplazo alternativo (ISALTITEM=X). Ej: 1 = MAT-A-PREMIUM puede reemplazar a MAT-A en esta receta.',
       'Si / No — ¿Esta fuente tiene al menos un recurso asignado en Prod Source Resource? Si No, IBP no puede planificar la capacidad de esta receta. Ej: SRC-003 = No → sin restricción de capacidad modelada → 🔴.'
-    ], [
+    ];
+    var _s6Groups = [
       'control','control',
       'ibp',
       'ibp','ibp','ibp',
@@ -1547,7 +1584,9 @@ async function paAnalyzeAndExport(
       'metric','metric','detail',
       'metric',
       'flag'
-    ]);
+    ];
+    efInjectHeaders(_s6Hdrs, _s6Notes, _s6Groups, 'pa', 'psh', 11);
+    var S6 = makeSheet('Prod Source Header', 'FFF7A800', _s6Hdrs, _s6Notes, _s6Groups);
     Object.keys(pshBySid).sort().forEach(function(sid) {
       var recs    = pshBySid[sid];
       var primary = recs.find(function(r){ return r.SOURCETYPE === 'P'; }) || recs[0];
@@ -1578,7 +1617,7 @@ async function paAnalyzeAndExport(
       if (multi)   obs.push('Múltiples SOURCEIDs para mismo PRDID+LOCID — verificar cuotas');
       if (!obs.length) obs.push('BOM con componentes PSI | Lead time definido | Habilitado en LP | SOURCETYPE=P presente | Recursos PSR asignados');
       var fill = (!hasPSI || noLt || !inLP || !hasPSR) ? C_RED : (!hasP || multi) ? C_YEL : null;
-      S6.addRow([
+      var _s6Row = [
         statusLabel(fill), obs.join(' | '),
         sid,
         outPrd, pd(outPrd), pm(outPrd),
@@ -1588,7 +1627,9 @@ async function paAnalyzeAndExport(
         psiRows.length, residsSet.size, codes(residsSet),
         altCount,
         yn(hasPSR)
-      ], fill);
+      ];
+      efInjectRow(_s6Row, 'pa', 'psh', 11, primary);
+      S6.addRow(_s6Row, fill);
       track('Prod Source Header', fill);
     });
     S6.finalize();
@@ -1601,7 +1642,7 @@ async function paAnalyzeAndExport(
      ════════════════════════════════════════════════════════════════ */
   if (ent.psi) {
     initStat('Prod Source Item');
-    var S7 = makeSheet('Prod Source Item', 'FF06B6D4', [
+    var _s7Hdrs = [
       'Estado','Observacion',
       'SOURCEID',
       'PRDID output','PRDDESCR output','MATTYPEID output',
@@ -1613,7 +1654,8 @@ async function paAnalyzeAndExport(
       'LOCFR origen','LOCDESCR origen',
       '# Orígenes comp.','Orígenes comp. (códigos)',
       'Material de reemplazo (ISALTITEM)','Reemplaza a'
-    ], [
+    ];
+    var _s7Notes = [
       'Color de alerta: 🔴 Alerta = coeficiente cero, insumo sin arco de abastecimiento o componente sin Location Product | 🟡 Advertencia = SOURCEID no encontrado o sustituto sin registro Item Sub | ✅ OK = componente bien configurado.',
       'Detalle de hallazgos. Ej 🔴: "Coeficiente = 0 o no definido | Insumo sin arco de abastecimiento en Location Source". Ej ✅: "SOURCEID válido | Coeficiente definido | Con arco de abastecimiento | Habilitado en Location Product".',
       'Fuente de producción (SOURCEID) a la que pertenece este componente. Ej: SRC-001 = este componente es ingrediente de la receta SRC-001.',
@@ -1635,7 +1677,8 @@ async function paAnalyzeAndExport(
       'Códigos de los nodos origen del componente hacia esta planta. Ej: PROV-01, PROV-02.',
       'X = este componente es un material de reemplazo alternativo (ISALTITEM=X). Vacío = componente principal. Ej: MAT-A-PREMIUM con X = puede sustituir a MAT-A cuando no hay stock.',
       'Código del componente principal al que reemplaza este sustituto. Solo aplica cuando ISALTITEM=X. Ej: MAT-A = este sustituto reemplaza a MAT-A.'
-    ], [
+    ];
+    var _s7Groups = [
       'control','control',
       'ibp',
       'ibp','ibp','ibp',
@@ -1647,7 +1690,9 @@ async function paAnalyzeAndExport(
       'detail','detail',
       'metric','detail',
       'ibp','detail'
-    ]);
+    ];
+    efInjectHeaders(_s7Hdrs, _s7Notes, _s7Groups, 'pa', 'psi', 11);
+    var S7 = makeSheet('Prod Source Item', 'FF06B6D4', _s7Hdrs, _s7Notes, _s7Groups);
 
     // ¿Es excluido el componente?
     function _compExclNote(compMt) {
@@ -1712,7 +1757,7 @@ async function paAnalyzeAndExport(
                  : (noSrc || (isAlt === 'X' && !replacedBy && ent.psiSub)) ? C_YEL
                  : null;
 
-        S7.addRow([
+        var _s7Row = [
           statusLabel(fill), obs.join(' | '),
           sid,
           outPrd, pd(outPrd), pm(outPrd),
@@ -1724,7 +1769,9 @@ async function paAnalyzeAndExport(
           locfrCodes, locfrDescr,
           originsComp.size, codes(originsComp),
           isAlt || '', replacedBy
-        ], fill);
+        ];
+        efInjectRow(_s7Row, 'pa', 'psi', 11, r);
+        S7.addRow(_s7Row, fill);
         track('Prod Source Item', fill);
       });
       await new Promise(function(r){ setTimeout(r, 0); });
@@ -1741,7 +1788,7 @@ async function paAnalyzeAndExport(
      ════════════════════════════════════════════════════════════════ */
   if (ent.psr) {
     initStat('Prod Source Resource');
-    var S8 = makeSheet('Prod Source Resource', 'FF6C63FF', [
+    var _s8Hdrs = [
       'Estado','Observacion',
       'SOURCEID',
       'PRDID output','PRDDESCR output','MATTYPEID output',
@@ -1749,7 +1796,8 @@ async function paAnalyzeAndExport(
       'RESID','RESDESCR',
       'RESID+LOCID en Resource Location',
       '# Plantas con este recurso asignado','Plantas recurso (códigos)'
-    ], [
+    ];
+    var _s8Notes = [
       'Color de alerta: 🟡 Advertencia = recurso asignado a una receta pero sin Resource Location en esa planta | ✅ OK = asignación válida y consistente.',
       'Detalle de la validación. Ej ✅: "Recurso LINEA-01 asignado en Resource Location para planta P001 | Asociado a SOURCEID SRC-001". Ej 🟡: "Recurso en producción sin asignación en Resource Location para planta P001" — el recurso opera en una receta de P001 pero no figura en el maestro de esa planta.',
       'Fuente de producción (SOURCEID) a la que está asignado este recurso. Ej: SRC-001.',
@@ -1763,7 +1811,8 @@ async function paAnalyzeAndExport(
       'Si / No — ¿La combinación RESID+LOCID aparece en Resource Location? Si No, el recurso está en la receta pero IBP no lo reconoce como ubicado en esa planta. Ej: LINEA-01 en P001 = No → 🟡 inconsistencia entre PSR y Resource Location.',
       'Número de plantas donde este recurso tiene configuración en Resource Location. Ej: 2 = LINEA-01 tiene Resource Location en P001 y P002.',
       'Códigos de las plantas donde este recurso tiene Resource Location configurado. Ej: P001, P002.'
-    ], [
+    ];
+    var _s8Groups = [
       'control','control',
       'ibp',
       'ibp','ibp','ibp',
@@ -1771,7 +1820,9 @@ async function paAnalyzeAndExport(
       'ibp','ibp',
       'flag',
       'metric','detail'
-    ]);
+    ];
+    efInjectHeaders(_s8Hdrs, _s8Notes, _s8Groups, 'pa', 'psr', 9);
+    var S8 = makeSheet('Prod Source Resource', 'FF6C63FF', _s8Hdrs, _s8Notes, _s8Groups);
 
     // RESID → plantas asignadas (Resource Location)
     var resLocMapByResid = {};
@@ -1793,7 +1844,7 @@ async function paAnalyzeAndExport(
                  : inRL  ? 'Recurso ' + resid + ' asignado en Resource Location para planta ' + locid + ' | Asociado a SOURCEID ' + sid
                  :          'Recurso en producción sin asignación en Resource Location para planta ' + locid;
       var fill   = noSrc ? C_YEL : inRL ? null : C_YEL;
-      S8.addRow([
+      var _s8Row = [
         statusLabel(fill), obs,
         sid,
         outPrd, pd(outPrd), pm(outPrd),
@@ -1801,7 +1852,9 @@ async function paAnalyzeAndExport(
         resid, rd(resid),
         yn(inRL),
         resPlants.size, codes(resPlants)
-      ], fill);
+      ];
+      efInjectRow(_s8Row, 'pa', 'psr', 9, r);
+      S8.addRow(_s8Row, fill);
       track('Prod Source Resource', fill);
     });
     S8.finalize();
