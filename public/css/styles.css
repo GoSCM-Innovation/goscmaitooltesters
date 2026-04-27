@@ -2575,7 +2575,7 @@ button[disabled][title]:hover::after {
 
 /* Tab panel must fill viewport so internal flex chain gets a bounded height */
 #tab-glosario.active {
-  display: flex;
+  display: block;
   height: 100vh;
   overflow: hidden;
 }
@@ -2691,7 +2691,6 @@ button[disabled][title]:hover::after {
   flex: 1;
   overflow-y: auto;
   padding: var(--sp-8) var(--sp-8);
-  max-width: 960px;
 }
 .glosario-content::-webkit-scrollbar { width: 6px; }
 .glosario-content::-webkit-scrollbar-track { background: transparent; }
