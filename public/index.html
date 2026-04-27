@@ -2088,11 +2088,13 @@
     <div class="panel" id="ex-results" style="display:none">
       <div class="ex-toolbar">
         <div class="ex-dim-toggle">
-          <button class="dim-btn active" id="ex-dim-integration" onclick="Explorer.switchDimension('integration')">🔗 Integración</button>
-          <button class="dim-btn" id="ex-dim-dst-table"    onclick="Explorer.switchDimension('dst-table')">📤 Tabla Destino</button>
-          <button class="dim-btn" id="ex-dim-src-table"    onclick="Explorer.switchDimension('src-table')">📥 Tabla Origen</button>
-          <button class="dim-btn" id="ex-dim-dst-field"    onclick="Explorer.switchDimension('dst-field')">📋 Campo Destino</button>
-          <button class="dim-btn" id="ex-dim-src-field"    onclick="Explorer.switchDimension('src-field')">📋 Campo Origen</button>
+          <button class="dim-btn active" id="ex-dim-integration"   onclick="Explorer.switchDimension('integration')">🔗 Integración</button>
+          <button class="dim-btn" id="ex-dim-dst-table"            onclick="Explorer.switchDimension('dst-table')">📤 Tabla Destino</button>
+          <button class="dim-btn" id="ex-dim-src-table"            onclick="Explorer.switchDimension('src-table')">📥 Tabla Origen</button>
+          <button class="dim-btn" id="ex-dim-dst-field"            onclick="Explorer.switchDimension('dst-field')">📋 Campo Destino</button>
+          <button class="dim-btn" id="ex-dim-src-field"            onclick="Explorer.switchDimension('src-field')">📋 Campo Origen</button>
+          <button class="dim-btn" id="ex-dim-filter-table"         onclick="Explorer.switchDimension('filter-table')">🔍 Tabla Filtro/Join</button>
+          <button class="dim-btn" id="ex-dim-filter-field"         onclick="Explorer.switchDimension('filter-field')">🎯 Campo Filtro/Join</button>
         </div>
         <div class="ex-toolbar-row2">
           <input class="sel-search" id="ex-search" placeholder="🔍 Buscar..." oninput="Explorer.applySearch(this.value)">
