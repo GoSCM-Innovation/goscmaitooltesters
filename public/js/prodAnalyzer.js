@@ -284,7 +284,7 @@ function paConfirmMapping() {
   // Colapsar mapeo
   var mdtBody = document.getElementById('bodyPAMDT');
   var mdtArr  = document.getElementById('arrPAMDT');
-  if (mdtBody) { mdtBody.classList.add('hidden'); if (mdtArr) mdtArr.textContent = '▶'; }
+  if (mdtBody) { toggleMappingBody('bodyPAMDT', 'arrPAMDT', false); }
 
   // Mostrar y expandir panel de exclusión
   var excl = document.getElementById('panelPAExclude');

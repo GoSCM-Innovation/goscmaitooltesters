@@ -54,10 +54,7 @@
     function doConfirmMapping() {
       var body = document.getElementById('bodySNMDT');
       var arr  = document.getElementById('arrSNMDT');
-      if (body && !body.classList.contains('hidden')) {
-        body.classList.add('hidden');
-        if (arr) arr.textContent = '▶';
-      }
+      if (body) { toggleMappingBody('bodySNMDT', 'arrSNMDT', false); }
       var excl = document.getElementById('panelSNExclude');
       if (excl) {
         excl.classList.remove('hidden');
