@@ -1052,3 +1052,24 @@
       bomFlattenChildren(children, rows, expandedIds, tab && tab._indexes);
     }
 
+    function bomToggleFullscreen() {
+      var wrapper = document.getElementById('bomTreeWrapper');
+      if (!document.fullscreenElement) {
+        wrapper.requestFullscreen().catch(function (err) {
+          console.error('Fullscreen error:', err);
+        });
+      } else {
+        document.exitFullscreen();
+      }
+    }
+
+    document.addEventListener('fullscreenchange', function () {
+      var btn = document.getElementById('btnBomFullscreen');
+      if (!btn) return;
+      if (document.fullscreenElement && document.fullscreenElement.id === 'bomTreeWrapper') {
+        btn.innerHTML = '&#x2715; Salir';
+      } else {
+        btn.innerHTML = '&#x26F6; Pantalla completa';
+      }
+    });
+
