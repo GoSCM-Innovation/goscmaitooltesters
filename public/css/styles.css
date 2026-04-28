@@ -1075,17 +1075,25 @@
     }
     #bomTreeWrapper:fullscreen {
       background: var(--bg);
-      overflow-y: auto;
+      overflow: hidden;
       display: flex;
       flex-direction: column;
     }
-    #bomTreeWrapper:fullscreen #bomTabsBar {
-      position: sticky;
-      top: 0;
-      z-index: 10;
-    }
     #bomTreeWrapper:fullscreen #bomTabsContent {
       flex: 1;
+      overflow-y: auto;
+    }
+    #bomTreeWrapper:fullscreen .table-wrap {
+      max-height: none;
+      overflow: visible;
+    }
+    #bomTreeWrapper:fullscreen .controls-bar {
+      position: sticky;
+      top: 0;
+      z-index: 150;
+    }
+    #bomTreeWrapper:fullscreen th {
+      top: 50px;
     }
     .bom-tabs-scroll {
       display: flex;
