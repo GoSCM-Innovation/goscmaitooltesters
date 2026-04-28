@@ -551,13 +551,16 @@
     <!-- ═══ CYCLE BANNER ═══ -->
     <div class="cycle-banner" id="cycleBanner">⚠️ <strong>Ciclos detectados:</strong> <span id="cycleList"></span></div>
 
-    <!-- ═══ MULTI-PRODUCT TAB BAR ═══ -->
-    <div class="bom-tabs-bar hidden" id="bomTabsBar">
-      <div class="bom-tabs-scroll" id="bomTabsScroll"></div>
-    </div>
+    <!-- ═══ MULTI-PRODUCT TAB BAR + CONTENT (wrapper for fullscreen) ═══ -->
+    <div id="bomTreeWrapper">
+      <div class="bom-tabs-bar hidden" id="bomTabsBar">
+        <div class="bom-tabs-scroll" id="bomTabsScroll"></div>
+        <button class="btn btn-secondary btn-small bom-fs-btn" id="btnBomFullscreen" onclick="bomToggleFullscreen()" title="Pantalla completa">&#x26F6; Pantalla completa</button>
+      </div>
 
-    <!-- ═══ TAB CONTENT CONTAINER ═══ -->
-    <div id="bomTabsContent" class="hidden"></div>
+      <!-- ═══ TAB CONTENT CONTAINER ═══ -->
+      <div id="bomTabsContent" class="hidden"></div>
+    </div>
 
   </div><!-- /tab-bom -->
 
