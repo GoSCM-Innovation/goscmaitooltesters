@@ -86,7 +86,7 @@ const Explorer = (function () {
     selectedIdx    = null;
     selectedDimKey = null;
     currentDim     = 'integration';
-    ['integration','dst-table','src-table','dst-field','src-field'].forEach(d => {
+    ALL_DIMS.forEach(d => {
       const b = document.getElementById('ex-dim-' + d);
       if (b) b.classList.toggle('active', d === 'integration');
     });
@@ -134,18 +134,50 @@ const Explorer = (function () {
   }
 
   // ── Índices ──────────────────────────────────────────────
+  // Regex para extraer tokens TABLA.CAMPO o CAMPO de expresiones de filtro.
+  // Se excluyen palabras clave SQL comunes para evitar ruido.
+  const _FILTER_SQL_KW = new Set([
+    'AND','OR','NOT','IS','NULL','IN','LIKE','BETWEEN','EXISTS','SELECT',
+    'FROM','WHERE','JOIN','ON','AS','CASE','WHEN','THEN','ELSE','END',
+    'TRIM','UPPER','LOWER','SUBSTR','LENGTH','CONVERT','CAST','COALESCE',
+    'IFTHENELSE','ISNULL','IFNULL','IIF','SYSDATE','GEN_UUID',
+  ]);
+
+  function extractFilterFields(expr) {
+    // Captura TOKEN.CAMPO o TOKEN standalone (sin operadores ni literales)
+    const tokens = new Set();
+    const re = /\b([A-Za-z_][A-Za-z0-9_]*)(?:\.([A-Za-z_][A-Za-z0-9_]*))?\b/g;
+    let m;
+    while ((m = re.exec(expr)) !== null) {
+      const schemaOrField = m[1].toUpperCase();
+      const field         = m[2] ? m[2].toUpperCase() : null;
+      if (field) {
+        // TABLE.FIELD pattern — index the FIELD part
+        if (!_FILTER_SQL_KW.has(field)) tokens.add(field);
+      } else {
+        // standalone token — only index if not a keyword and looks like a column
+        if (!_FILTER_SQL_KW.has(schemaOrField) && schemaOrField.length >= 2)
+          tokens.add(schemaOrField);
+      }
+    }
+    return [...tokens];
+  }
+
   function buildIndexes() {
     indexes = {
-      byTargetKey:   {},   // normTableKey(dst, target) → [idx]
-      bySourceKey:   {},   // normTableKey(srcDS, srcTable) → [idx]
-      byFileWritten: {},   // normFileKey(fileLoaderFileName) → [idx]
-      byFileRead:    {},   // normFileKey(srcTable when srcDS≈FILE) → [idx]
-      searchTokens:  [],   // [{idx, tokens: string}]
-      // ── Dimensiones de exploración ──
-      byDstTable:    {},   // normTableKey(dstDS, dstTable) → [{intIdx, mIdx}]
-      bySrcTable:    {},   // normTableKey(srcDS, srcTable) → [{intIdx, mIdx}]
-      byDstField:    {},   // FIELDNAME → [{intIdx, mIdx}]
-      bySrcField:    {},   // FIELDNAME → [{intIdx, mIdx}]
+      byTargetKey:    {},   // normTableKey(dst, target) → [idx]
+      bySourceKey:    {},   // normTableKey(srcDS, srcTable) → [idx]
+      byFileWritten:  {},   // normFileKey(fileLoaderFileName) → [idx]
+      byFileRead:     {},   // normFileKey(srcTable when srcDS≈FILE) → [idx]
+      searchTokens:   [],   // [{idx, tokens: string}]
+      // ── Dimensiones de exploración — mappings ──
+      byDstTable:     {},   // normTableKey(dstDS, dstTable) → [{intIdx, mIdx}]
+      bySrcTable:     {},   // normTableKey(srcDS, srcTable) → [{intIdx, mIdx}]
+      byDstField:     {},   // FIELDNAME → [{intIdx, mIdx}]
+      bySrcField:     {},   // FIELDNAME → [{intIdx, mIdx}]
+      // ── Dimensiones de exploración — filtros/joins ──
+      byFilterTable:  {},   // normTableKey('', table) → [{intIdx, fIdx}]
+      byFilterField:  {},   // FIELDNAME → [{intIdx, fIdx}]
     };
 
     function push(map, key, idx) {
@@ -157,6 +189,11 @@ const Explorer = (function () {
       if (!key) return;
       if (!map[key]) map[key] = [];
       map[key].push({ intIdx, mIdx });
+    }
+    function pushDimF(map, key, intIdx, fIdx) {
+      if (!key) return;
+      if (!map[key]) map[key] = [];
+      map[key].push({ intIdx, fIdx });
     }
 
     integrations.forEach(p => {
@@ -194,6 +231,21 @@ const Explorer = (function () {
             if (f) pushDim(indexes.bySrcField, f.toUpperCase(), p._idx, mIdx);
           });
         }
+      });
+
+      // ── Filtros y joins ───────────────────────────────────
+      p.filters.forEach((f, fIdx) => {
+        // Tabla origen — extraida por parseDataflow; puede ser multi-tabla
+        if (f.sourceTable) {
+          f.sourceTable.split(/,\s*/).forEach(rawTbl => {
+            const t = rawTbl.trim();
+            if (t) pushDimF(indexes.byFilterTable, normTableKey('', t), p._idx, fIdx);
+          });
+        }
+        // Campos individuales extraidos de la expresion
+        extractFilterFields(f.expression || '').forEach(field => {
+          pushDimF(indexes.byFilterField, field, p._idx, fIdx);
+        });
       });
 
       // search tokens (incluye tablas referenciadas en lookup expressions)
@@ -524,7 +576,14 @@ const Explorer = (function () {
     const el = document.getElementById('ex-counter');
     if (!el || visible === null) return;
     if (currentDim !== 'integration') {
-      const labels = { 'dst-table': 'tablas destino', 'src-table': 'tablas origen', 'dst-field': 'campos destino', 'src-field': 'campos origen' };
+      const labels = {
+        'dst-table':    'tablas destino',
+        'src-table':    'tablas origen',
+        'dst-field':    'campos destino',
+        'src-field':    'campos origen',
+        'filter-table': 'tablas filtro/join',
+        'filter-field': 'campos filtro/join',
+      };
       const lbl = labels[currentDim] || '';
       el.textContent = visible === total ? `${total} ${lbl}` : `${visible} / ${total} ${lbl}`;
     } else {
@@ -533,19 +592,34 @@ const Explorer = (function () {
   }
 
   // ── Dimensiones ──────────────────────────────────────────
-  const DIM_MAP_KEY = { 'dst-table': 'byDstTable', 'src-table': 'bySrcTable', 'dst-field': 'byDstField', 'src-field': 'bySrcField' };
-  const DIM_LABELS  = { 'dst-table': 'Tabla Destino', 'src-table': 'Tabla Origen', 'dst-field': 'Campo Destino', 'src-field': 'Campo Origen' };
+  const DIM_MAP_KEY = {
+    'dst-table':    'byDstTable',
+    'src-table':    'bySrcTable',
+    'dst-field':    'byDstField',
+    'src-field':    'bySrcField',
+    'filter-table': 'byFilterTable',
+    'filter-field': 'byFilterField',
+  };
+  const DIM_LABELS = {
+    'dst-table':    'Tabla Destino',
+    'src-table':    'Tabla Origen',
+    'dst-field':    'Campo Destino',
+    'src-field':    'Campo Origen',
+    'filter-table': 'Tabla Filtro/Join',
+    'filter-field': 'Campo Filtro/Join',
+  };
+  const ALL_DIMS = ['integration','dst-table','src-table','dst-field','src-field','filter-table','filter-field'];
 
   function switchDimension(dim) {
     currentDim     = dim;
     selectedDimKey = null;
 
-    ['integration','dst-table','src-table','dst-field','src-field'].forEach(d => {
+    ALL_DIMS.forEach(d => {
       const btn = document.getElementById('ex-dim-' + d);
       if (btn) btn.classList.toggle('active', d === dim);
     });
 
-    // grafo solo aplica en vista integración
+    // grafo solo aplica en vista integracion
     const vt = document.getElementById('ex-view-toggle');
     if (vt) vt.style.display = dim === 'integration' ? '' : 'none';
     if (currentView === 'graph' && dim !== 'integration') switchView('list');
@@ -564,10 +638,19 @@ const Explorer = (function () {
     renderMasterDimItems(indexes[mapKey], dim, query);
   }
 
+  // Para dimensiones de filtro, el contador muestra filtros (fIdx) en lugar de mapeos (mIdx)
+  function isMappingDim(dim) {
+    return dim === 'dst-table' || dim === 'src-table' || dim === 'dst-field' || dim === 'src-field';
+  }
+  function isFilterDim(dim) {
+    return dim === 'filter-table' || dim === 'filter-field';
+  }
+
   function renderMasterDimItems(dimMap, dim, filterQuery) {
     const el = document.getElementById('ex-master');
     if (!el) return;
-    const isField = dim === 'dst-field' || dim === 'src-field';
+    const isField  = dim === 'dst-field'    || dim === 'src-field'    || dim === 'filter-field';
+    const isFilter = dim === 'filter-table' || dim === 'filter-field';
 
     let entries = Object.entries(dimMap || {});
     if (filterQuery) {
@@ -586,15 +669,19 @@ const Explorer = (function () {
     el.innerHTML = entries.map(([key, items]) => {
       const isActive = selectedDimKey === key;
       let label, sublabel;
+      const intCount = new Set(items.map(x => x.intIdx)).size;
       if (isField) {
         label    = key;
-        const intCount = new Set(items.map(x => x.intIdx)).size;
-        sublabel = `${items.length} uso${items.length !== 1 ? 's' : ''} · ${intCount} integración${intCount !== 1 ? 'es' : ''}`;
+        const unit = isFilter ? 'filtro' : 'uso';
+        sublabel = `${items.length} ${unit}${items.length !== 1 ? 's' : ''} · ${intCount} integracion${intCount !== 1 ? 'es' : ''}`;
       } else {
         const parts = key.split('::');
-        label    = parts[1] || key;
-        const intCount = new Set(items.map(x => x.intIdx)).size;
-        sublabel = (parts[0] ? parts[0] + ' · ' : '') + `${intCount} integración${intCount !== 1 ? 'es' : ''} · ${items.length} mapeo${items.length !== 1 ? 's' : ''}`;
+        label = parts[1] || key;
+        if (isFilter) {
+          sublabel = `${intCount} integracion${intCount !== 1 ? 'es' : ''} · ${items.length} filtro${items.length !== 1 ? 's' : ''}`;
+        } else {
+          sublabel = (parts[0] ? parts[0] + ' · ' : '') + `${intCount} integracion${intCount !== 1 ? 'es' : ''} · ${items.length} mapeo${items.length !== 1 ? 's' : ''}`;
+        }
       }
       return `<div class="ex-item${isActive ? ' active' : ''}" data-key="${escH(encodeURIComponent(key))}" onclick="Explorer.handleDimItemClick(this)">
         <div class="ex-name">${escH(label)}</div>
@@ -621,77 +708,123 @@ const Explorer = (function () {
     const items  = mapKey && indexes[mapKey] ? (indexes[mapKey][key] || []) : [];
     if (!items.length) { det.innerHTML = '<p class="docs-hint">Sin datos para esta clave</p>'; return; }
 
-    const isField = dim === 'dst-field' || dim === 'src-field';
-    const isDst   = dim === 'dst-table' || dim === 'dst-field';
-    const parts   = key.split('::');
+    const isField  = dim === 'dst-field'    || dim === 'src-field'    || dim === 'filter-field';
+    const isDst    = dim === 'dst-table'    || dim === 'dst-field';
+    const isFilter = dim === 'filter-table' || dim === 'filter-field';
+    const parts    = key.split('::');
     const displayName = isField ? key : (parts[1] || key);
     const displayDS   = isField ? '' : (parts[0] || '');
     const intCount    = new Set(items.map(x => x.intIdx)).size;
+    const unitLabel   = isFilter ? 'filtro' : 'mapeo';
 
     let html = `
       <div class="ex-header-card">
         <div class="ex-h-title">${escH(displayName)}</div>
         ${displayDS ? `<div class="ex-h-flow">Datastore: ${escH(displayDS)}</div>` : ''}
-        <div class="ex-h-sub">${escH(DIM_LABELS[dim] || dim)} · ${items.length} mapeo${items.length !== 1 ? 's' : ''} en ${intCount} integración${intCount !== 1 ? 'es' : ''}</div>
+        <div class="ex-h-sub">${escH(DIM_LABELS[dim] || dim)} · ${items.length} ${unitLabel}${items.length !== 1 ? 's' : ''} en ${intCount} integracion${intCount !== 1 ? 'es' : ''}</div>
       </div>`;
 
-    // agrupar por integración
-    const byInt = new Map();
-    items.forEach(({ intIdx, mIdx }) => {
-      if (!byInt.has(intIdx)) byInt.set(intIdx, []);
-      byInt.get(intIdx).push(mIdx);
-    });
+    if (isFilter) {
+      // ── Vista para filtros/joins ──────────────────────────
+      // Agrupar por integracion; items tiene {intIdx, fIdx}
+      const byInt = new Map();
+      items.forEach(({ intIdx, fIdx }) => {
+        if (!byInt.has(intIdx)) byInt.set(intIdx, []);
+        byInt.get(intIdx).push(fIdx);
+      });
 
-    byInt.forEach((mIdxList, intIdx) => {
-      const p = integrations[intIdx];
-      if (!p) return;
-      const secId = 'exsec-' + intIdx + '-' + Math.random().toString(36).slice(2, 6);
-      html += `
-        <div class="ex-detail-section">
-          <div class="ex-section-header" onclick="var b=document.getElementById('${secId}');b.classList.toggle('collapsed');this.querySelector('.ex-arr').textContent=b.classList.contains('collapsed')?'▶':'▼';">
-            <span>
-              <span class="ex-type-badge ex-type-${p.tipoIntegracion || 'MD'}">${escH(p.tipoIntegracion || 'MD')}</span>
-              ${escH(p.dataflowName || p.jobName)}
-              <span style="color:var(--text2);font-weight:400;font-size:11px;margin-left:6px;">${escH(p._zipName)}</span>
-            </span>
-            <span style="display:flex;gap:6px;align-items:center">
-              <span style="color:var(--text2);font-size:11px;">${mIdxList.length} campo${mIdxList.length !== 1 ? 's' : ''}</span>
-              <span class="ex-chain-pill" onclick="event.stopPropagation();Explorer.goToIntegration(${intIdx})" title="Ver integración completa">🔗 Ver</span>
-              <span class="ex-arr">▼</span>
-            </span>
-          </div>
-          <div class="ex-section-body" id="${secId}">
-            <div style="overflow-x:auto">
-              <table class="ex-mapping-table">
-                <thead><tr>
-                  ${isDst
-                    ? '<th style="min-width:120px">Campo Destino</th><th style="min-width:130px">Origen</th><th>Transformación</th>'
-                    : '<th style="min-width:130px">Campo Origen</th><th style="min-width:120px">→ Campo Destino</th><th>Transformación</th>'}
-                </tr></thead>
-                <tbody>${mIdxList.map(mIdx => {
-                  const m = p.mappings[mIdx];
-                  if (!m) return '';
-                  const srcParts = [m.srcDS, m.srcTable, m.srcField].filter(Boolean);
-                  const hasOps = m.ops && m.ops.trim().length > 0;
-                  if (isDst) {
-                    return `<tr>
-                      <td><div class="ex-dst-field">${escH(m.dstField)}</div>${m.dstDesc ? `<div class="ex-dst-desc">${escH(m.dstDesc)}</div>` : ''}</td>
-                      <td class="ex-src-info">${escH(srcParts.join(' · ') || '—')}</td>
-                      <td>${hasOps ? `<code class="ex-ops-code">${escH(m.ops)}</code>` : '<span style="color:var(--text2)">—</span>'}</td>
-                    </tr>`;
-                  } else {
-                    return `<tr>
-                      <td class="ex-src-info">${escH(srcParts.join(' · ') || '—')}</td>
-                      <td><div class="ex-dst-field">${escH(m.dstField)}</div>${m.dstTable ? `<div class="ex-dst-desc">→ ${escH(m.dstTable)}</div>` : ''}</td>
-                      <td>${hasOps ? `<code class="ex-ops-code">${escH(m.ops)}</code>` : '<span style="color:var(--text2)">—</span>'}</td>
-                    </tr>`;
-                  }
-                }).join('')}</tbody>
-              </table>
+      byInt.forEach((fIdxList, intIdx) => {
+        const p = integrations[intIdx];
+        if (!p) return;
+        // Eliminar duplicados de fIdx (una expresion puede matchear varios campos)
+        const uniqueFIdx = [...new Set(fIdxList)];
+        const secId = 'exsec-' + intIdx + '-' + Math.random().toString(36).slice(2, 6);
+        html += `
+          <div class="ex-detail-section">
+            <div class="ex-section-header" onclick="var b=document.getElementById('${secId}');b.classList.toggle('collapsed');this.querySelector('.ex-arr').textContent=b.classList.contains('collapsed')?'▶':'▼';">
+              <span>
+                <span class="ex-type-badge ex-type-${p.tipoIntegracion || 'MD'}">${escH(p.tipoIntegracion || 'MD')}</span>
+                ${escH(p.dataflowName || p.jobName)}
+                <span style="color:var(--text2);font-weight:400;font-size:11px;margin-left:6px;">${escH(p._zipName)}</span>
+              </span>
+              <span style="display:flex;gap:6px;align-items:center">
+                <span style="color:var(--text2);font-size:11px;">${uniqueFIdx.length} filtro${uniqueFIdx.length !== 1 ? 's' : ''}</span>
+                <span class="ex-chain-pill" onclick="event.stopPropagation();Explorer.goToIntegration(${intIdx})" title="Ver integracion completa">Ver</span>
+                <span class="ex-arr">▼</span>
+              </span>
             </div>
-          </div>
-        </div>`;
-    });
+            <div class="ex-section-body" id="${secId}">
+              ${uniqueFIdx.map(fIdx => {
+                const f = p.filters[fIdx];
+                if (!f) return '';
+                return `<div class="ex-filter-row">
+                  ${f.sourceTable ? `<div class="ex-filter-table">Tabla: ${escH(f.sourceTable)}</div>` : ''}
+                  <pre class="ex-filter-expr">${escH(f.expression)}</pre>
+                </div>`;
+              }).join('')}
+            </div>
+          </div>`;
+      });
+
+    } else {
+      // ── Vista para mappings (comportamiento original) ─────
+      const byInt = new Map();
+      items.forEach(({ intIdx, mIdx }) => {
+        if (!byInt.has(intIdx)) byInt.set(intIdx, []);
+        byInt.get(intIdx).push(mIdx);
+      });
+
+      byInt.forEach((mIdxList, intIdx) => {
+        const p = integrations[intIdx];
+        if (!p) return;
+        const secId = 'exsec-' + intIdx + '-' + Math.random().toString(36).slice(2, 6);
+        html += `
+          <div class="ex-detail-section">
+            <div class="ex-section-header" onclick="var b=document.getElementById('${secId}');b.classList.toggle('collapsed');this.querySelector('.ex-arr').textContent=b.classList.contains('collapsed')?'▶':'▼';">
+              <span>
+                <span class="ex-type-badge ex-type-${p.tipoIntegracion || 'MD'}">${escH(p.tipoIntegracion || 'MD')}</span>
+                ${escH(p.dataflowName || p.jobName)}
+                <span style="color:var(--text2);font-weight:400;font-size:11px;margin-left:6px;">${escH(p._zipName)}</span>
+              </span>
+              <span style="display:flex;gap:6px;align-items:center">
+                <span style="color:var(--text2);font-size:11px;">${mIdxList.length} campo${mIdxList.length !== 1 ? 's' : ''}</span>
+                <span class="ex-chain-pill" onclick="event.stopPropagation();Explorer.goToIntegration(${intIdx})" title="Ver integracion completa">Ver</span>
+                <span class="ex-arr">▼</span>
+              </span>
+            </div>
+            <div class="ex-section-body" id="${secId}">
+              <div style="overflow-x:auto">
+                <table class="ex-mapping-table">
+                  <thead><tr>
+                    ${isDst
+                      ? '<th style="min-width:120px">Campo Destino</th><th style="min-width:130px">Origen</th><th>Transformacion</th>'
+                      : '<th style="min-width:130px">Campo Origen</th><th style="min-width:120px">Campo Destino</th><th>Transformacion</th>'}
+                  </tr></thead>
+                  <tbody>${mIdxList.map(mIdx => {
+                    const m = p.mappings[mIdx];
+                    if (!m) return '';
+                    const srcParts = [m.srcDS, m.srcTable, m.srcField].filter(Boolean);
+                    const hasOps = m.ops && m.ops.trim().length > 0;
+                    if (isDst) {
+                      return `<tr>
+                        <td><div class="ex-dst-field">${escH(m.dstField)}</div>${m.dstDesc ? `<div class="ex-dst-desc">${escH(m.dstDesc)}</div>` : ''}</td>
+                        <td class="ex-src-info">${escH(srcParts.join(' · ') || '—')}</td>
+                        <td>${hasOps ? `<code class="ex-ops-code">${escH(m.ops)}</code>` : '<span style="color:var(--text2)">—</span>'}</td>
+                      </tr>`;
+                    } else {
+                      return `<tr>
+                        <td class="ex-src-info">${escH(srcParts.join(' · ') || '—')}</td>
+                        <td><div class="ex-dst-field">${escH(m.dstField)}</div>${m.dstTable ? `<div class="ex-dst-desc">${escH(m.dstTable)}</div>` : ''}</td>
+                        <td>${hasOps ? `<code class="ex-ops-code">${escH(m.ops)}</code>` : '<span style="color:var(--text2)">—</span>'}</td>
+                      </tr>`;
+                    }
+                  }).join('')}</tbody>
+                </table>
+              </div>
+            </div>
+          </div>`;
+      });
+    }
 
     det.innerHTML = html;
   }
@@ -702,7 +835,7 @@ const Explorer = (function () {
     filtered = integrations.slice();
     currentDim = 'integration';
     selectedDimKey = null;
-    ['integration','dst-table','src-table','dst-field','src-field'].forEach(d => {
+    ALL_DIMS.forEach(d => {
       const btn = document.getElementById('ex-dim-' + d);
       if (btn) btn.classList.toggle('active', d === 'integration');
     });
