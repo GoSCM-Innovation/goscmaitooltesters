@@ -1224,9 +1224,10 @@
           var catIsRawmat   = snCats.indexOf('rawmat')   >= 0;
           var catIsTrading  = snCats.indexOf('trading')  >= 0;
           // Reglas por categoría (más permisivo cuando hay multi-categoría)
-          var useSemiRules    = catIsSemi    && !catIsFinished;
-          var useRawmatRules  = catIsRawmat  && !catIsFinished && !catIsSemi;
-          var useTradingRules = catIsTrading && !catIsFinished && !catIsSemi;
+          var useSemiRules      = catIsSemi    && !catIsFinished;
+          var useRawmatRules    = catIsRawmat  && !catIsFinished && !catIsSemi;
+          var useTradingRules   = catIsTrading && !catIsFinished && !catIsSemi;
+          var catIsUncategorized = !catIsSemi && !catIsFinished && !catIsRawmat && !catIsTrading;
 
           var graph     = await snBuildProductGraph(prdid);
           var paths     = snFindAllPaths(graph);
@@ -1316,9 +1317,9 @@
           if (!inLP && (inPSH || inLS)) obs.push('Sin Location Product');
           if (!inCP && inCS)            obs.push('Sin Customer Product');
 
-          // Trading: validar que arcos LS y CS compartan al menos una ubicación
+          // Trading y sin-categoría: validar que arcos LS y CS compartan al menos una ubicación
           var tradingDisconnected = false;
-          if (useTradingRules && inLS && inCS) {
+          if ((useTradingRules || catIsUncategorized) && inLS && inCS) {
             var _lsReachable = {};
             Object.keys(graph.locEdges).forEach(function(fr) {
               _lsReachable[fr] = true;
@@ -1366,7 +1367,7 @@
                            'Distribuci\u00f3n sin ruta completa': 1 };
             var YEL_ST = { 'Abastecimiento Parcial': 1, 'Abastecimiento sin Consumo PSI': 1 };
             pFill = (RED_ST[networkStatus] || cycles.length > 0) ? C_RED
-              : (YEL_ST[networkStatus] || (!inLP && (inPSH || inLS)) || (!inCP && inCS)) ? C_YEL
+              : (YEL_ST[networkStatus] || tradingDisconnected || (!inLP && (inPSH || inLS)) || (!inCP && inCS)) ? C_YEL
               : null;
           }
 
