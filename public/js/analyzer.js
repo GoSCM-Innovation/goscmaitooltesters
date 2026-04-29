@@ -1215,6 +1215,7 @@
           var inCP  = !!prdInCustProd[prdid];
           var onlyMaster = !inPSH && !inPSI && !inLS && !inCS && !inLP && !inCP;
 
+          if (!pm(prdid)) continue;
           if (typeof mattypeIsExcluded === 'function' && mattypeIsExcluded(pm(prdid))) continue;
 
           /* ── Categoría del producto ── */
@@ -1631,6 +1632,7 @@
       await idbCursorEach('sn_loc', function (r) {
         var p  = str(r.PRDID), fr = str(r.LOCFR), to = str(r.LOCID), tlt = str(r.TLEADTIME || '');
         if (!p || !fr || !to) return;
+        if (!pm(p)) return;
         if (typeof mattypeIsExcluded === 'function' && mattypeIsExcluded(pm(p))) return;
 
         var arcKey   = p + '|' + fr + '|' + to;
@@ -1679,6 +1681,7 @@
       await idbCursorEach('sn_cust', function (r) {
         var p   = str(r.PRDID), loc = str(r.LOCID), c = str(r.CUSTID), clt = str(r.CLEADTIME || '');
         if (!p || !loc || !c) return;
+        if (!pm(p)) return;
         if (typeof mattypeIsExcluded === 'function' && mattypeIsExcluded(pm(p))) return;
 
         var inLPLoc  = locProdSet.has(loc + '|' + p);
