@@ -258,13 +258,34 @@
           log(logEl, 'ok', '✓ Customer Master: ' + custMasters.length + ' registros');
         }
 
+        // Fetch global plant set via PSH (sin filtro de PRDID) para detectar plantas en modo insumo
+        var allPlantLocs = new Set();
+        if (cfg.sourceProd && plantRows.length === 0) {
+          // Solo necesario cuando no hay PSH propio (producto insumo)
+          var destLocIds = [];
+          locRows.forEach(function (r) { if (r.LOCID) destLocIds.push(str(r.LOCID)); });
+          supplierLocRows.forEach(function (r) { if (r.LOCID) destLocIds.push(str(r.LOCID)); });
+          var uniqueDests = destLocIds.filter(function (v, i, a) { return a.indexOf(v) === i; }).slice(0, 80);
+          if (uniqueDests.length) {
+            var pshLocFilter = uniqueDests.map(function (l) { return "LOCID eq '" + l + "'"; }).join(' or ');
+            if (paBase) pshLocFilter = '(' + pshLocFilter + ') and ' + paBase;
+            log(logEl, 'info', '[GET] PSH global por LOCID para detectar plantas (' + uniqueDests.length + ' ubicaciones)');
+            var pshGlobal = await fetchAllPages(cfg.base + cfg.sourceProd, logEl, pshLocFilter, 'LOCID,PINVALID');
+            pshGlobal.forEach(function (r) { if (r.PINVALID !== 'X' && r.LOCID) allPlantLocs.add(str(r.LOCID)); });
+            log(logEl, 'ok', '✓ Plantas globales detectadas: ' + allPlantLocs.size);
+          }
+        } else {
+          plantRows.forEach(function (r) { if (r.LOCID) allPlantLocs.add(str(r.LOCID)); });
+        }
+
         var prdInfo = vizSuggestions.find(function (s) { return s.prdid === prdid; }) || {};
         VIZ_DATA = {
           locRows: locRows, custRows: custRows, plantRows: plantRows,
           prdRows: [{ PRDID: prdid, PRDDESCR: prdInfo.prddescr || '' }],
           locMasters: locMasters, custMasters: custMasters,
           psiRows: psiRows, supplierLocRows: supplierLocRows,
-          locProdRows: locProdRows, custProdRows: custProdRows
+          locProdRows: locProdRows, custProdRows: custProdRows,
+          allPlantLocs: allPlantLocs
         };
         // Auto-threshold: si hay más de 20 clientes, ocultar el exceso automáticamente
         var VIZ_CUST_THRESHOLD = 20;
@@ -299,6 +320,30 @@
         var b = document.getElementById('btnVizLoadNet');
         if (b) { b.disabled = false; b.style.opacity = '1'; b.textContent = 'Cargar red logística'; }
       }
+    }
+
+    /* Resuelve el tipo de nodo de una ubicación:
+       LOCTYPE='V' → proveedor; en allPlantLocs → planta; resto → fallback */
+    function _vizResolveType(locId, locMap, fallback) {
+      var lm = locMap[locId];
+      if (lm && str(lm.LOCTYPE) === 'V') return 'supplier';
+      if (VIZ_DATA && VIZ_DATA.allPlantLocs && VIZ_DATA.allPlantLocs.has(locId)) return 'plant';
+      return fallback || 'location';
+    }
+
+    /* Arco estilo proveedor (púrpura punteado) */
+    function _vizAddSupplierEdge(edgesArr, from, to, comps) {
+      var key = from + '||' + to;
+      if (edgesArr.some(function (e) { return e.id === key; })) return;
+      edgesArr.push({
+        id: key, from: from, to: to,
+        arrows: { to: { enabled: true, scaleFactor: 0.55 } },
+        dashes: [6, 4],
+        color: { color: 'rgba(167,139,250,0.5)', highlight: 'rgba(167,139,250,0.95)', hover: 'rgba(167,139,250,0.75)' },
+        width: 1.5,
+        title: comps || (from + ' → ' + to),
+        _detail: comps || ''
+      });
     }
 
     /* --- Build nodes + edges ----------------------------------------- */
@@ -353,20 +398,17 @@
         edgesArr.push(edgeObj);
       }
 
-      // Product node (focal point)
-      addNode(prdid, 'product', prdid + (prdDescr ? '\n' + prdDescr : ''), 'Producto: ' + prdid + (prdDescr ? '\n' + prdDescr : ''));
-
       // Plants
       data.plantRows.forEach(function (r) {
         var locid = str(r.LOCID); if (!locid) return;
         var lm = locMap[locid] || {};
         var d = str(lm.LOCDESCR || lm.LOCNAME || '');
         var plt = str(r.PLEADTIME || '');
-        addNode(locid, 'plant', locid + (d ? '\n' + d : ''), 'Planta: ' + locid + (d ? '\n' + d : ''));
-        addEdge(prdid, locid, false, '', plt ? 'Lead time producción: ' + plt : '');
+        var title = 'Planta: ' + locid + (d ? '\n' + d : '') + (plt ? '\nLead time producción: ' + plt : '');
+        addNode(locid, 'plant', locid + (d ? '\n' + d : ''), title);
       });
 
-      // Location edges (LOCFR → LOCID)
+      // Location edges (LOCFR → LOCID) — resuelve proveedores y plantas por LOCTYPE / PSH global
       data.locRows.forEach(function (r) {
         var from = str(r.LOCFR), to = str(r.LOCID);
         if (!from || !to) return;
@@ -375,9 +417,22 @@
         var df = str(lf.LOCDESCR || lf.LOCNAME || '');
         var dt = str(lt.LOCDESCR || lt.LOCNAME || '');
         var tlt = str(r.TLEADTIME || '');
-        addNode(from, 'location', from + (df ? '\n' + df : ''), 'Ubicación: ' + from + (df ? '\n' + df : ''));
-        addNode(to, 'location', to + (dt ? '\n' + dt : ''), 'Ubicación: ' + to + (dt ? '\n' + dt : ''));
-        addEdge(from, to, false, '', tlt ? 'Lead time transporte: ' + tlt : '');
+        var typeFrom = _vizResolveType(from, locMap, 'location');
+        var typeTo   = _vizResolveType(to,   locMap, 'location');
+        var lblFrom  = { supplier: 'Proveedor', plant: 'Planta', location: 'Ubicación' };
+        var lblTo    = { supplier: 'Proveedor', plant: 'Planta', location: 'Ubicación' };
+        if (typeFrom === 'supplier' && VIZ_VISIBLE.supplier === false) return;
+        addNode(from, typeFrom, from + (df ? '\n' + df : ''),
+          (lblFrom[typeFrom] || 'Ubicación') + ': ' + from + (df ? '\n' + df : ''));
+        addNode(to,   typeTo,   to   + (dt ? '\n' + dt : ''),
+          (lblTo[typeTo]   || 'Ubicación') + ': ' + to   + (dt ? '\n' + dt : ''));
+        if (typeFrom === 'supplier') {
+          var prd = str(r.PRDID || '');
+          _vizAddSupplierEdge(edgesArr, from, to,
+            (prd ? 'Insumo: ' + prd : '') + (tlt ? (prd ? ' ' : '') + '[LT:' + tlt + ']' : ''));
+        } else {
+          addEdge(from, to, false, '', tlt ? 'Lead time transporte: ' + tlt : '');
+        }
       });
 
       // Customer edges (LOCID → CUSTID)
@@ -391,7 +446,10 @@
         var dl = str(lm.LOCDESCR || lm.LOCNAME || '');
         var dc = str(cm.CUSTDESCR || '');
         var clt = str(r.CLEADTIME || '');
-        addNode(locid, 'location', locid + (dl ? '\n' + dl : ''), 'Ubicación: ' + locid + (dl ? '\n' + dl : ''));
+        var typeL = _vizResolveType(locid, locMap, 'location');
+        var lblL  = { supplier: 'Proveedor', plant: 'Planta', location: 'Ubicación' };
+        addNode(locid, typeL, locid + (dl ? '\n' + dl : ''),
+          (lblL[typeL] || 'Ubicación') + ': ' + locid + (dl ? '\n' + dl : ''));
         addNode(custid, 'customer', custid + (dc ? '\n' + dc : ''), 'Cliente: ' + custid + (dc ? '\n' + dc : ''));
         addEdge(locid, custid, true, '', clt ? 'Lead time cliente: ' + clt : '');
       });
@@ -441,17 +499,7 @@
           addNode(se.supp, 'supplier',
             se.supp + (ds ? '\n' + ds : ''),
             'Proveedor: ' + se.supp + (ds ? '\n' + ds : ''));
-          if (!edgesArr.some(function (e) { return e.id === key; })) {
-            edgesArr.push({
-              id: key, from: se.supp, to: se.dest,
-              arrows: { to: { enabled: true, scaleFactor: 0.55 } },
-              dashes: [6, 4],
-              color: { color: 'rgba(167,139,250,0.5)', highlight: 'rgba(167,139,250,0.95)', hover: 'rgba(167,139,250,0.75)' },
-              width: 1.5,
-              title: 'Componentes: ' + se.comps.join(', '),
-              _detail: 'Componentes: ' + se.comps.join(', ')
-            });
-          }
+          _vizAddSupplierEdge(edgesArr, se.supp, se.dest, 'Componentes: ' + se.comps.join(', '));
         });
       }
 
@@ -474,10 +522,9 @@
       var numSuppCols = Math.max(1, Math.ceil(byType.supplier.length   / MAX_ROWS));
 
       var xSupp0 = -(numSuppCols * COL_W);
-      var xPrd   = 0;
-      var xPlt   = COL_W;
-      var xLoc0  = COL_W * 2;
-      var xCust  = COL_W * (2 + numLocCols);
+      var xPlt   = 0;
+      var xLoc0  = COL_W;
+      var xCust  = COL_W * (1 + numLocCols);
 
       // Build adjacency from edges for barycenter sorting
       var nodeById = {};
@@ -506,12 +553,13 @@
         byType.plant.forEach(function (n) { plantYMap[n.id] = n.y; });
         // Collect supplier→plant connections from edges in VIZ_DATA
         var suppToPlants = {};
-        if (VIZ_DATA && VIZ_DATA.supplierLocRows) {
+        if (VIZ_DATA) {
           var plantSet = {};
           byType.plant.forEach(function (n) { plantSet[n.id] = true; });
-          VIZ_DATA.supplierLocRows.forEach(function (r) {
+          var allSuppRows = (VIZ_DATA.supplierLocRows || []).concat(VIZ_DATA.locRows || []);
+          allSuppRows.forEach(function (r) {
             var supp = str(r.LOCFR), dest = str(r.LOCID);
-            if (supp && dest && plantSet[dest]) {
+            if (supp && dest && plantSet[dest] && plantSet[supp] === undefined) {
               if (!suppToPlants[supp]) suppToPlants[supp] = {};
               suppToPlants[supp][dest] = true;
             }
@@ -613,51 +661,70 @@
       document.getElementById('vizEmpty').style.display = 'none';
 
       vizNetwork = vizMakeNetwork(container, nodes, edges);
+      _vizBindClickHandler(vizNetwork, nodes, 'vizDetailContent', 'vizDetail', false);
+    }
 
-      vizNetwork.on('click', function (params) {
-        var detail = document.getElementById('vizDetail');
-        if (params.nodes.length > 0) {
-          var nid = params.nodes[0];
-          var node = nodes.find(function (n) { return n.id === nid; });
-          if (node) {
-            var typeLabels = { product: 'Producto', plant: 'Planta', location: 'Ubicación', customer: 'Cliente', supplier: 'Proveedor' };
-            var badgeMap = { product: 'badge-psh', plant: 'badge-main', location: 'badge-comp', customer: 'badge-leaf', supplier: 'badge-coprod' };
-            var html =
-              '<span class="badge ' + (badgeMap[node._type] || 'badge-comp') + '">' +
-              (typeLabels[node._type] || node._type) + '</span>' +
-              ' <strong style="font-family:var(--mono);font-size:12px">' + escH(nid) + '</strong>' +
-              (node._title && node._title !== nid ? ' <span style="color:var(--text2)">' + escH(node._title) + '</span>' : '');
+    /* Genera el HTML del panel de detalle para un nodo clickeado */
+    function _vizNodeDetailHtml(nid, node) {
+      var typeLabels = { plant: 'Planta', location: 'Ubicación', customer: 'Cliente', supplier: 'Proveedor' };
+      var badgeMap   = { plant: 'badge-main', location: 'badge-comp', customer: 'badge-leaf', supplier: 'badge-coprod' };
+      var html =
+        '<span class="badge ' + (badgeMap[node._type] || 'badge-comp') + '">' +
+        (typeLabels[node._type] || node._type) + '</span>' +
+        ' <strong style="font-family:var(--mono);font-size:12px">' + escH(nid) + '</strong>' +
+        (node._title && node._title !== nid ? '<br><span style="color:var(--text2);font-size:11px">' + escH(node._title) + '</span>' : '');
 
-            // Supplier click: show component inputs
-            if (node._type === 'supplier' && VIZ_DATA && VIZ_DATA.supplierLocRows) {
-              var compsBySupp = {};
-              VIZ_DATA.supplierLocRows.forEach(function (r) {
-                if (str(r.LOCFR) === nid) {
-                  var comp = str(r.PRDID || '');
-                  if (comp) compsBySupp[comp] = true;
-                }
-              });
-              var compList = Object.keys(compsBySupp).sort();
-              if (compList.length) {
-                var prdLookup = {};
-                vizSuggestions.forEach(function (s) { prdLookup[s.prdid] = s.prddescr; });
-                html += '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">' +
-                  '<div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-weight:600;">Insumos abastecidos (' + compList.length + '):</div>' +
-                  '<div style="display:flex;flex-wrap:wrap;gap:4px;">';
-                compList.forEach(function (c) {
-                  var descr = prdLookup[c] || '';
-                  html += '<span style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-size:11px;font-family:var(--mono);">' +
-                    escH(c) + (descr ? ' <span style="color:var(--text3)">' + escH(descr) + '</span>' : '') + '</span>';
-                });
-                html += '</div></div>';
-              }
-            }
-
-            document.getElementById('vizDetailContent').innerHTML = html;
-            detail.style.cssText = 'display:block;padding:10px 24px;background:var(--bg2);border-bottom:1px solid var(--border);font-size:12px;';
+      if (node._type === 'supplier' && VIZ_DATA) {
+        var compsBySupp = {};
+        // Leer tanto supplierLocRows (terminados) como locRows (insumos)
+        var allRows = (VIZ_DATA.supplierLocRows || []).concat(VIZ_DATA.locRows || []);
+        allRows.forEach(function (r) {
+          if (str(r.LOCFR) === nid) {
+            var comp = str(r.PRDID || '');
+            if (comp) compsBySupp[comp] = true;
           }
+        });
+        var compList = Object.keys(compsBySupp).sort();
+        if (compList.length) {
+          var prdLookup = {};
+          vizSuggestions.forEach(function (s) { prdLookup[s.prdid] = s.prddescr; });
+          html += '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">' +
+            '<div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-weight:600;">Insumos abastecidos (' + compList.length + '):</div>' +
+            '<div style="display:flex;flex-wrap:wrap;gap:4px;">';
+          compList.forEach(function (c) {
+            var descr = prdLookup[c] || '';
+            html += '<span style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-size:11px;font-family:var(--mono);">' +
+              escH(c) + (descr ? ' <span style="color:var(--text3)">' + escH(descr) + '</span>' : '') + '</span>';
+          });
+          html += '</div></div>';
+        }
+      }
+      return html;
+    }
+
+    /* Bindea click handler a un network; fullscreen=true usa vizFsDetail */
+    function _vizBindClickHandler(net, nodes, contentId, panelId, isFs) {
+      net.on('click', function (params) {
+        if (params.nodes.length === 0) return;
+        var nid  = params.nodes[0];
+        var node = nodes.find(function (n) { return n.id === nid; });
+        if (!node) return;
+        var html = _vizNodeDetailHtml(nid, node);
+        if (isFs) {
+          var panel = document.getElementById('vizFsDetail');
+          document.getElementById('vizFsDetailContent').innerHTML = html;
+          if (panel) panel.style.display = 'block';
+        } else {
+          var detail = document.getElementById(panelId);
+          document.getElementById(contentId).innerHTML = html;
+          if (detail) detail.style.cssText = 'display:block;padding:10px 24px;background:var(--bg2);border-bottom:1px solid var(--border);font-size:12px;';
         }
       });
+    }
+
+    function vizFsDetailClose() {
+      var p = document.getElementById('vizFsDetail');
+      if (p) p.style.display = 'none';
     }
 
     function vizRerender() {
@@ -672,12 +739,12 @@
     }
 
     function vizCompact() {
-      // Re-renderiza desde cero con posicionamiento manual LR
       var net = vizNetworkFull;
       if (net && vizCurrentPrd && VIZ_DATA) {
         var graph = vizBuildGraph(vizCurrentPrd, VIZ_DATA);
         net.destroy();
         vizNetworkFull = vizMakeNetwork(document.getElementById('vizCanvasFull'), graph.nodes, graph.edges);
+        _vizBindClickHandler(vizNetworkFull, graph.nodes, null, null, true);
       } else {
         vizRerender();
       }
@@ -899,10 +966,12 @@
         if (csvBtn) csvBtn.style.display = '';
         vizRutasRenderTable('vizFsRutasTable');
       }
+      document.getElementById('vizFsDetail') && (document.getElementById('vizFsDetail').style.display = 'none');
       setTimeout(function () {
         var graph = vizBuildGraph(vizCurrentPrd, VIZ_DATA);
         vizNetworkFull = vizMakeNetwork(
           document.getElementById('vizCanvasFull'), graph.nodes, graph.edges);
+        _vizBindClickHandler(vizNetworkFull, graph.nodes, null, null, true);
       }, 100);
     }
 

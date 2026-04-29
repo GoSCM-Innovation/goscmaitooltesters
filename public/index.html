@@ -998,11 +998,6 @@
         <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:8px;">
           Leyenda</div>
         <div style="display:flex;flex-direction:column;gap:6px;">
-          <label style="display:flex;align-items:center;gap:8px;cursor:default;opacity:.7;">
-            <span
-              style="width:12px;height:12px;border-radius:2px;background:#6C63FF;display:inline-block;flex-shrink:0;"></span>
-            <span>Producto</span>
-          </label>
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;" title="Mostrar/ocultar plantas">
             <input type="checkbox" id="vizChkPlant" checked onchange="vizToggleType('plant',    this.checked)"
               style="accent-color:#F59E0B;cursor:pointer;">
@@ -1088,6 +1083,15 @@
           <button class="btn btn-secondary btn-small" onclick="vizCloseFullscreen()">✕ Cerrar</button>
         </div>
       </div>
+      <!-- Fullscreen node detail panel -->
+      <div id="vizFsDetail" style="display:none;position:absolute;top:54px;left:16px;z-index:10;
+        background:rgba(11,17,32,0.96);border:1px solid var(--border);border-radius:8px;
+        padding:10px 14px;font-size:12px;max-width:320px;min-width:180px;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+          <div id="vizFsDetailContent"></div>
+          <button onclick="vizFsDetailClose()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;line-height:1;flex-shrink:0;padding:0 2px;">✕</button>
+        </div>
+      </div>
       <div id="vizCanvasFull" style="position:absolute;top:46px;left:0;right:0;bottom:0;"></div>
       <!-- Leyenda fullscreen -->
       <div
@@ -1095,11 +1099,6 @@
         <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;margin-bottom:8px;">
           Leyenda</div>
         <div style="display:flex;flex-direction:column;gap:6px;">
-          <label style="display:flex;align-items:center;gap:8px;cursor:default;opacity:.7;color:#e2e8f0;">
-            <span
-              style="width:12px;height:12px;border-radius:2px;background:#6C63FF;display:inline-block;flex-shrink:0;"></span>
-            <span>Producto</span>
-          </label>
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#e2e8f0;">
             <input type="checkbox" id="vizFsChkPlant" checked onchange="vizToggleType('plant',    this.checked)"
               style="accent-color:#F59E0B;cursor:pointer;">
