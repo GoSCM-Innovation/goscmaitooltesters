@@ -228,7 +228,7 @@
           setStatusSN('info', 'Descargando Location Source → IDB...');
           log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + locationEntity);
           var nLoc = await fetchAndIndex(baseOData + locationEntity, logEl, fLocSrc,
-            'PRDID,LOCFR,LOCID,TLEADTIME,TINVALID',
+            efGetSelect('sn', 'locationSource'),
             function (rows) {
               rows = rows.filter(function(r) { return r.TINVALID !== 'X'; });
               rows.forEach(function (r) { var p = str(r.PRDID); if (p) SN_IDX.allPrds[p] = true; });
@@ -242,7 +242,7 @@
           setStatusSN('info', 'Descargando Customer Source → IDB...');
           log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + customerEntity);
           var nCust = await fetchAndIndex(baseOData + customerEntity, logEl, fCustSrc,
-            'PRDID,LOCID,CUSTID,CLEADTIME,CINVALID',
+            efGetSelect('sn', 'customerSource'),
             function (rows) {
               rows = rows.filter(function(r) { return r.CINVALID !== 'X'; });
               rows.forEach(function (r) { var p = str(r.PRDID); if (p) SN_IDX.allPrds[p] = true; });
@@ -256,7 +256,7 @@
           setStatusSN('info', 'Indexando Product (lookup en memoria)...');
           log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + productEntity);
           var nPrd = await fetchAndIndex(baseOData + productEntity, logEl, paFilter,
-            'PRDID,PRDDESCR,MATTYPEID',
+            efGetSelect('sn', 'product'),
             function (rows) {
               rows.forEach(function (r) { var k = str(r.PRDID); if (k) SN_IDX.prdLookup[k] = r; });
               return Promise.resolve();
@@ -309,7 +309,7 @@
           setStatusSN('info', 'Indexando Location (lookup en memoria)...');
           log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + locMasterEntity);
           var nLocM = await fetchAndIndex(baseOData + locMasterEntity, logEl, fLoc,
-            'LOCID,LOCDESCR,LOCTYPE,LOCVALID',
+            efGetSelect('sn', 'location'),
             function (rows) {
               rows = rows.filter(function(r) { return r.LOCVALID !== 'X'; });
               rows.forEach(function (r) { var k = str(r.LOCID); if (k) SN_IDX.locLookup[k] = r; });
@@ -333,7 +333,7 @@
           setStatusSN('info', 'Indexando Customer (lookup en memoria)...');
           log(logEl, 'info', timer.fmt() + ' [GET] ' + baseOData + custMasterEntity);
           var nCustM = await fetchAndIndex(baseOData + custMasterEntity, logEl, fCust,
-            'CUSTID,CUSTDESCR,CUSTVALID',
+            efGetSelect('sn', 'customer'),
             function (rows) {
               rows = rows.filter(function(r) { return r.CUSTVALID !== 'X'; });
               rows.forEach(function (r) { var k = str(r.CUSTID); if (k) SN_IDX.custLookup[k] = r; });
