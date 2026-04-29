@@ -1057,11 +1057,17 @@
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
           <span style="font-size:11px;color:var(--text2);">Tipo:</span>
           <button id="vizRutasBtn_all"        onclick="vizRutasSetTipo('all')"        style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--accent);font-weight:700;">Todas</button>
-          <button id="vizRutasBtn_customer"  onclick="vizRutasSetTipo('customer')"  style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--text2);font-weight:400;">Con cliente</button>
-          <button id="vizRutasBtn_nocustomer" onclick="vizRutasSetTipo('nocustomer')" style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--text2);font-weight:400;">Sin cliente</button>
-          <input id="vizRutasSearch" type="text" placeholder="Buscar planta o cliente…"
+          <button id="vizRutasBtn_customer"  onclick="vizRutasSetTipo('customer')"  style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--text2);font-weight:400;">Con llegada a cliente</button>
+          <button id="vizRutasBtn_nocustomer" onclick="vizRutasSetTipo('nocustomer')" style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--text2);font-weight:400;">Sin llegada a cliente</button>
+          <span id="vizRutasSubFilter" style="display:none;align-items:center;gap:4px;border-left:1px solid var(--border);padding-left:8px;margin-left:2px;">
+            <span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;">Causa:</span>
+            <button id="vizRutasBtnSub_all"     onclick="vizRutasSetSubtipo('all')"     style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--accent);font-weight:700;">Todas</button>
+            <button id="vizRutasBtnSub_deadend" onclick="vizRutasSetSubtipo('deadend')" style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--text2);font-weight:400;">Dead-end</button>
+            <button id="vizRutasBtnSub_cycle"   onclick="vizRutasSetSubtipo('cycle')"   style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--text2);font-weight:400;">Ciclo</button>
+          </span>
+          <input id="vizRutasSearch" type="text" placeholder="Buscar planta, nodo final o cliente…"
             oninput="vizRutasSetQ(this.value,'vizRutasSearch')"
-            style="font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);width:180px;">
+            style="font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);width:200px;">
         </div>
         <div style="max-height:360px;overflow-y:auto;">
           <div id="vizRutasTable"></div>
@@ -1140,11 +1146,17 @@
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
             <span style="font-size:11px;color:var(--text2);">Tipo:</span>
             <button id="vizFsRutasBtn_all"         onclick="vizRutasSetTipo('all')"         style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--accent);font-weight:700;">Todas</button>
-            <button id="vizFsRutasBtn_customer"    onclick="vizRutasSetTipo('customer')"    style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--text2);font-weight:400;">Con cliente</button>
-            <button id="vizFsRutasBtn_nocustomer"  onclick="vizRutasSetTipo('nocustomer')"  style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--text2);font-weight:400;">Sin cliente</button>
-            <input id="vizFsRutasSearch" type="text" placeholder="Buscar planta o cliente…"
+            <button id="vizFsRutasBtn_customer"    onclick="vizRutasSetTipo('customer')"    style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--text2);font-weight:400;">Con llegada a cliente</button>
+            <button id="vizFsRutasBtn_nocustomer"  onclick="vizRutasSetTipo('nocustomer')"  style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--text2);font-weight:400;">Sin llegada a cliente</button>
+            <span id="vizFsRutasSubFilter" style="display:none;align-items:center;gap:4px;border-left:1px solid var(--border);padding-left:8px;margin-left:2px;">
+              <span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;">Causa:</span>
+              <button id="vizFsRutasBtnSub_all"     onclick="vizRutasSetSubtipo('all')"     style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--accent);font-weight:700;">Todas</button>
+              <button id="vizFsRutasBtnSub_deadend" onclick="vizRutasSetSubtipo('deadend')" style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--text2);font-weight:400;">Dead-end</button>
+              <button id="vizFsRutasBtnSub_cycle"   onclick="vizRutasSetSubtipo('cycle')"   style="background:none;border:none;font-size:11px;cursor:pointer;padding:2px 6px;color:var(--text2);font-weight:400;">Ciclo</button>
+            </span>
+            <input id="vizFsRutasSearch" type="text" placeholder="Buscar planta, nodo final o cliente…"
               oninput="vizRutasSetQ(this.value,'vizFsRutasSearch')"
-              style="font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);width:180px;">
+              style="font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);width:200px;">
           </div>
           <div style="max-height:220px;overflow-y:auto;">
             <div id="vizFsRutasTable"></div>

@@ -893,6 +893,8 @@
         var fsQ   = document.getElementById('vizFsRutasSearch');
         if (mainQ && fsQ) fsQ.value = mainQ.value;
         _vizRutasBtnSync(_vizRutasFiltro.tipo);
+        _vizRutasSubBtnSync(_vizRutasFiltro.subtipo);
+        _vizRutasSubFilterVisible(_vizRutasFiltro.tipo === 'nocustomer');
         var csvBtn = document.getElementById('btnVizFsRutasCsv');
         if (csvBtn) csvBtn.style.display = '';
         vizRutasRenderTable('vizFsRutasTable');
@@ -977,12 +979,14 @@
        para el producto activo en el Visualizer.
        ══════════════════════════════════════════════════════════════════ */
     var _vizRutas      = [];
-    var _vizRutasFiltro = { tipo: 'all', q: '' };
+    var _vizRutasFiltro = { tipo: 'all', subtipo: 'all', q: '' };
     var _RUTAS_CAP     = 500;
 
     /* DFS desde cada planta; captura todas las rutas posibles y las categoriza:
        hasCustomer=true  → Con llegada a cliente
-       hasCustomer=false → Sin llegada a cliente (dead-end) */
+       hasCustomer=false → Sin llegada a cliente
+         endType='deadend' → nodo final sin salidas (ni clientes ni ubicaciones)
+         endType='cycle'   → todas las salidas restantes ya fueron visitadas */
     function vizFindAllRoutes(graph) {
       var results = [];
       var MAX = 50000;
@@ -990,14 +994,16 @@
       function dfs(node, path, visited) {
         if (results.length >= MAX) return;
         var custNext = graph.custEdges[node] || [];
-        var locNext  = (graph.locEdges[node] || []).filter(function(n) { return !visited[n]; });
+        var locNextRaw = graph.locEdges[node] || [];
+        var locNext    = locNextRaw.filter(function(n) { return !visited[n]; });
         if (custNext.length === 0 && locNext.length === 0) {
-          results.push({ plant: path[0], nodes: path.slice(), customer: null, hasCustomer: false });
+          var endType = locNextRaw.length > 0 ? 'cycle' : 'deadend';
+          results.push({ plant: path[0], nodes: path.slice(), customer: null, hasCustomer: false, endType: endType, endNode: node });
           return;
         }
         custNext.forEach(function(cust) {
           if (results.length < MAX)
-            results.push({ plant: path[0], nodes: path.slice(), customer: cust, hasCustomer: true });
+            results.push({ plant: path[0], nodes: path.slice(), customer: cust, hasCustomer: true, endType: null, endNode: node });
         });
         locNext.forEach(function(loc) {
           if (results.length < MAX) {
@@ -1021,6 +1027,21 @@
       return results;
     }
 
+    /* Plantas cuyo 100% de rutas terminan sin cliente (planta huérfana) */
+    function _vizOrphanPlants(routes) {
+      var byPlant = {};
+      routes.forEach(function(r) {
+        if (!byPlant[r.plant]) byPlant[r.plant] = { total: 0, noCust: 0 };
+        byPlant[r.plant].total++;
+        if (!r.hasCustomer) byPlant[r.plant].noCust++;
+      });
+      var orphans = [];
+      Object.keys(byPlant).forEach(function(p) {
+        if (byPlant[p].total > 0 && byPlant[p].total === byPlant[p].noCust) orphans.push(p);
+      });
+      return orphans;
+    }
+
     function vizRenderRutas() {
       if (!VIZ_DATA || !vizCurrentPrd) return;
       var panel = document.getElementById('vizRutasPanel');
@@ -1030,16 +1051,31 @@
       _vizRutas = vizFindAllRoutes(graph);
 
       // Reset filtros
-      _vizRutasFiltro = { tipo: 'all', q: '' };
+      _vizRutasFiltro = { tipo: 'all', subtipo: 'all', q: '' };
       ['vizRutasSearch', 'vizFsRutasSearch'].forEach(function(id) {
         var el = document.getElementById(id); if (el) el.value = '';
       });
       _vizRutasBtnSync('all');
+      _vizRutasSubBtnSync('all');
+      _vizRutasSubFilterVisible(false);
 
       var nC = _vizRutas.filter(function(r) { return  r.hasCustomer; }).length;
-      var nP = _vizRutas.filter(function(r) { return !r.hasCustomer; }).length;
+      var nDead  = _vizRutas.filter(function(r) { return !r.hasCustomer && r.endType === 'deadend'; }).length;
+      var nCycle = _vizRutas.filter(function(r) { return !r.hasCustomer && r.endType === 'cycle'; }).length;
+      var nP = nDead + nCycle;
+      var orphans = _vizOrphanPlants(_vizRutas);
       var truncNote = _vizRutas._truncated ? ' (truncadas a 50.000)' : '';
-      var summText  = nC + ' con cliente' + (nP ? ' · ' + nP + ' sin cliente' : '') + truncNote;
+      var sinPart = '';
+      if (nP) {
+        var detalles = [];
+        if (nDead)  detalles.push(nDead + ' dead-end');
+        if (nCycle) detalles.push(nCycle + ' ciclo');
+        sinPart = ' · ' + nP + ' sin llegada a cliente (' + detalles.join(', ') + ')';
+      }
+      var orphanPart = orphans.length
+        ? ' · ⚠ ' + orphans.length + ' planta' + (orphans.length === 1 ? '' : 's') + ' huérfana' + (orphans.length === 1 ? '' : 's') + ': ' + orphans.join(', ')
+        : '';
+      var summText  = nC + ' con llegada a cliente' + sinPart + orphanPart + truncNote;
 
       ['vizRutasSummary', 'vizFsRutasSummary'].forEach(function(id) {
         var el = document.getElementById(id); if (el) el.textContent = summText;
@@ -1072,6 +1108,24 @@
       });
     }
 
+    function _vizRutasSubBtnSync(sub) {
+      ['all', 'deadend', 'cycle'].forEach(function(t) {
+        ['vizRutasBtnSub_' + t, 'vizFsRutasBtnSub_' + t].forEach(function(id) {
+          var el = document.getElementById(id);
+          if (!el) return;
+          el.style.fontWeight = t === sub ? '700' : '400';
+          el.style.color      = t === sub ? 'var(--accent)' : 'var(--text2)';
+        });
+      });
+    }
+
+    function _vizRutasSubFilterVisible(visible) {
+      ['vizRutasSubFilter', 'vizFsRutasSubFilter'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.style.display = visible ? 'inline-flex' : 'none';
+      });
+    }
+
     function vizRutasToggle() {
       var body = document.getElementById('vizRutasBody');
       var btn  = document.getElementById('btnVizRutasToggle');
@@ -1093,6 +1147,19 @@
     function vizRutasSetTipo(tipo) {
       _vizRutasFiltro.tipo = tipo;
       _vizRutasBtnSync(tipo);
+      // El sub-filtro causa solo aplica cuando se ve "Sin llegada a cliente"
+      _vizRutasSubFilterVisible(tipo === 'nocustomer');
+      if (tipo !== 'nocustomer') {
+        _vizRutasFiltro.subtipo = 'all';
+        _vizRutasSubBtnSync('all');
+      }
+      vizRutasRenderTable('vizRutasTable');
+      vizRutasRenderTable('vizFsRutasTable');
+    }
+
+    function vizRutasSetSubtipo(sub) {
+      _vizRutasFiltro.subtipo = sub;
+      _vizRutasSubBtnSync(sub);
       vizRutasRenderTable('vizRutasTable');
       vizRutasRenderTable('vizFsRutasTable');
     }
@@ -1112,15 +1179,17 @@
       var tbl = document.getElementById(tblId);
       if (!tbl) return;
 
-      var tipo = _vizRutasFiltro.tipo;
-      var q    = _vizRutasFiltro.q;
+      var tipo    = _vizRutasFiltro.tipo;
+      var subtipo = _vizRutasFiltro.subtipo;
+      var q       = _vizRutasFiltro.q;
 
       var filtered = [];
       _vizRutas.forEach(function(r, origIdx) {
         if (tipo === 'customer'   && !r.hasCustomer) return;
         if (tipo === 'nocustomer' &&  r.hasCustomer) return;
+        if (tipo === 'nocustomer' && subtipo !== 'all' && r.endType !== subtipo) return;
         if (q) {
-          var hay = (r.plant + ' ' + r.nodes.join(' ') + ' ' + (r.customer || '')).toLowerCase();
+          var hay = (r.plant + ' ' + r.nodes.join(' ') + ' ' + (r.customer || '') + ' ' + (r.endNode || '')).toLowerCase();
           if (hay.indexOf(q) === -1) return;
         }
         filtered.push({ r: r, origIdx: origIdx });
@@ -1147,15 +1216,27 @@
         '<th style="text-align:left;padding:4px 8px;color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.05em;">#</th>',
         '<th style="text-align:left;padding:4px 8px;color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.05em;">Tipo</th>',
         '<th style="text-align:left;padding:4px 8px;color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.05em;">Ruta</th>',
+        '<th style="text-align:left;padding:4px 8px;color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.05em;">Termina en</th>',
         '<th style="text-align:right;padding:4px 8px;color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.05em;">Saltos</th>',
         '</tr></thead><tbody>'
       ];
 
       filtered.slice(0, _RUTAS_CAP).forEach(function(item, i) {
         var r = item.r, origIdx = item.origIdx;
-        var label = r.hasCustomer
-          ? '<span style="color:var(--green);font-weight:600;">✓ Con cliente</span>'
-          : '<span style="color:#F59E0B;font-weight:600;">⚠ Sin cliente</span>';
+        var label;
+        if (r.hasCustomer) {
+          label = '<span style="color:var(--green);font-weight:600;">✓ Con llegada a cliente</span>';
+        } else if (r.endType === 'cycle') {
+          label = '<span style="color:#a78bfa;font-weight:600;">↻ Sin llegada · Ciclo</span>';
+        } else {
+          label = '<span style="color:#F59E0B;font-weight:600;">⚠ Sin llegada · Dead-end</span>';
+        }
+        var endTxt = r.hasCustomer
+          ? (r.customer || '')
+          : (r.endNode || '');
+        var endStyle = r.hasCustomer
+          ? 'color:var(--green);'
+          : 'color:#F59E0B;font-weight:600;';
         var nodesStr = r.nodes.join(' → ') + (r.customer ? ' → ' + r.customer : '');
         var saltos   = r.nodes.length - 1 + (r.customer ? 1 : 0);
         var bg = i % 2 === 0 ? 'var(--bg)' : 'var(--bg2)';
@@ -1164,6 +1245,7 @@
           '<td style="padding:4px 8px;color:var(--text2);">' + (i + 1) + '</td>',
           '<td style="padding:4px 8px;">' + label + '</td>',
           '<td style="padding:4px 8px;color:var(--text);font-family:var(--mono);font-size:11px;">' + escH(nodesStr) + '</td>',
+          '<td style="padding:4px 8px;font-family:var(--mono);font-size:11px;' + endStyle + '">' + escH(endTxt) + '</td>',
           '<td style="padding:4px 8px;text-align:right;color:var(--text2);">' + saltos + '</td>',
           '</tr>'
         );
@@ -1225,11 +1307,13 @@
     function vizRutasCsv() {
       if (!_vizRutas.length) return;
       var prd   = vizCurrentPrd || 'producto';
-      var lines = ['"#","Tipo","Planta","Ruta","Cliente","# Saltos"'];
+      var lines = ['"#","Tipo","Causa","Planta","Ruta","Termina en","Cliente","# Saltos"'];
       _vizRutas.forEach(function(r, i) {
-        var tipo = r.hasCustomer ? 'Con cliente' : 'Sin cliente';
-        var ruta = r.nodes.join(' -> ') + (r.customer ? ' -> ' + r.customer : '');
-        lines.push([(i + 1), tipo, r.plant, '"' + ruta + '"', r.customer || '', r.nodes.length - 1 + (r.customer ? 1 : 0)].join(','));
+        var tipo  = r.hasCustomer ? 'Con llegada a cliente' : 'Sin llegada a cliente';
+        var causa = r.hasCustomer ? '' : (r.endType === 'cycle' ? 'Ciclo' : 'Dead-end');
+        var ruta  = r.nodes.join(' -> ') + (r.customer ? ' -> ' + r.customer : '');
+        var endTxt = r.hasCustomer ? (r.customer || '') : (r.endNode || '');
+        lines.push([(i + 1), tipo, causa, r.plant, '"' + ruta + '"', endTxt, r.customer || '', r.nodes.length - 1 + (r.customer ? 1 : 0)].join(','));
       });
       var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
       var a = document.createElement('a');
