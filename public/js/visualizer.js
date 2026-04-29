@@ -630,8 +630,6 @@
       }
       place(byType.customer, xCust, 1);
 
-      place(byType.product, xPrd, 1);
-
       return nodes;
     }
 
