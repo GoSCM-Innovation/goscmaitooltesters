@@ -2824,7 +2824,8 @@ button[disabled][title]:hover::after {
 .glos-cat-semi     { background: rgba(167,139,250,.2); color: #a78bfa; }
 .glos-cat-rawmat   { background: rgba(52,211,153,.2);  color: #34d399; }
 .glos-cat-trading  { background: rgba(232,98,42,.2);   color: #E8622A; }
-.glos-cat-all      { background: rgba(220,230,245,.1); color: var(--text2); }
+.glos-cat-all          { background: rgba(220,230,245,.1); color: var(--text2); }
+.glos-cat-uncategorized{ background: rgba(150,150,180,.2); color: #9090c0; }
 
 /* Table wrapper */
 .glos-table-wrap {

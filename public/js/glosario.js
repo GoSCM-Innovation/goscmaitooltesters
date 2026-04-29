@@ -22,11 +22,12 @@
   }
   function catBadge(cat) {
     var map = {
-      finished: '<span class="glos-cat glos-cat-finished">Terminado</span>',
-      semi:     '<span class="glos-cat glos-cat-semi">Semiterminado</span>',
-      rawmat:   '<span class="glos-cat glos-cat-rawmat">Mat. Prima</span>',
-      trading:  '<span class="glos-cat glos-cat-trading">Mercadería</span>',
-      all:      '<span class="glos-cat glos-cat-all">Todos</span>'
+      finished:      '<span class="glos-cat glos-cat-finished">Terminado</span>',
+      semi:          '<span class="glos-cat glos-cat-semi">Semiterminado</span>',
+      rawmat:        '<span class="glos-cat glos-cat-rawmat">Mat. Prima</span>',
+      trading:       '<span class="glos-cat glos-cat-trading">Mercadería</span>',
+      uncategorized: '<span class="glos-cat glos-cat-uncategorized">Sin cat.</span>',
+      all:           '<span class="glos-cat glos-cat-all">Todos</span>'
     };
     return (cat || []).map(function (c) { return map[c] || ''; }).join(' ');
   }
@@ -599,11 +600,11 @@
             '</tbody></table></div>'
           ) +
           sub('Estados de la Red', netStatusTable([
-            ['Red Completa', 'ok', ['finished'], 'El producto tiene al menos una ruta completa desde una planta productora hasta un cliente. Configuración correcta.'],
-            ['Sin Entrega a Cliente', 'red', ['finished'], 'El producto tiene producción (PSH) y arcos de distribución (Location Source) pero ninguno llega hasta un Customer Source — no se entrega a ningún cliente.'],
-            ['Sin Distribución', 'red', ['finished'], 'El producto tiene producción (PSH) pero no hay arcos de distribución (Location Source) desde la planta. Sale de la planta sin ruta configurada.'],
-            ['Distribución sin ruta completa', 'red', ['finished'], 'El producto tiene Customer Source configurado pero no existe ninguna ruta completa que conecte la producción con esa entrega al cliente.'],
-            ['Solo Entrega', 'red', ['trading'], 'El producto tiene Customer Source (entrega a cliente) pero no tiene Location Source (distribución). Mercadería sin origen declarado en la red.'],
+            ['Red Completa', 'ok', ['finished', 'uncategorized'], 'El producto tiene al menos una ruta completa desde una planta productora hasta un cliente. Configuración correcta.'],
+            ['Sin Entrega a Cliente', 'red', ['finished', 'uncategorized'], 'El producto tiene producción (PSH) y arcos de distribución (Location Source) pero ninguno llega hasta un Customer Source — no se entrega a ningún cliente.'],
+            ['Sin Distribución', 'red', ['finished', 'uncategorized'], 'El producto tiene producción (PSH) pero no hay arcos de distribución (Location Source) desde la planta. Sale de la planta sin ruta configurada.'],
+            ['Distribución sin ruta completa', 'red', ['finished', 'uncategorized'], 'El producto tiene Customer Source configurado pero no existe ninguna ruta completa que conecte la producción con esa entrega al cliente.'],
+            ['Solo Entrega', 'red', ['trading', 'uncategorized'], 'El producto tiene Customer Source (entrega a cliente) pero no tiene Location Source (distribución). Sin origen declarado en la red.'],
             ['Solo Distribución', 'yellow', ['trading'], 'El producto tiene Location Source pero no tiene Customer Source — nunca llega a ningún cliente desde la red declarada.'],
             ['Solo Distribución + Entrega', 'ok', ['trading'], 'Mercadería con arcos de distribución (LS) y entrega (CS) correctamente configurados.'],
             ['Semiterminado Local', 'ok', ['semi'], 'El semiterminado se produce y consume en la misma planta. No requiere transferencia.'],
@@ -615,20 +616,33 @@
             ['Abastecimiento Parcial', 'yellow', ['rawmat'], 'El insumo tiene Location Source pero ningún arco llega hasta una planta productora — posible configuración incompleta.'],
             ['Abastecimiento sin Consumo PSI', 'yellow', ['rawmat'], 'El insumo tiene Location Source pero no aparece en ningún BOM como componente — arco de abastecimiento sin uso productivo declarado.'],
             ['Sin Abastecimiento', 'red', ['rawmat'], 'El insumo no tiene ningún arco en Location Source — no tiene origen declarado en la red.'],
-            ['Sin arcos de red', 'red', ['all'], 'El producto no tiene ningún arco en Location Source ni Customer Source — completamente desconectado de la red.'],
+            ['Sin arcos de red', 'red', ['finished', 'trading', 'uncategorized'], 'El producto no tiene ningún arco en Location Source ni Customer Source — completamente desconectado de la red. ⛔ para Terminado y Sin cat., ⚠ para Mercadería.'],
             ['Huérfano', 'red', ['all'], 'El producto solo existe en el maestro de materiales sin ninguna actividad en la red (no está en PSH, PSI, Location Source, Customer Source ni Location Product).']
           ])) +
+          callout('warn', '<strong>Estados de la Red en la columna Observacion:</strong> Cuando el Estado de la Red no es el estado OK de la categoría del producto, su texto exacto aparece también como primera observación en la columna Observacion. Los estados OK por categoría son: <em>Terminado / Sin cat.</em> = "Red Completa"; <em>Mercadería</em> = "Solo Distribución + Entrega"; <em>Mat. Prima</em> = "Abastecimiento Completo"; <em>Semiterminado</em> = cualquiera de los tres estados "Semiterminado...". Todos los demás estados indican un problema y aparecen en Observacion con el mismo texto.') +
           sub('Observaciones posibles', obsTable([
-            ['Ghost node: X', 'red', ['finished', 'trading'], 'La ubicación X recibe el producto pero todas sus salidas terminan en un callejón sin salida — no llega a ningún cliente.', 'Revisar la configuración de arcos salientes de la ubicación X en Location Source. Puede faltar un arco hacia el siguiente nodo o hacia un Customer Source.'],
-            ['Dead-end: X', 'red', ['finished', 'trading'], 'La ubicación X recibe el producto por Location Source pero no tiene ninguna salida configurada — el producto llega y no puede continuar.', 'Agregar el arco de salida faltante en Location Source o en Customer Source desde la ubicación X, o verificar si ese nodo es el destino final (y entonces falta un Customer Source).'],
-            ['Planta aislada: X', 'red', ['finished'], 'La planta X produce este producto pero no tiene ninguna ruta que llegue a algún cliente — producción sin mercado alcanzable.', 'Revisar arcos de distribución desde la planta X en Location Source. Puede faltar el arco inicial desde la planta hacia el primer nodo de distribución.'],
+            ['Sin Entrega a Cliente', 'red', ['finished', 'uncategorized'], 'El producto tiene PSH y Location Source pero ningún arco llega hasta un cliente. El Estado de la Red es "Sin Entrega a Cliente" y ese texto aparece en Observacion.', 'Verificar que exista al menos un arco de Customer Source para este producto, o que la red de Location Source conecte la producción con alguna ubicación que tenga Customer Source.'],
+            ['Sin Distribución', 'red', ['finished', 'uncategorized'], 'El producto tiene PSH pero no tiene arcos de Location Source saliendo de la planta. El Estado de la Red es "Sin Distribución" y ese texto aparece en Observacion.', 'Crear al menos un arco en Location Source con la planta productora como LOCFR.'],
+            ['Distribución sin ruta completa', 'red', ['finished', 'uncategorized'], 'El producto tiene Customer Source pero no existe ninguna ruta completa de producción que llegue hasta él. Aparece textualmente en Observacion.', 'Revisar los arcos de Location Source e identificar el nodo desconectado que impide que la producción llegue hasta el arco de entrega al cliente.'],
+            ['Solo Entrega', 'red', ['trading', 'uncategorized'], 'El producto tiene Customer Source pero no tiene Location Source. Aparece textualmente en Observacion.', 'Configurar los arcos de Location Source que lleven el producto desde su origen hasta la ubicación de entrega al cliente.'],
+            ['Solo Distribución', 'yellow', ['trading'], 'El producto tiene Location Source pero no tiene Customer Source. Aparece textualmente en Observacion.', 'Configurar los arcos de Customer Source para que el producto llegue a algún cliente.'],
+            ['Sin arcos de red', 'red', ['finished', 'trading', 'uncategorized'], 'El producto no tiene ningún arco en Location Source ni Customer Source. Aparece textualmente en Observacion. ⛔ para Terminado y Sin cat.; ⚠ para Mercadería.', 'Revisar si el producto está activo en IBP. Configurar al menos un arco en Location Source o Customer Source según corresponda a su rol en la cadena.'],
+            ['Sin Producción', 'red', ['semi'], 'El semiterminado no tiene PSH. Aparece textualmente en Observacion.', 'Crear la fuente de producción (PSH con SOURCETYPE=P) para este semiterminado en IBP.'],
+            ['Sin Consumo PSI', 'red', ['semi'], 'El semiterminado tiene PSH pero no aparece como componente en ningún BOM. Aparece textualmente en Observacion.', 'Agregar este semiterminado como componente (PSI) en el BOM del producto terminado que lo consume.'],
+            ['Sin Abastecimiento', 'red', ['rawmat'], 'El insumo no tiene ningún arco en Location Source. Aparece textualmente en Observacion.', 'Configurar el arco de Location Source con el proveedor o planta origen como LOCFR hacia las plantas consumidoras.'],
+            ['Abastecimiento Parcial', 'yellow', ['rawmat'], 'El insumo tiene Location Source pero ningún arco llega hasta una planta productora. Aparece textualmente en Observacion.', 'Revisar si falta el arco final en Location Source que conecte el origen con la planta donde se consume el insumo.'],
+            ['Abastecimiento sin Consumo PSI', 'yellow', ['rawmat'], 'El insumo tiene Location Source pero no aparece en ningún BOM. Aparece textualmente en Observacion.', 'Verificar si el insumo está vigente y si debe ser agregado como componente PSI en alguna receta de producción.'],
+            ['Huérfano', 'red', ['all'], 'El producto solo existe en el maestro de materiales — no tiene ninguna actividad en la red. Aparece textualmente en Observacion.', 'Verificar si el producto es obsoleto o si falta configurar su participación en la red (PSH, Location Source, Customer Source o Location Product).'],
+            ['Ghost node: X', 'red', ['finished', 'trading', 'uncategorized'], 'La ubicación X recibe el producto pero todas sus salidas terminan en un callejón sin salida — no llega a ningún cliente.', 'Revisar la configuración de arcos salientes de la ubicación X en Location Source. Puede faltar un arco hacia el siguiente nodo o hacia un Customer Source.'],
+            ['Dead-end: X', 'red', ['finished', 'trading', 'uncategorized'], 'La ubicación X recibe el producto por Location Source pero no tiene ninguna salida configurada — el producto llega y no puede continuar.', 'Agregar el arco de salida faltante en Location Source o en Customer Source desde la ubicación X, o verificar si ese nodo es el destino final (y entonces falta un Customer Source).'],
+            ['Planta aislada: X', 'red', ['finished', 'uncategorized'], 'La planta X produce este producto pero no tiene ninguna ruta que llegue a algún cliente — producción sin mercado alcanzable.', 'Revisar arcos de distribución desde la planta X en Location Source. Puede faltar el arco inicial desde la planta hacia el primer nodo de distribución.'],
             ['Ciclo: X → Y → Z → X', 'red', ['all'], 'Se detectó un ciclo en la red: el producto puede circular indefinidamente entre estas ubicaciones sin llegar a ningún cliente.', 'Revisar los arcos de Location Source entre las ubicaciones del ciclo e identificar cuál está configurado en sentido incorrecto.'],
-            ['PLEADTIME faltante: X', 'red', ['finished', 'semi'], 'La planta X produce este producto pero su PLEADTIME es 0 o está vacío. IBP planifica producción instantánea.', 'Ingresar el PLEADTIME real en días en el Production Source Header para la planta X y este producto.'],
+            ['PLEADTIME faltante: X', 'red', ['finished', 'semi', 'uncategorized'], 'La planta X produce este producto pero su PLEADTIME es 0 o está vacío. IBP planifica producción instantánea.', 'Ingresar el PLEADTIME real en días en el Production Source Header para la planta X y este producto.'],
             ['TLEADTIME faltante: X→Y', 'yellow', ['all'], 'El arco de transferencia X→Y tiene TLEADTIME = 0 o vacío. IBP planifica transferencias instantáneas en ese tramo.', 'Ingresar el TLEADTIME real en días en el arco de Location Source X→Y para este producto.'],
-            ['CLEADTIME faltante: X→Y', 'yellow', ['finished', 'trading'], 'El arco de entrega X→Y (hacia cliente) tiene CLEADTIME = 0 o vacío. IBP planifica entregas instantáneas en ese tramo.', 'Ingresar el CLEADTIME real en días en el arco de Customer Source X→Y para este producto.'],
+            ['CLEADTIME faltante: X→Y', 'yellow', ['finished', 'trading', 'uncategorized'], 'El arco de entrega X→Y (hacia cliente) tiene CLEADTIME = 0 o vacío. IBP planifica entregas instantáneas en ese tramo.', 'Ingresar el CLEADTIME real en días en el arco de Customer Source X→Y para este producto.'],
             ['Sin Location Product', 'yellow', ['all'], 'El producto está en PSH o en Location Source pero no está habilitado en Location Product en alguna ubicación de la red.', 'Habilitar el producto en Location Product para las ubicaciones donde participa activamente en la red.'],
             ['Sin Customer Product', 'yellow', ['all'], 'El producto tiene Customer Source (entrega a cliente) pero no está habilitado en Customer Product para ese cliente.', 'Habilitar la combinación producto+cliente en Customer Product en IBP.'],
-            ['Red desconectada: arcos LS y CS no comparten ubicaciones', 'red', ['trading'], 'Los arcos de distribución (Location Source) y los arcos de entrega (Customer Source) no tienen ninguna ubicación en común — la red está partida en dos fragmentos desconectados.', 'Revisar que al menos una ubicación aparezca tanto en Location Source (como destino) como en Customer Source (como origen de entrega).'],
+            ['Red desconectada: arcos LS y CS no comparten ubicaciones', 'red', ['trading', 'uncategorized'], 'Los arcos de distribución (Location Source) y los arcos de entrega (Customer Source) no tienen ninguna ubicación en común — la red está partida en dos fragmentos desconectados.', 'Revisar que al menos una ubicación aparezca tanto en Location Source (como destino) como en Customer Source (como origen de entrega).'],
             ['Destino(s) de transferencia sin consumo PSI: X, Y', 'red', ['semi'], 'El semiterminado se transfiere a las ubicaciones X, Y pero en ninguna de ellas se consume como ingrediente en alguna receta.', 'Agregar el semiterminado como componente PSI en el BOM de la planta destino, o eliminar el arco de transferencia si es un error.'],
             ['Paths truncados (>50.000, red muy compleja)', 'yellow', ['all'], 'La red tiene más de 50.000 rutas posibles — se procesaron parcialmente para evitar bloqueo del sistema.', 'Esta advertencia es informativa. El análisis es representativo pero puede no detectar todas las anomalías. Considerar simplificar la red o analizar por subconjunto de productos.'],
             ['Semiterminado consumido en planta productora con transferencia configurada', 'ok', ['semi'], 'El semiterminado se consume en la planta donde se fabrica y además se transfiere a otra planta donde también se consume como PSI.', 'Sin acción requerida.'],
@@ -637,8 +651,8 @@
             ['Habilitado en Location Product', 'ok', ['all'], 'El producto está habilitado en Location Product en todas las ubicaciones activas de su red.', 'Sin acción requerida.'],
             ['Lead times definidos', 'ok', ['all'], 'Todos los arcos de transferencia y entrega del producto tienen lead time mayor que cero.', 'Sin acción requerida.'],
             ['Mercadería con arcos de distribución y entrega', 'ok', ['trading'], 'La mercadería tiene Location Source y Customer Source correctamente configurados.', 'Sin acción requerida.'],
-            ['Red completa sin anomalias', 'ok', ['finished'], 'El producto tiene rutas completas de planta a cliente y no se detectaron Ghost Nodes, Dead-ends ni ciclos.', 'Sin acción requerida.'],
-            ['N ruta(s) a cliente', 'ok', ['finished', 'trading'], 'El producto tiene N rutas completas desde plantas productoras hasta clientes. A mayor número de rutas, mayor resiliencia.', 'Sin acción requerida.']
+            ['Red completa sin anomalias', 'ok', ['finished', 'uncategorized'], 'El producto tiene rutas completas de planta a cliente y no se detectaron Ghost Nodes, Dead-ends ni ciclos.', 'Sin acción requerida.'],
+            ['N ruta(s) a cliente', 'ok', ['finished', 'trading', 'uncategorized'], 'El producto tiene N rutas completas desde plantas productoras hasta clientes. A mayor número de rutas, mayor resiliencia.', 'Sin acción requerida.']
           ]));
       }
     },
@@ -715,8 +729,8 @@
             ['Sin productos alcanzables desde produccion', 'red', ['all'], 'El cliente tiene Customer Source configurado pero ninguna ruta completa conecta la producción con sus arcos de entrega.', 'Revisar la red de distribución hacia este cliente e identificar los arcos faltantes en Location Source o Customer Source.'],
             ['Sin Customer Product', 'yellow', ['all'], 'El cliente tiene arcos de entrega (Customer Source) pero no está habilitado en Customer Product. IBP lo ignora en la planificación.', 'Habilitar las combinaciones cliente+producto correspondientes en Customer Product en IBP.'],
             ['N producto(s) con unica ruta', 'yellow', ['all'], 'N productos llegan a este cliente por una sola ruta completa. Si esa ruta falla, el abastecimiento se corta.', 'Evaluar si se justifica agregar una ruta alternativa para los productos indicados, para aumentar la resiliencia del abastecimiento.'],
-            ['N producto(s) con nodo critico unico', 'yellow', ['all'], 'N productos tienen una ruta única que pasa por un nodo crítico. Si ese nodo falla, el cliente queda sin abastecimiento.', 'Identificar el nodo crítico indicado y evaluar agregar una ruta alternativa que evite ese único punto de falla.'],
-            ['Solo en maestro, sin uso en red', 'info', ['all'], 'El cliente existe en el maestro pero no tiene arcos de entrega en Customer Source.', 'Verificar si el cliente es obsoleto o si falta configurar sus arcos de entrega.'],
+            ['N producto(s) con nodo critico unico', 'info', ['all'], 'N productos llegan a este cliente a través de un nodo crítico único: si ese nodo desaparece, el abastecimiento se corta. El Estado puede ser ✅ si no hay además rutas de punto único — es una observación de riesgo de resiliencia, no un error de configuración.', 'Identificar el nodo crítico indicado y evaluar agregar una ruta alternativa que evite ese único punto de falla.'],
+            ['Solo en maestro, sin uso en red', 'red', ['all'], 'El cliente existe en el maestro pero no tiene arcos de entrega en Customer Source ni está habilitado en Customer Product. Se marca ⛔ porque un cliente sin ninguna actividad en la red es una anomalía de datos.', 'Verificar si el cliente es obsoleto o si falta configurar sus arcos de entrega en Customer Source.'],
             ['Abastecido con rutas resilientes', 'ok', ['all'], 'Todos los productos de este cliente tienen múltiples rutas alternativas y no dependen de un nodo único.', 'Sin acción requerida.'],
             ['Habilitado en Customer Product', 'ok', ['all'], 'El cliente está habilitado en Customer Product para todos los productos que lo abastecen.', 'Sin acción requerida.'],
             ['N producto(s) alcanzables', 'ok', ['all'], 'El cliente tiene N productos con al menos una ruta completa de producción configurada.', 'Sin acción requerida.'],
@@ -807,21 +821,22 @@
               '<th style="color:var(--cyan)">Semiterminado</th>' +
               '<th style="color:var(--green)">Mat. Prima</th>' +
               '<th style="color:var(--purple)">Mercadería</th>' +
+              '<th style="color:#9090c0">Sin cat.</th>' +
             '</tr></thead><tbody>' +
-              '<tr><td>Necesita ruta completa a cliente</td><td>⛔ Alerta</td><td>No aplica</td><td>No aplica</td><td>⛔ Alerta</td></tr>' +
-              '<tr><td>Ghost Nodes / Dead-ends</td><td>⛔ Detecta</td><td>No detecta</td><td>No detecta</td><td>⛔ Detecta</td></tr>' +
-              '<tr><td>Plantas aisladas</td><td>⛔ Detecta</td><td>No detecta</td><td>No detecta</td><td>⛔ Detecta</td></tr>' +
-              '<tr><td>PLEADTIME faltante</td><td>⛔ Alerta</td><td>⚠ Advertencia</td><td>No aplica</td><td>No aplica</td></tr>' +
-              '<tr><td>TLEADTIME faltante</td><td>⚠ Advertencia</td><td>⚠ Advertencia</td><td>⚠ Advertencia</td><td>⚠ Advertencia</td></tr>' +
-              '<tr><td>CLEADTIME faltante</td><td>⚠ Advertencia</td><td>No aplica</td><td>No aplica</td><td>⚠ Advertencia</td></tr>' +
-              '<tr><td>Necesita PSH propio</td><td>⛔ Alerta</td><td>⛔ Alerta</td><td>No aplica</td><td>No aplica</td></tr>' +
-              '<tr><td>Necesita consumo PSI en destino (semi)</td><td>No aplica</td><td>⛔ Alerta</td><td>No aplica</td><td>No aplica</td></tr>' +
-              '<tr><td>Necesita arco de abastecimiento</td><td>No aplica</td><td>No aplica</td><td>⛔ Alerta</td><td>No aplica</td></tr>' +
-              '<tr><td>Arcos LS + CS conectados</td><td>No aplica</td><td>No aplica</td><td>No aplica</td><td>⛔ Alerta</td></tr>' +
+              '<tr><td>Necesita ruta completa a cliente</td><td>⛔ Alerta</td><td>No aplica</td><td>No aplica</td><td>⛔ Alerta</td><td>⛔ Alerta</td></tr>' +
+              '<tr><td>Ghost Nodes / Dead-ends</td><td>⛔ Detecta</td><td>No detecta</td><td>No detecta</td><td>⛔ Detecta</td><td>⛔ Detecta</td></tr>' +
+              '<tr><td>Plantas aisladas</td><td>⛔ Detecta</td><td>No detecta</td><td>No detecta</td><td>⛔ Detecta</td><td>⛔ Detecta</td></tr>' +
+              '<tr><td>PLEADTIME faltante</td><td>⛔ Alerta</td><td>⚠ Advertencia</td><td>No aplica</td><td>No aplica</td><td>⛔ Alerta</td></tr>' +
+              '<tr><td>TLEADTIME faltante</td><td>⚠ Advertencia</td><td>⚠ Advertencia</td><td>⚠ Advertencia</td><td>⚠ Advertencia</td><td>⚠ Advertencia</td></tr>' +
+              '<tr><td>CLEADTIME faltante</td><td>⚠ Advertencia</td><td>No aplica</td><td>No aplica</td><td>⚠ Advertencia</td><td>⚠ Advertencia</td></tr>' +
+              '<tr><td>Necesita PSH propio</td><td>⛔ Alerta</td><td>⛔ Alerta</td><td>No aplica</td><td>No aplica</td><td>⛔ Alerta</td></tr>' +
+              '<tr><td>Necesita consumo PSI en destino (semi)</td><td>No aplica</td><td>⛔ Alerta</td><td>No aplica</td><td>No aplica</td><td>No aplica</td></tr>' +
+              '<tr><td>Necesita arco de abastecimiento</td><td>No aplica</td><td>No aplica</td><td>⛔ Alerta</td><td>No aplica</td><td>No aplica</td></tr>' +
+              '<tr><td>Arcos LS + CS conectados</td><td>No aplica</td><td>No aplica</td><td>No aplica</td><td>⛔ Alerta</td><td>⚠ Advertencia</td></tr>' +
             '</tbody></table></div>'
           ) +
           callout('warn', '<strong>Tipo excluido:</strong> Los productos excluidos no generan filas en la hoja Product del Network Analyzer. Sin embargo, si son componentes PSI de productos incluidos, sus arcos de abastecimiento sí se validan en la hoja Product del producto consumidor.') +
-          callout('info', '<strong>Sin categoría (uncategorized):</strong> Se aplica el modo más permisivo: todos los hallazgos se limitan a ⚠ Advertencia, nunca ⛔ Alerta. Esto puede ocultar problemas críticos reales. Se recomienda siempre categorizar antes de interpretar resultados.');
+          callout('info', '<strong>Sin categoría (uncategorized):</strong> Se ejecutan todas las validaciones disponibles — es el modo más completo, equivalente al de Terminado. El Estado de la Red se determina por lo que está presente en la data: si tiene PSH, se evalúa como Terminado; si tiene PSI sin PSH, como insumo. Cualquier anomalía detectada genera ⛔ Alerta igual que un Terminado. Se recomienda categorizar los materiales para obtener hallazgos precisos según el rol real del producto.');
       }
     }
   ];
