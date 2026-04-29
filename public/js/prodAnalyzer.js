@@ -813,6 +813,7 @@ async function paAnalyzeAndExport(
       var cats      = mattypeGetCategories(mattypeid);
       var isExcl    = mattypeIsExcluded(mattypeid);
       if (isExcl) return; // excluidos no se analizan aquí
+      if (!mattypeid) return;
 
       var rules           = mattypeGetRules(cats);
       var isUncategorized = cats[0] === 'uncategorized';
@@ -1591,7 +1592,7 @@ async function paAnalyzeAndExport(
       var recs    = pshBySid[sid];
       var primary = recs.find(function(r){ return r.SOURCETYPE === 'P'; }) || recs[0];
       var outPrd  = primary.PRDID, outLoc = primary.LOCID;
-      if (mattypeIsExcluded(pm(outPrd))) return;
+      if (!pm(outPrd) || mattypeIsExcluded(pm(outPrd))) return;
       var plt     = primary.PLEADTIME || '', coeff = primary.OUTPUTCOEFFICIENT || '', pratio = primary.PRATIO || '';
       var stypes  = recs.map(function(r){ return r.SOURCETYPE; })
                         .filter(function(v,i,a){ return a.indexOf(v) === i; }).join('/');
@@ -1709,7 +1710,7 @@ async function paAnalyzeAndExport(
         var info   = pshSidLocid[sid] || {};
         var locid  = info.LOCID || '';
         var outPrd = info.PRDID || '';
-        if (mattypeIsExcluded(pm(outPrd))) return;
+        if (!pm(outPrd) || mattypeIsExcluded(pm(outPrd))) return;
         var compMt = pm(comp);
 
         var noSrc  = !locid;
